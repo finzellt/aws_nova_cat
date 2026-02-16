@@ -31,16 +31,18 @@ jobs:
           pip install -r requirements-dev.txt -r infra/requirements.txt -r services/hello/requirements.txt
 
       - name: Lint (ruff)
-        run: ruff check .
+        run: python -m ruff check .
 
       - name: Format check (ruff)
-        run: ruff format --check .
+        run: python -m ruff format --check .
 
       - name: Type check (mypy)
-        run: mypy .
+        run: python -m mypy .
 
       - name: Tests (pytest)
-        run: pytest
+        run: python -m pytest
+        env:
+          PYTHONPATH: .
 
       - name: CDK synth
         working-directory: infra
