@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+cdk.out/
+infra/cdk.context.json
+
+.DS_Store
+.idea/
+.vscode/

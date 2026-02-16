@@ -1,0 +1,7 @@
+{
+  "app": "PYTHONPATH=.. python app.py",
+  "watch": {
+    "include": ["**/*.py", "../services/**/*.py"],
+    "exclude": ["cdk.out", "**/__pycache__/**", ".venv", "../**/__pycache__/**"]
+  }
+}
