@@ -1,0 +1,264 @@
+{
+  "$defs": {
+    "NovaStatus": {
+      "enum": [
+        "candidate",
+        "confirmed",
+        "retracted"
+      ],
+      "title": "NovaStatus",
+      "type": "string"
+    },
+    "Position": {
+      "additionalProperties": false,
+      "properties": {
+        "dec_deg": {
+          "description": "Declination in degrees.",
+          "maximum": 90.0,
+          "minimum": -90.0,
+          "title": "Dec Deg",
+          "type": "number"
+        },
+        "epoch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "J2000",
+          "description": "Epoch label, e.g., 'J2000'.",
+          "title": "Epoch"
+        },
+        "frame": {
+          "$ref": "#/$defs/SkyCoordFrame",
+          "default": "icrs"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Provenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ra_deg": {
+          "description": "Right ascension in degrees.",
+          "exclusiveMaximum": 360.0,
+          "minimum": 0.0,
+          "title": "Ra Deg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "ra_deg",
+        "dec_deg"
+      ],
+      "title": "Position",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Scientific provenance: enough to trace 'what said this' and 'when',\nwithout overfitting to any single upstream system.",
+      "properties": {
+        "asserted_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human or system actor that asserted this fact (e.g., ORCID, service name).",
+          "title": "Asserted By"
+        },
+        "citation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional citation string or bibcode/doi reference.",
+          "title": "Citation"
+        },
+        "method": {
+          "$ref": "#/$defs/ProvenanceMethod",
+          "default": "imported"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "description": "Semantic version for this persistent entity contract.",
+          "examples": [
+            "1.0.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source": {
+          "description": "Canonical identifier for upstream source (e.g., 'ASAS-SN', 'ADS', 'AAVSO', 'UserUpload').",
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_record_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upstream record identifier, if provided.",
+          "title": "Source Record Id"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "ProvenanceMethod": {
+      "enum": [
+        "manual",
+        "scraped",
+        "computed",
+        "imported"
+      ],
+      "title": "ProvenanceMethod",
+      "type": "string"
+    },
+    "SkyCoordFrame": {
+      "enum": [
+        "icrs"
+      ],
+      "title": "SkyCoordFrame",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/entities/nova/1.0.0",
+  "additionalProperties": false,
+  "description": "Core nova record. Keep minimal: identity + a small set of stable scientific metadata.\nPut the rest behind extensions as needed.",
+  "properties": {
+    "alias_ids": {
+      "description": "IDs of Alias records linked to this Nova.",
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "title": "Alias Ids",
+      "type": "array"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "discovery_date": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Discovery Date"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "nova_uuid": {
+      "description": "Stable identifier used across the system. Duplicates id for clarity at boundaries.",
+      "format": "uuid",
+      "title": "Nova Uuid",
+      "type": "string"
+    },
+    "position": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Position"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "public_name": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Public Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "description": "Semantic version for this persistent entity contract.",
+      "examples": [
+        "1.0.0"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/NovaStatus",
+      "default": "candidate"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "public_name"
+  ],
+  "title": "Nova",
+  "type": "object"
+}

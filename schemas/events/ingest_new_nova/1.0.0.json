@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "JobType": {
+      "enum": [
+        "InitializeNova",
+        "IngestNewNova",
+        "RefreshPapers",
+        "DiscoverSpectraProducts",
+        "DownloadAndValidateSpectra",
+        "IngestPhotometryDataset",
+        "NameCheckAndReconcile"
+      ],
+      "title": "JobType",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/events/ingest_new_nova/1.0.0",
+  "additionalProperties": false,
+  "properties": {
+    "attributes": {
+      "additionalProperties": true,
+      "title": "Attributes",
+      "type": "object"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_version": {
+      "default": "1.0.0",
+      "description": "Semantic version for this event contract.",
+      "title": "Event Version",
+      "type": "string"
+    },
+    "force_refresh": {
+      "default": false,
+      "title": "Force Refresh",
+      "type": "boolean"
+    },
+    "idempotency_key": {
+      "maxLength": 256,
+      "minLength": 8,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "initiated_at": {
+      "format": "date-time",
+      "title": "Initiated At",
+      "type": "string"
+    },
+    "job_type": {
+      "$ref": "#/$defs/JobType",
+      "default": "IngestNewNova"
+    },
+    "nova_id": {
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "nova_id"
+  ],
+  "title": "IngestNewNovaEvent",
+  "type": "object"
+}

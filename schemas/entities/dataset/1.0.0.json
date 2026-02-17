@@ -1,0 +1,230 @@
+{
+  "$defs": {
+    "DatasetKind": {
+      "enum": [
+        "spectra",
+        "photometry"
+      ],
+      "title": "DatasetKind",
+      "type": "string"
+    },
+    "DatasetStatus": {
+      "enum": [
+        "discovered",
+        "validated",
+        "published",
+        "rejected"
+      ],
+      "title": "DatasetStatus",
+      "type": "string"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Scientific provenance: enough to trace 'what said this' and 'when',\nwithout overfitting to any single upstream system.",
+      "properties": {
+        "asserted_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human or system actor that asserted this fact (e.g., ORCID, service name).",
+          "title": "Asserted By"
+        },
+        "citation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional citation string or bibcode/doi reference.",
+          "title": "Citation"
+        },
+        "method": {
+          "$ref": "#/$defs/ProvenanceMethod",
+          "default": "imported"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "description": "Semantic version for this persistent entity contract.",
+          "examples": [
+            "1.0.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source": {
+          "description": "Canonical identifier for upstream source (e.g., 'ASAS-SN', 'ADS', 'AAVSO', 'UserUpload').",
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_record_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upstream record identifier, if provided.",
+          "title": "Source Record Id"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "ProvenanceMethod": {
+      "enum": [
+        "manual",
+        "scraped",
+        "computed",
+        "imported"
+      ],
+      "title": "ProvenanceMethod",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/entities/dataset/1.0.0",
+  "additionalProperties": false,
+  "description": "Dataset ties a nova to one scientific product line (spectra or photometry).\nFiles are separate entities; dataset references file IDs.",
+  "properties": {
+    "attributes": {
+      "additionalProperties": true,
+      "description": "Free-form attributes for incremental enrichment (kept small; avoid embedding huge payloads).",
+      "title": "Attributes",
+      "type": "object"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "file_ids": {
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "title": "File Ids",
+      "type": "array"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/DatasetKind"
+    },
+    "nova_id": {
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    },
+    "observed_end": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observed End"
+    },
+    "observed_start": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observed Start"
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "description": "Semantic version for this persistent entity contract.",
+      "examples": [
+        "1.0.0"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/DatasetStatus",
+      "default": "discovered"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "nova_id",
+    "kind"
+  ],
+  "title": "Dataset",
+  "type": "object"
+}

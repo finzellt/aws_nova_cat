@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "AttemptStatus": {
+      "enum": [
+        "started",
+        "succeeded",
+        "failed",
+        "timed_out",
+        "cancelled"
+      ],
+      "title": "AttemptStatus",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/entities/attempt/1.0.0",
+  "additionalProperties": false,
+  "description": "One execution attempt for a job/workflow task. Stored for traceability.",
+  "properties": {
+    "attempt_number": {
+      "minimum": 1,
+      "title": "Attempt Number",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "error_message": {
+      "anyOf": [
+        {
+          "maxLength": 4000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Message"
+    },
+    "execution_arn": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Step Functions execution ARN, if relevant.",
+      "title": "Execution Arn"
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "job_run_id": {
+      "format": "uuid",
+      "title": "Job Run Id",
+      "type": "string"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "AWS Lambda request id, if relevant.",
+      "title": "Request Id"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "description": "Semantic version for this persistent entity contract.",
+      "examples": [
+        "1.0.0"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AttemptStatus",
+      "default": "started"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_run_id",
+    "attempt_number"
+  ],
+  "title": "Attempt",
+  "type": "object"
+}
