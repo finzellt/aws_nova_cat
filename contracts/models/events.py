@@ -42,6 +42,7 @@ class EventBase(BaseModel):
 
 
 class InitializeNovaEvent(EventBase):
+    event_version: str = Field(default="1.0.0")
     job_type: JobType = Field(default=JobType.initialize_nova)
     # create-or-get semantics: allow providing a proposed nova_uuid, or omit to have system create one.
     proposed_nova_uuid: UUID | None = None
@@ -54,6 +55,7 @@ class InitializeNovaEvent(EventBase):
 
 
 class IngestNewNovaEvent(EventBase):
+    event_version: str = Field(default="1.0.0")
     job_type: JobType = Field(default=JobType.ingest_new_nova)
     nova_id: UUID
     # minimal knobs to control ingestion behavior without coupling
@@ -62,6 +64,7 @@ class IngestNewNovaEvent(EventBase):
 
 
 class RefreshReferencesEvent(EventBase):
+    event_version: str = Field(default="1.0.0")
     job_type: JobType = Field(default=JobType.refresh_references)
     nova_id: UUID
     # ADS query hints; keep generic
@@ -71,6 +74,7 @@ class RefreshReferencesEvent(EventBase):
 
 
 class DiscoverSpectraProductsEvent(EventBase):
+    event_version: str = Field(default="1.0.0")
     job_type: JobType = Field(default=JobType.discover_spectra_products)
     nova_id: UUID
     # optionally constrain discovery sources
@@ -81,6 +85,7 @@ class DiscoverSpectraProductsEvent(EventBase):
 
 
 class DownloadAndValidateSpectraEvent(EventBase):
+    event_version: str = Field(default="1.0.0")
     job_type: JobType = Field(default=JobType.download_and_validate_spectra)
     nova_id: UUID
     dataset_id: UUID
@@ -92,6 +97,7 @@ class DownloadAndValidateSpectraEvent(EventBase):
 
 
 class IngestPhotometryDatasetEvent(EventBase):
+    event_version: str = Field(default="1.0.0")
     job_type: JobType = Field(default=JobType.ingest_photometry_dataset)
     nova_id: UUID
     dataset_kind: DatasetKind = Field(default=DatasetKind.photometry)
@@ -101,6 +107,7 @@ class IngestPhotometryDatasetEvent(EventBase):
 
 
 class NameCheckAndReconcileEvent(EventBase):
+    event_version: str = Field(default="1.0.0")
     job_type: JobType = Field(default=JobType.name_check_and_reconcile)
     nova_id: UUID
     proposed_public_name: str | None = None

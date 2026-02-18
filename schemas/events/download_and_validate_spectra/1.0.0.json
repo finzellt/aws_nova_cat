@@ -34,7 +34,6 @@
     },
     "event_version": {
       "default": "1.0.0",
-      "description": "Semantic version for this event contract.",
       "title": "Event Version",
       "type": "string"
     },

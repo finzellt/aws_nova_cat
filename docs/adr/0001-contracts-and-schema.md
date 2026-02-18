@@ -10,8 +10,11 @@ We must define contracts before implementing ingestion or persistence details, a
 
 ## Decision
 1. **Pydantic models are the source of truth** for all contracts:
-   - Persistent entities (e.g., Nova, Dataset, Paper, JobRun)
+   - Persistent entities (e.g., Nova, Dataset, Reference, NovaReference, JobRun)
    - Workflow event payloads used at Step Functions boundaries
+   - Bibliographic works are modeled as global `Reference` entities,
+     with nova-scoped `NovaReference` link records to support
+     many-to-many relationships without duplication.
 
 2. **JSON Schema artifacts are generated from Pydantic models and committed to the repository** under `/schemas`:
    - These files are the published interface artifacts for consumers and reviewers

@@ -48,7 +48,7 @@ TARGETS: list[SchemaTarget] = [
     # Events
     SchemaTarget("events", "initialize_nova", InitializeNovaEvent),
     SchemaTarget("events", "ingest_new_nova", IngestNewNovaEvent),
-    SchemaTarget("events", "refresh_papers", RefreshReferencesEvent),
+    SchemaTarget("events", "refresh_references", RefreshReferencesEvent),
     SchemaTarget("events", "discover_spectra_products", DiscoverSpectraProductsEvent),
     SchemaTarget("events", "download_and_validate_spectra", DownloadAndValidateSpectraEvent),
     SchemaTarget("events", "ingest_photometry_dataset", IngestPhotometryDatasetEvent),

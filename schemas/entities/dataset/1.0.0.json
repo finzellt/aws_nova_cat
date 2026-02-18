@@ -79,10 +79,6 @@
         },
         "schema_version": {
           "default": "1.0.0",
-          "description": "Semantic version for this persistent entity contract.",
-          "examples": [
-            "1.0.0"
-          ],
           "title": "Schema Version",
           "type": "string"
         },
@@ -205,10 +201,6 @@
     },
     "schema_version": {
       "default": "1.0.0",
-      "description": "Semantic version for this persistent entity contract.",
-      "examples": [
-        "1.0.0"
-      ],
       "title": "Schema Version",
       "type": "string"
     },

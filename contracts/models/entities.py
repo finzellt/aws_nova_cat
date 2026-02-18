@@ -57,6 +57,8 @@ class Provenance(PersistentBase):
     without overfitting to any single upstream system.
     """
 
+    schema_version: str = Field(default="1.0.0")
+
     source: str = Field(
         ...,
         description="Canonical identifier for upstream source (e.g., 'SIMBAD', 'ADS', 'ASAS-SN', 'AAVSO', 'UserUpload').",
@@ -124,6 +126,8 @@ class Nova(PersistentBase):
     Naming: public_name is the current canonical display name.
     Aliases: pragmatic search terms (often copied from SIMBAD / observed elsewhere).
     """
+
+    schema_version: str = Field(default="1.0.0")
 
     nova_id: UUID = Field(
         default_factory=uuid4, description="Stable, system-wide identifier for this nova."
@@ -219,6 +223,8 @@ class FileObject(PersistentBase):
     Logical file contract (not storage layout): identity + integrity + descriptive metadata.
     """
 
+    schema_version: str = Field(default="1.0.0")
+
     file_id: UUID = Field(default_factory=uuid4)
 
     filename: str = Field(..., min_length=1, max_length=512)
@@ -239,6 +245,8 @@ class Dataset(PersistentBase):
     Many datasets may reference the same nova via `nova_id`.
     Datasets are the unit of ingestion, validation, and publication.
     """
+
+    schema_version: str = Field(default="1.0.0")
 
     dataset_id: UUID = Field(default_factory=uuid4)
 
@@ -314,6 +322,8 @@ class Reference(PersistentBase):
     Deduplicated by stable external identifiers when available.
     """
 
+    schema_version: str = Field(default="1.0.0")
+
     reference_id: UUID = Field(default_factory=uuid4)
 
     reference_type: ReferenceType = Field(default=ReferenceType.journal_article)
@@ -365,6 +375,8 @@ class NovaReference(PersistentBase):
     This is the unit used to build a nova's bibliography page.
     """
 
+    schema_version: str = Field(default="1.0.0")
+
     nova_reference_id: UUID = Field(default_factory=uuid4)
 
     nova_id: UUID
@@ -393,6 +405,8 @@ class Attempt(PersistentBase):
     """
     One execution attempt for a job/workflow task. Stored for traceability.
     """
+
+    schema_version: str = Field(default="1.0.0")
 
     attempt_id: UUID = Field(default_factory=uuid4)
 
@@ -440,6 +454,8 @@ class JobRun(PersistentBase):
     """
     Persistent record of a workflow/job invocation.
     """
+
+    schema_version: str = Field(default="1.0.0")
 
     job_run_id: UUID = Field(default_factory=uuid4)
 
