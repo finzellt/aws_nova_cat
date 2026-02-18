@@ -7,7 +7,15 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from contracts.models.entities import Attempt, Dataset, FileObject, JobRun, Nova, Paper
+from contracts.models.entities import (
+    Attempt,
+    Dataset,
+    FileObject,
+    JobRun,
+    Nova,
+    NovaReference,
+    Reference,
+)
 from contracts.models.events import (
     DiscoverSpectraProductsEvent,
     DownloadAndValidateSpectraEvent,
@@ -15,7 +23,7 @@ from contracts.models.events import (
     IngestPhotometryDatasetEvent,
     InitializeNovaEvent,
     NameCheckAndReconcileEvent,
-    RefreshPapersEvent,
+    RefreshReferencesEvent,
 )
 
 SCHEMAS_ROOT = Path("schemas")
@@ -33,13 +41,14 @@ TARGETS: list[SchemaTarget] = [
     SchemaTarget("entities", "nova", Nova),
     SchemaTarget("entities", "dataset", Dataset),
     SchemaTarget("entities", "file_object", FileObject),
-    SchemaTarget("entities", "paper", Paper),
+    SchemaTarget("entities", "reference", Reference),
+    SchemaTarget("entities", "nova_reference", NovaReference),
     SchemaTarget("entities", "job_run", JobRun),
     SchemaTarget("entities", "attempt", Attempt),
     # Events
     SchemaTarget("events", "initialize_nova", InitializeNovaEvent),
     SchemaTarget("events", "ingest_new_nova", IngestNewNovaEvent),
-    SchemaTarget("events", "refresh_papers", RefreshPapersEvent),
+    SchemaTarget("events", "refresh_papers", RefreshReferencesEvent),
     SchemaTarget("events", "discover_spectra_products", DiscoverSpectraProductsEvent),
     SchemaTarget("events", "download_and_validate_spectra", DownloadAndValidateSpectraEvent),
     SchemaTarget("events", "ingest_photometry_dataset", IngestPhotometryDatasetEvent),

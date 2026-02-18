@@ -61,8 +61,8 @@ class IngestNewNovaEvent(EventBase):
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
-class RefreshPapersEvent(EventBase):
-    job_type: JobType = Field(default=JobType.refresh_papers)
+class RefreshReferencesEvent(EventBase):
+    job_type: JobType = Field(default=JobType.refresh_references)
     nova_id: UUID
     # ADS query hints; keep generic
     query_terms: list[str] = Field(default_factory=list)

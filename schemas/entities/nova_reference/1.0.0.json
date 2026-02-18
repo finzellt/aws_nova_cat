@@ -1,0 +1,184 @@
+{
+  "$defs": {
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Scientific provenance: enough to trace 'what said this' and 'when',\nwithout overfitting to any single upstream system.",
+      "properties": {
+        "asserted_by": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human or system actor that asserted this fact (e.g., ORCID, service name).",
+          "title": "Asserted By"
+        },
+        "citation": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional citation string or bibcode/doi reference.",
+          "title": "Citation"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/ProvenanceMethod",
+          "default": "imported"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "description": "Semantic version for this persistent entity contract.",
+          "examples": [
+            "1.0.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source": {
+          "description": "Canonical identifier for upstream source (e.g., 'SIMBAD', 'ADS', 'ASAS-SN', 'AAVSO', 'UserUpload').",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_record_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upstream record identifier, if provided.",
+          "title": "Source Record Id"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "ProvenanceMethod": {
+      "enum": [
+        "manual",
+        "scraped",
+        "computed",
+        "imported"
+      ],
+      "title": "ProvenanceMethod",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/entities/nova_reference/1.0.0",
+  "additionalProperties": false,
+  "description": "Per-nova link connecting a Nova to a global Reference.\nThis is the unit used to build a nova's bibliography page.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "maxLength": 4000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
+    },
+    "nova_id": {
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    },
+    "nova_reference_id": {
+      "format": "uuid",
+      "title": "Nova Reference Id",
+      "type": "string"
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "reference_id": {
+      "format": "uuid",
+      "title": "Reference Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "description": "Semantic version for this persistent entity contract.",
+      "examples": [
+        "1.0.0"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "nova_id",
+    "reference_id"
+  ],
+  "title": "NovaReference",
+  "type": "object"
+}

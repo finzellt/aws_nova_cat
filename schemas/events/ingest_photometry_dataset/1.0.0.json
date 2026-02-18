@@ -12,7 +12,7 @@
       "enum": [
         "InitializeNova",
         "IngestNewNova",
-        "RefreshPapers",
+        "RefreshReferences",
         "DiscoverSpectraProducts",
         "DownloadAndValidateSpectra",
         "IngestPhotometryDataset",

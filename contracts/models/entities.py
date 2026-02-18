@@ -267,36 +267,113 @@ class Dataset(PersistentBase):
 
 
 # ----------------------------
-# Papers
+# References
 # ----------------------------
 
 
-class PaperIdType(str, Enum):
-    bibcode = "bibcode"
+class ReferenceType(str, Enum):
+    journal_article = "journal_article"
+    conference_abstract = "conference_abstract"
+    poster = "poster"
+    catalog = "catalog"
+    dataset = "dataset"
+    software = "software"
+    other = "other"
+
+
+class IdentifierType(str, Enum):
+    ads_bibcode = "ads_bibcode"
     doi = "doi"
     arxiv = "arxiv"
+    vizier = "vizier"
+    url = "url"
+    other = "other"
 
 
-class Paper(PersistentBase):
+class Identifier(BaseModel):
     """
-    Paper metadata (primarily from ADS). Keep fields stable and portable.
+    A typed identifier for a Reference (supports ADS bibcodes, DOIs, arXiv IDs, VizieR IDs, URLs, etc.).
     """
 
-    paper_id: UUID = Field(default_factory=uuid4)
+    model_config = ConfigDict(extra="forbid")
 
-    id_type: PaperIdType
-    identifier: str = Field(..., min_length=1, max_length=128)  # bibcode/doi/arxiv id
+    id_type: IdentifierType
+    value: str = Field(..., min_length=1, max_length=256)
+
+    @field_validator("value")
+    @classmethod
+    def reject_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Identifier value cannot be blank.")
+        return v
+
+
+class Reference(PersistentBase):
+    """
+    Global bibliographic/work record (paper, poster, catalog entry, dataset record, etc.).
+    Deduplicated by stable external identifiers when available.
+    """
+
+    reference_id: UUID = Field(default_factory=uuid4)
+
+    reference_type: ReferenceType = Field(default=ReferenceType.journal_article)
+
+    identifiers: list[Identifier] = Field(
+        default_factory=list,
+        description="Typed external identifiers for this reference (e.g., ADS bibcode, DOI, arXiv, VizieR, URL).",
+    )
+
     title: str | None = Field(default=None, max_length=2000)
     year: int | None = Field(default=None, ge=1800, le=2500)
     authors: list[str] = Field(default_factory=list)
-    url: HttpUrl | None = None
+    url: HttpUrl | None = Field(
+        default=None,
+        description="Canonical URL if available (often derived from identifiers, but included for convenience).",
+    )
 
     provenance: Provenance | None = None
 
     @field_validator("authors")
     @classmethod
     def strip_authors(cls, v: list[str]) -> list[str]:
-        return [" ".join(a.split()) for a in v if a.strip()]
+        return [" ".join(a.split()) for a in v if a and a.strip()]
+
+    @model_validator(mode="after")
+    def validate_identifiers(self) -> Reference:
+        # Require at least one stable identifier for global dedupe, OR allow url/title as a fallback.
+        if not self.identifiers and not self.url and not self.title:
+            raise ValueError(
+                "Reference must include at least one identifier, or a url/title fallback."
+            )
+
+        # Deduplicate identifiers by (type, value) exact match.
+        seen: set[tuple[str, str]] = set()
+        deduped: list[Identifier] = []
+        for ident in self.identifiers:
+            key = (ident.id_type.value, ident.value)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(ident)
+        self.identifiers = deduped
+        return self
+
+
+class NovaReference(PersistentBase):
+    """
+    Per-nova link connecting a Nova to a global Reference.
+    This is the unit used to build a nova's bibliography page.
+    """
+
+    nova_reference_id: UUID = Field(default_factory=uuid4)
+
+    nova_id: UUID
+    reference_id: UUID
+
+    notes: str | None = Field(default=None, max_length=4000)
+
+    # Link-level provenance: how/why this Reference was associated with this nova (e.g., ADS query terms).
+    provenance: Provenance | None = None
 
 
 # ----------------------------
@@ -344,7 +421,7 @@ class Attempt(PersistentBase):
 class JobType(str, Enum):
     initialize_nova = "InitializeNova"
     ingest_new_nova = "IngestNewNova"
-    refresh_papers = "RefreshPapers"
+    refresh_references = "RefreshReferences"
     discover_spectra_products = "DiscoverSpectraProducts"
     download_and_validate_spectra = "DownloadAndValidateSpectra"
     ingest_photometry_dataset = "IngestPhotometryDataset"
