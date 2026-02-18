@@ -16,6 +16,11 @@
   "additionalProperties": false,
   "description": "One execution attempt for a job/workflow task. Stored for traceability.",
   "properties": {
+    "attempt_id": {
+      "format": "uuid",
+      "title": "Attempt Id",
+      "type": "string"
+    },
     "attempt_number": {
       "minimum": 1,
       "title": "Attempt Number",
@@ -77,11 +82,6 @@
       ],
       "default": null,
       "title": "Finished At"
-    },
-    "id": {
-      "format": "uuid",
-      "title": "Id",
-      "type": "string"
     },
     "job_run_id": {
       "format": "uuid",

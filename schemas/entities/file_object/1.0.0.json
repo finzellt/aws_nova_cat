@@ -40,6 +40,7 @@
         "asserted_by": {
           "anyOf": [
             {
+              "maxLength": 256,
               "type": "string"
             },
             {
@@ -53,6 +54,7 @@
         "citation": {
           "anyOf": [
             {
+              "maxLength": 512,
               "type": "string"
             },
             {
@@ -62,6 +64,11 @@
           "default": null,
           "description": "Optional citation string or bibcode/doi reference.",
           "title": "Citation"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
         },
         "method": {
           "$ref": "#/$defs/ProvenanceMethod",
@@ -95,7 +102,8 @@
           "type": "string"
         },
         "source": {
-          "description": "Canonical identifier for upstream source (e.g., 'ASAS-SN', 'ADS', 'AAVSO', 'UserUpload').",
+          "description": "Canonical identifier for upstream source (e.g., 'SIMBAD', 'ADS', 'ASAS-SN', 'AAVSO', 'UserUpload').",
+          "maxLength": 128,
           "minLength": 1,
           "title": "Source",
           "type": "string"
@@ -103,6 +111,7 @@
         "source_record_id": {
           "anyOf": [
             {
+              "maxLength": 256,
               "type": "string"
             },
             {
@@ -112,6 +121,11 @@
           "default": null,
           "description": "Upstream record identifier, if provided.",
           "title": "Source Record Id"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
         }
       },
       "required": [
@@ -151,15 +165,15 @@
       ],
       "default": null
     },
+    "file_id": {
+      "format": "uuid",
+      "title": "File Id",
+      "type": "string"
+    },
     "filename": {
       "maxLength": 512,
       "minLength": 1,
       "title": "Filename",
-      "type": "string"
-    },
-    "id": {
-      "format": "uuid",
-      "title": "Id",
       "type": "string"
     },
     "media_type": {

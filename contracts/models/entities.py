@@ -18,23 +18,21 @@ def utcnow() -> datetime:
 # ----------------------------
 
 
-class VersionedModel(BaseModel):
-    """Base class for all contracts with explicit versioning."""
+class PersistentBase(BaseModel):
+    """
+    Base for all persistent entities.
 
-    model_config = ConfigDict(extra="forbid", frozen=False)
+    NOTE: We intentionally do NOT include a generic `id` field.
+    Every entity uses an explicit `<entity>_id` field for clarity in contracts.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     schema_version: str = Field(
         default="1.0.0",
         description="Semantic version for this persistent entity contract.",
         examples=["1.0.0"],
     )
-
-
-class TimestampedModel(BaseModel):
-    """Base class for created/updated timestamps."""
-
-    model_config = ConfigDict(extra="forbid")
-
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
@@ -53,7 +51,7 @@ class ProvenanceMethod(str, Enum):
     imported = "imported"
 
 
-class Provenance(VersionedModel):
+class Provenance(PersistentBase):
     """
     Scientific provenance: enough to trace 'what said this' and 'when',
     without overfitting to any single upstream system.
@@ -61,61 +59,40 @@ class Provenance(VersionedModel):
 
     source: str = Field(
         ...,
-        description="Canonical identifier for upstream source (e.g., 'ASAS-SN', 'ADS', 'AAVSO', 'UserUpload').",
+        description="Canonical identifier for upstream source (e.g., 'SIMBAD', 'ADS', 'ASAS-SN', 'AAVSO', 'UserUpload').",
         min_length=1,
+        max_length=128,
     )
     source_record_id: str | None = Field(
         default=None,
         description="Upstream record identifier, if provided.",
+        max_length=256,
     )
     retrieved_at: datetime = Field(default_factory=utcnow)
     method: ProvenanceMethod = Field(default=ProvenanceMethod.imported)
     asserted_by: str | None = Field(
         default=None,
         description="Human or system actor that asserted this fact (e.g., ORCID, service name).",
+        max_length=256,
     )
     citation: str | None = Field(
         default=None,
         description="Optional citation string or bibcode/doi reference.",
+        max_length=512,
     )
     notes: str | None = Field(default=None, max_length=2000)
 
-
-class EntityBase(VersionedModel, TimestampedModel):
-    """Base for persistent entities with stable IDs."""
-
-    id: UUID = Field(default_factory=uuid4)
-
-
-# ----------------------------
-# Persistent Entities
-# ----------------------------
-
-
-class AliasType(str, Enum):
-    official = "official"
-    common = "common"
-    survey = "survey"
-    historical = "historical"
-    other = "other"
-
-
-class Alias(EntityBase):
-    """
-    A name that refers to a nova. Names can evolve; UUID is stable.
-    """
-
-    nova_id: UUID
-    value: str = Field(..., min_length=1, max_length=256)
-    type: AliasType = Field(default=AliasType.other)
-
-    # Optional metadata / provenance for the alias itself:
-    provenance: Provenance | None = None
-
-    @field_validator("value")
+    @field_validator("retrieved_at")
     @classmethod
-    def normalize_alias(cls, v: str) -> str:
-        return " ".join(v.split())
+    def ensure_retrieved_tz_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
+            raise ValueError("retrieved_at must be timezone-aware (UTC).")
+        return v
+
+
+# ----------------------------
+# Nova
+# ----------------------------
 
 
 class NovaStatus(str, Enum):
@@ -125,7 +102,7 @@ class NovaStatus(str, Enum):
 
 
 class SkyCoordFrame(str, Enum):
-    icrs = "icrs"  # keep minimal; extend later if needed
+    icrs = "icrs"
 
 
 class Position(BaseModel):
@@ -139,43 +116,71 @@ class Position(BaseModel):
     provenance: Provenance | None = None
 
 
-class Nova(EntityBase):
+class Nova(PersistentBase):
     """
-    Core nova record. Keep minimal: identity + a small set of stable scientific metadata.
-    Put the rest behind extensions as needed.
+    Core nova record.
+
+    Identity: nova_id (UUID) is the only authoritative internal identifier.
+    Naming: public_name is the current canonical display name.
+    Aliases: pragmatic search terms (often copied from SIMBAD / observed elsewhere).
     """
 
-    nova_uuid: UUID = Field(
-        default_factory=uuid4,
-        description="Stable identifier used across the system. Duplicates id for clarity at boundaries.",
+    nova_id: UUID = Field(
+        default_factory=uuid4, description="Stable, system-wide identifier for this nova."
     )
-
-    # Public-facing name may change; aliases capture history and alternates.
     public_name: str = Field(..., min_length=1, max_length=256)
     status: NovaStatus = Field(default=NovaStatus.candidate)
 
-    # Minimal astrophysical metadata hooks (extensible later)
     position: Position | None = None
     discovery_date: datetime | None = None
 
-    # Provenance for the top-level nova record (e.g. who/what created it)
-    provenance: Provenance | None = None
-
-    # Forward references are okay, but keep entity separation clean:
-    alias_ids: list[UUID] = Field(
-        default_factory=list, description="IDs of Alias records linked to this Nova."
+    # Aliases are search terms; we keep them simple and minimally validated.
+    aliases: list[str] = Field(
+        default_factory=list,
+        description="Known external name strings used for discovery/matching (e.g., SIMBAD alias list).",
     )
+
+    provenance: Provenance | None = None
 
     @field_validator("public_name")
     @classmethod
-    def normalize_name(cls, v: str) -> str:
-        return " ".join(v.split())
+    def reject_blank_name(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("public_name cannot be blank.")
+        return v
 
-    @model_validator(mode="after")
-    def ensure_uuid_consistency(self) -> Nova:
-        # Allow either separate or same; but keep stable.
-        # If you prefer "id is the canonical", enforce equality.
-        return self
+    @field_validator("aliases")
+    @classmethod
+    def validate_aliases(cls, v: list[str]) -> list[str]:
+        # Keep aliases as "as-seen" search terms; only reject useless entries and exact duplicates.
+        out: list[str] = []
+        seen: set[str] = set()
+        for s in v:
+            if s is None:
+                continue
+            if s.strip() == "":
+                continue
+            if len(s) > 512:
+                raise ValueError("Alias too long (>512 chars).")
+            if s in seen:
+                continue
+            seen.add(s)
+            out.append(s)
+        return out
+
+    @field_validator("discovery_date")
+    @classmethod
+    def ensure_discovery_tz_aware_if_present(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return None
+        if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
+            raise ValueError("discovery_date must be timezone-aware (UTC).")
+        return v
+
+
+# ----------------------------
+# Files and Datasets
+# ----------------------------
 
 
 class DatasetKind(str, Enum):
@@ -209,10 +214,12 @@ class ContentDigest(BaseModel):
         return v.lower()
 
 
-class FileObject(EntityBase):
+class FileObject(PersistentBase):
     """
     Logical file contract (not storage layout): identity + integrity + descriptive metadata.
     """
+
+    file_id: UUID = Field(default_factory=uuid4)
 
     filename: str = Field(..., min_length=1, max_length=512)
     media_type: str | None = Field(
@@ -226,32 +233,42 @@ class FileObject(EntityBase):
     provenance: Provenance | None = None
 
 
-class Dataset(EntityBase):
+class Dataset(PersistentBase):
     """
-    Dataset ties a nova to one scientific product line (spectra or photometry).
-    Files are separate entities; dataset references file IDs.
+    A coherent scientific dataset associated with a single nova.
+    Many datasets may reference the same nova via `nova_id`.
+    Datasets are the unit of ingestion, validation, and publication.
     """
+
+    dataset_id: UUID = Field(default_factory=uuid4)
 
     nova_id: UUID
     kind: DatasetKind
     status: DatasetStatus = Field(default=DatasetStatus.discovered)
 
-    # One or more files comprise a dataset (spectrum FITS + header, photometry CSV + meta, etc.)
     file_ids: list[UUID] = Field(default_factory=list)
 
-    # Minimal common metadata hooks
     title: str | None = Field(default=None, max_length=512)
     observed_start: datetime | None = None
     observed_end: datetime | None = None
 
-    # Provenance at dataset level (discovery + validation chain)
     provenance: Provenance | None = None
 
-    # Extensibility point for instrument/survey-specific details without schema explosion
     attributes: dict[str, Any] = Field(
         default_factory=dict,
         description="Free-form attributes for incremental enrichment (kept small; avoid embedding huge payloads).",
     )
+
+    @model_validator(mode="after")
+    def validate_observation_window(self) -> Dataset:
+        if self.observed_start and self.observed_end and self.observed_end < self.observed_start:
+            raise ValueError("observed_end cannot be earlier than observed_start.")
+        return self
+
+
+# ----------------------------
+# Papers
+# ----------------------------
 
 
 class PaperIdType(str, Enum):
@@ -260,10 +277,12 @@ class PaperIdType(str, Enum):
     arxiv = "arxiv"
 
 
-class Paper(EntityBase):
+class Paper(PersistentBase):
     """
     Paper metadata (primarily from ADS). Keep fields stable and portable.
     """
+
+    paper_id: UUID = Field(default_factory=uuid4)
 
     id_type: PaperIdType
     identifier: str = Field(..., min_length=1, max_length=128)  # bibcode/doi/arxiv id
@@ -280,6 +299,11 @@ class Paper(EntityBase):
         return [" ".join(a.split()) for a in v if a.strip()]
 
 
+# ----------------------------
+# JobRun / Attempt (operational trace)
+# ----------------------------
+
+
 class AttemptStatus(str, Enum):
     started = "started"
     succeeded = "succeeded"
@@ -288,10 +312,12 @@ class AttemptStatus(str, Enum):
     cancelled = "cancelled"
 
 
-class Attempt(EntityBase):
+class Attempt(PersistentBase):
     """
     One execution attempt for a job/workflow task. Stored for traceability.
     """
+
+    attempt_id: UUID = Field(default_factory=uuid4)
 
     job_run_id: UUID
     attempt_number: int = Field(..., ge=1)
@@ -300,11 +326,9 @@ class Attempt(EntityBase):
     started_at: datetime = Field(default_factory=utcnow)
     finished_at: datetime | None = None
 
-    # Error reporting: keep compact and safe to persist
     error_code: str | None = Field(default=None, max_length=128)
     error_message: str | None = Field(default=None, max_length=4000)
 
-    # Trace linkouts
     request_id: str | None = Field(default=None, description="AWS Lambda request id, if relevant.")
     execution_arn: str | None = Field(
         default=None, description="Step Functions execution ARN, if relevant."
@@ -335,10 +359,12 @@ class JobStatus(str, Enum):
     cancelled = "cancelled"
 
 
-class JobRun(EntityBase):
+class JobRun(PersistentBase):
     """
     Persistent record of a workflow/job invocation.
     """
+
+    job_run_id: UUID = Field(default_factory=uuid4)
 
     job_type: JobType
     status: JobStatus = Field(default=JobStatus.queued)
@@ -349,11 +375,10 @@ class JobRun(EntityBase):
     initiated_at: datetime = Field(default_factory=utcnow)
     finished_at: datetime | None = None
 
-    # Optional linkage
+    # Optional linkage for convenience/traceability
     nova_id: UUID | None = None
     dataset_id: UUID | None = None
 
-    # Operational metadata
     initiated_by: str | None = Field(
         default=None, description="Actor or service initiating the run."
     )

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from contracts.models.entities import Alias, Attempt, Dataset, FileObject, JobRun, Nova, Paper
+from contracts.models.entities import Attempt, Dataset, FileObject, JobRun, Nova, Paper
 from contracts.models.events import (
     DiscoverSpectraProductsEvent,
     DownloadAndValidateSpectraEvent,
@@ -31,7 +31,6 @@ class SchemaTarget:
 TARGETS: list[SchemaTarget] = [
     # Entities
     SchemaTarget("entities", "nova", Nova),
-    SchemaTarget("entities", "alias", Alias),
     SchemaTarget("entities", "dataset", Dataset),
     SchemaTarget("entities", "file_object", FileObject),
     SchemaTarget("entities", "paper", Paper),

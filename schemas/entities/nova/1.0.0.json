@@ -69,6 +69,7 @@
         "asserted_by": {
           "anyOf": [
             {
+              "maxLength": 256,
               "type": "string"
             },
             {
@@ -82,6 +83,7 @@
         "citation": {
           "anyOf": [
             {
+              "maxLength": 512,
               "type": "string"
             },
             {
@@ -91,6 +93,11 @@
           "default": null,
           "description": "Optional citation string or bibcode/doi reference.",
           "title": "Citation"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
         },
         "method": {
           "$ref": "#/$defs/ProvenanceMethod",
@@ -124,7 +131,8 @@
           "type": "string"
         },
         "source": {
-          "description": "Canonical identifier for upstream source (e.g., 'ASAS-SN', 'ADS', 'AAVSO', 'UserUpload').",
+          "description": "Canonical identifier for upstream source (e.g., 'SIMBAD', 'ADS', 'ASAS-SN', 'AAVSO', 'UserUpload').",
+          "maxLength": 128,
           "minLength": 1,
           "title": "Source",
           "type": "string"
@@ -132,6 +140,7 @@
         "source_record_id": {
           "anyOf": [
             {
+              "maxLength": 256,
               "type": "string"
             },
             {
@@ -141,6 +150,11 @@
           "default": null,
           "description": "Upstream record identifier, if provided.",
           "title": "Source Record Id"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
         }
       },
       "required": [
@@ -169,15 +183,14 @@
   },
   "$id": "nova-cat://schemas/entities/nova/1.0.0",
   "additionalProperties": false,
-  "description": "Core nova record. Keep minimal: identity + a small set of stable scientific metadata.\nPut the rest behind extensions as needed.",
+  "description": "Core nova record.\n\nIdentity: nova_id (UUID) is the only authoritative internal identifier.\nNaming: public_name is the current canonical display name.\nAliases: pragmatic search terms (often copied from SIMBAD / observed elsewhere).",
   "properties": {
-    "alias_ids": {
-      "description": "IDs of Alias records linked to this Nova.",
+    "aliases": {
+      "description": "Known external name strings used for discovery/matching (e.g., SIMBAD alias list).",
       "items": {
-        "format": "uuid",
         "type": "string"
       },
-      "title": "Alias Ids",
+      "title": "Aliases",
       "type": "array"
     },
     "created_at": {
@@ -198,15 +211,10 @@
       "default": null,
       "title": "Discovery Date"
     },
-    "id": {
+    "nova_id": {
+      "description": "Stable, system-wide identifier for this nova.",
       "format": "uuid",
-      "title": "Id",
-      "type": "string"
-    },
-    "nova_uuid": {
-      "description": "Stable identifier used across the system. Duplicates id for clarity at boundaries.",
-      "format": "uuid",
-      "title": "Nova Uuid",
+      "title": "Nova Id",
       "type": "string"
     },
     "position": {
