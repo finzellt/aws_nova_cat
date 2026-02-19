@@ -1,0 +1,257 @@
+{
+  "$defs": {
+    "Identifier": {
+      "additionalProperties": false,
+      "description": "A typed identifier for a Reference (supports ADS bibcodes, DOIs, arXiv IDs, VizieR IDs, URLs, etc.).",
+      "properties": {
+        "id_type": {
+          "$ref": "#/$defs/IdentifierType"
+        },
+        "value": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id_type",
+        "value"
+      ],
+      "title": "Identifier",
+      "type": "object"
+    },
+    "IdentifierType": {
+      "enum": [
+        "ads_bibcode",
+        "doi",
+        "arxiv",
+        "vizier",
+        "url",
+        "other"
+      ],
+      "title": "IdentifierType",
+      "type": "string"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Scientific provenance: enough to trace 'what said this' and 'when',\nwithout overfitting to any single upstream system.",
+      "properties": {
+        "asserted_by": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human or system actor that asserted this fact (e.g., ORCID, service name).",
+          "title": "Asserted By"
+        },
+        "citation": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional citation string or bibcode/doi reference.",
+          "title": "Citation"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/ProvenanceMethod",
+          "default": "imported"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source": {
+          "description": "Canonical identifier for upstream source (e.g., 'SIMBAD', 'ADS', 'ASAS-SN', 'AAVSO', 'UserUpload').",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_record_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upstream record identifier, if provided.",
+          "title": "Source Record Id"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "ProvenanceMethod": {
+      "enum": [
+        "manual",
+        "scraped",
+        "computed",
+        "imported"
+      ],
+      "title": "ProvenanceMethod",
+      "type": "string"
+    },
+    "ReferenceType": {
+      "enum": [
+        "journal_article",
+        "conference_abstract",
+        "poster",
+        "catalog",
+        "dataset",
+        "software",
+        "other"
+      ],
+      "title": "ReferenceType",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/entities/reference/1.0.0",
+  "additionalProperties": false,
+  "description": "Global bibliographic/work record (paper, poster, catalog entry, dataset record, etc.).\nDeduplicated by stable external identifiers when available.",
+  "properties": {
+    "authors": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Authors",
+      "type": "array"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "identifiers": {
+      "description": "Typed external identifiers for this reference (e.g., ADS bibcode, DOI, arXiv, VizieR, URL).",
+      "items": {
+        "$ref": "#/$defs/Identifier"
+      },
+      "title": "Identifiers",
+      "type": "array"
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "reference_id": {
+      "format": "uuid",
+      "title": "Reference Id",
+      "type": "string"
+    },
+    "reference_type": {
+      "$ref": "#/$defs/ReferenceType",
+      "default": "journal_article"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Canonical URL if available (often derived from identifiers, but included for convenience).",
+      "title": "Url"
+    },
+    "year": {
+      "anyOf": [
+        {
+          "maximum": 2500,
+          "minimum": 1800,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Year"
+    }
+  },
+  "title": "Reference",
+  "type": "object"
+}

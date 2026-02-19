@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "JobType": {
+      "enum": [
+        "InitializeNova",
+        "IngestNewNova",
+        "RefreshReferences",
+        "DiscoverSpectraProducts",
+        "DownloadAndValidateSpectra",
+        "IngestPhotometryDataset",
+        "NameCheckAndReconcile"
+      ],
+      "title": "JobType",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/events/refresh_references/1.0.0",
+  "additionalProperties": false,
+  "properties": {
+    "attributes": {
+      "additionalProperties": true,
+      "title": "Attributes",
+      "type": "object"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_version": {
+      "default": "1.0.0",
+      "title": "Event Version",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "maxLength": 256,
+      "minLength": 8,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "initiated_at": {
+      "format": "date-time",
+      "title": "Initiated At",
+      "type": "string"
+    },
+    "job_type": {
+      "$ref": "#/$defs/JobType",
+      "default": "RefreshReferences"
+    },
+    "nova_id": {
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    },
+    "query_terms": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Query Terms",
+      "type": "array"
+    },
+    "since_year": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Since Year"
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "nova_id"
+  ],
+  "title": "RefreshReferencesEvent",
+  "type": "object"
+}

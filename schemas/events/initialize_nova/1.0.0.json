@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "JobType": {
+      "enum": [
+        "InitializeNova",
+        "IngestNewNova",
+        "RefreshReferences",
+        "DiscoverSpectraProducts",
+        "DownloadAndValidateSpectra",
+        "IngestPhotometryDataset",
+        "NameCheckAndReconcile"
+      ],
+      "title": "JobType",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/events/initialize_nova/1.0.0",
+  "additionalProperties": false,
+  "properties": {
+    "aliases": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Aliases",
+      "type": "array"
+    },
+    "attributes": {
+      "additionalProperties": true,
+      "title": "Attributes",
+      "type": "object"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_version": {
+      "default": "1.0.0",
+      "title": "Event Version",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "maxLength": 256,
+      "minLength": 8,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "initiated_at": {
+      "format": "date-time",
+      "title": "Initiated At",
+      "type": "string"
+    },
+    "job_type": {
+      "$ref": "#/$defs/JobType",
+      "default": "InitializeNova"
+    },
+    "proposed_nova_uuid": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Proposed Nova Uuid"
+    },
+    "public_name": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Public Name",
+      "type": "string"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Where this request came from (e.g., UI, ingest feed).",
+      "title": "Source"
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "public_name"
+  ],
+  "title": "InitializeNovaEvent",
+  "type": "object"
+}

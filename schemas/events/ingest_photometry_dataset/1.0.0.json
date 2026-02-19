@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "DatasetKind": {
+      "enum": [
+        "spectra",
+        "photometry"
+      ],
+      "title": "DatasetKind",
+      "type": "string"
+    },
+    "JobType": {
+      "enum": [
+        "InitializeNova",
+        "IngestNewNova",
+        "RefreshReferences",
+        "DiscoverSpectraProducts",
+        "DownloadAndValidateSpectra",
+        "IngestPhotometryDataset",
+        "NameCheckAndReconcile"
+      ],
+      "title": "JobType",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/events/ingest_photometry_dataset/1.0.0",
+  "additionalProperties": false,
+  "properties": {
+    "attributes": {
+      "additionalProperties": true,
+      "title": "Attributes",
+      "type": "object"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "dataset_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset Id"
+    },
+    "dataset_kind": {
+      "$ref": "#/$defs/DatasetKind",
+      "default": "photometry"
+    },
+    "event_version": {
+      "default": "1.0.0",
+      "title": "Event Version",
+      "type": "string"
+    },
+    "file_urls": {
+      "items": {
+        "type": "string"
+      },
+      "title": "File Urls",
+      "type": "array"
+    },
+    "idempotency_key": {
+      "maxLength": 256,
+      "minLength": 8,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "initiated_at": {
+      "format": "date-time",
+      "title": "Initiated At",
+      "type": "string"
+    },
+    "job_type": {
+      "$ref": "#/$defs/JobType",
+      "default": "IngestPhotometryDataset"
+    },
+    "nova_id": {
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "nova_id"
+  ],
+  "title": "IngestPhotometryDatasetEvent",
+  "type": "object"
+}

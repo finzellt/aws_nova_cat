@@ -1,0 +1,264 @@
+{
+  "$defs": {
+    "NovaStatus": {
+      "enum": [
+        "candidate",
+        "confirmed",
+        "retracted"
+      ],
+      "title": "NovaStatus",
+      "type": "string"
+    },
+    "Position": {
+      "additionalProperties": false,
+      "properties": {
+        "dec_deg": {
+          "description": "Declination in degrees.",
+          "maximum": 90.0,
+          "minimum": -90.0,
+          "title": "Dec Deg",
+          "type": "number"
+        },
+        "epoch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "J2000",
+          "description": "Epoch label, e.g., 'J2000'.",
+          "title": "Epoch"
+        },
+        "frame": {
+          "$ref": "#/$defs/SkyCoordFrame",
+          "default": "icrs"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Provenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ra_deg": {
+          "description": "Right ascension in degrees.",
+          "exclusiveMaximum": 360.0,
+          "minimum": 0.0,
+          "title": "Ra Deg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "ra_deg",
+        "dec_deg"
+      ],
+      "title": "Position",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Scientific provenance: enough to trace 'what said this' and 'when',\nwithout overfitting to any single upstream system.",
+      "properties": {
+        "asserted_by": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human or system actor that asserted this fact (e.g., ORCID, service name).",
+          "title": "Asserted By"
+        },
+        "citation": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional citation string or bibcode/doi reference.",
+          "title": "Citation"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/ProvenanceMethod",
+          "default": "imported"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source": {
+          "description": "Canonical identifier for upstream source (e.g., 'SIMBAD', 'ADS', 'ASAS-SN', 'AAVSO', 'UserUpload').",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_record_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upstream record identifier, if provided.",
+          "title": "Source Record Id"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "ProvenanceMethod": {
+      "enum": [
+        "manual",
+        "scraped",
+        "computed",
+        "imported"
+      ],
+      "title": "ProvenanceMethod",
+      "type": "string"
+    },
+    "SkyCoordFrame": {
+      "enum": [
+        "icrs"
+      ],
+      "title": "SkyCoordFrame",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/entities/nova/1.0.0",
+  "additionalProperties": false,
+  "description": "Core nova record.\n\nIdentity: nova_id (UUID) is the only authoritative internal identifier.\nNaming: public_name is the current canonical display name.\nAliases: pragmatic search terms (often copied from SIMBAD / observed elsewhere).",
+  "properties": {
+    "aliases": {
+      "description": "Known external name strings used for discovery/matching (e.g., SIMBAD alias list).",
+      "items": {
+        "type": "string"
+      },
+      "title": "Aliases",
+      "type": "array"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "discovery_date": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Discovery Date"
+    },
+    "nova_id": {
+      "description": "Stable, system-wide identifier for this nova.",
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    },
+    "position": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Position"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "public_name": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Public Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/NovaStatus",
+      "default": "candidate"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "public_name"
+  ],
+  "title": "Nova",
+  "type": "object"
+}
