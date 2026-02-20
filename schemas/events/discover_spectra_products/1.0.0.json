@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "JobType": {
+      "enum": [
+        "InitializeNova",
+        "IngestNewNova",
+        "RefreshReferences",
+        "DiscoverSpectraProducts",
+        "DownloadAndValidateSpectra",
+        "IngestPhotometryDataset",
+        "NameCheckAndReconcile"
+      ],
+      "title": "JobType",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/events/discover_spectra_products/1.0.0",
+  "additionalProperties": false,
+  "properties": {
+    "attributes": {
+      "additionalProperties": true,
+      "title": "Attributes",
+      "type": "object"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_version": {
+      "default": "1.0.0",
+      "title": "Event Version",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "maxLength": 256,
+      "minLength": 8,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "initiated_at": {
+      "format": "date-time",
+      "title": "Initiated At",
+      "type": "string"
+    },
+    "job_type": {
+      "$ref": "#/$defs/JobType",
+      "default": "DiscoverSpectraProducts"
+    },
+    "nova_id": {
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    },
+    "sources": {
+      "description": "Preferred discovery sources (optional).",
+      "items": {
+        "type": "string"
+      },
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "nova_id"
+  ],
+  "title": "DiscoverSpectraProductsEvent",
+  "type": "object"
+}

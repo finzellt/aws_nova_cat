@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "JobType": {
+      "enum": [
+        "InitializeNova",
+        "IngestNewNova",
+        "RefreshReferences",
+        "DiscoverSpectraProducts",
+        "DownloadAndValidateSpectra",
+        "IngestPhotometryDataset",
+        "NameCheckAndReconcile"
+      ],
+      "title": "JobType",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/events/download_and_validate_spectra/1.0.0",
+  "additionalProperties": false,
+  "properties": {
+    "attributes": {
+      "additionalProperties": true,
+      "title": "Attributes",
+      "type": "object"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "dataset_id": {
+      "format": "uuid",
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "event_version": {
+      "default": "1.0.0",
+      "title": "Event Version",
+      "type": "string"
+    },
+    "file_urls": {
+      "description": "Upstream URLs to download/validate.",
+      "items": {
+        "type": "string"
+      },
+      "title": "File Urls",
+      "type": "array"
+    },
+    "idempotency_key": {
+      "maxLength": 256,
+      "minLength": 8,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "initiated_at": {
+      "format": "date-time",
+      "title": "Initiated At",
+      "type": "string"
+    },
+    "job_type": {
+      "$ref": "#/$defs/JobType",
+      "default": "DownloadAndValidateSpectra"
+    },
+    "nova_id": {
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "nova_id",
+    "dataset_id"
+  ],
+  "title": "DownloadAndValidateSpectraEvent",
+  "type": "object"
+}
