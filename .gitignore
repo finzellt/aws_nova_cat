@@ -7,6 +7,7 @@ __pycache__/
 
 cdk.out/
 infra/cdk.context.json
+tools/diagrams/node_modules/
 
 .DS_Store
 .idea/
