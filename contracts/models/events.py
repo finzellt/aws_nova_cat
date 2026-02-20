@@ -25,7 +25,6 @@ class EventBase(BaseModel):
         default="1.0.0", description="Semantic version for this event contract."
     )
     correlation_id: UUID = Field(default_factory=uuid4)
-    idempotency_key: str = Field(..., min_length=8, max_length=256)
     initiated_at: datetime = Field(default_factory=utcnow)
 
     @field_validator("initiated_at")
