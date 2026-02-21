@@ -1,15 +1,20 @@
 ```mermaid
 flowchart TD
-  A[ValidateInput] --> B[BeginJobRun] --> C[AcquireIdempotencyLock]
-  C --> D[FetchReferenceCandidates]
-  D --> M{"ReconcileReferences (Map)"}
+  A[ValidateInput] --> B{EnsureCorrelationId}
+  B --> C[BeginJobRun]
+  C --> D[AcquireIdempotencyLock]
+  D --> E[FetchReferenceCandidates]
+  E --> M{"ReconcileReferences (Map)"}
+
   M --> N[NormalizeReference]
-  N --> U[UpsertReferenceEntity]
-  U --> L[LinkNovaReference]
-  L --> M
-  M --> DD[ComputeDiscoveryDate]
-  DD --> UD[UpsertDiscoveryDateMetadata]
-  UD --> P[PublishRefreshReferencesCompleted]
-  P --> S[FinalizeJobRunSuccess]
+  N --> O[UpsertReferenceEntity]
+  O --> P[LinkNovaReference]
+  P --> M
+
+  M --> R[ComputeDiscoveryDate]
+  R --> S[UpsertDiscoveryDateMetadata]
+  S --> T[FinalizeJobRunSuccess]
+
+  TF[TerminalFailHandler] --> FF[FinalizeJobRunFailed]
 
 ```

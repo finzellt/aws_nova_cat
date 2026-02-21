@@ -1,15 +1,18 @@
 ```mermaid
 flowchart TD
-    A[ValidateInput] --> B[BeginJobRun]
-    B --> C[AcquireIdempotencyLock]
-    C --> D[NormalizeName]
-    D --> P{"QueryResolvers</br> (Parallel)"}
-    P --> R[ReconcileResults]
-    R --> X{Decision}
+  A[ValidateInput] --> B{EnsureCorrelationId}
+  B --> C[BeginJobRun]
+  C --> D[AcquireIdempotencyLock]
+  D --> E[FetchCurrentNamingState]
+  E --> F{"QueryNamingAuthorities (Parallel)"}
+  F --> G[ReconcileNaming]
+  G --> H{NamingChanged?}
 
-    X -- resolved --> U[ApplyNameUpdates] --> E[PublishNameResolved] --> S[FinalizeJobRunSuccess]
-    X -- no match --> N[CreateNovaIdAndInitialize] --> U
-    X -- ambiguous --> Q[QuarantineHandler] --> SQ[FinalizeJobRunQuarantined]
+  H -- No --> I["FinalizeJobRunSuccess (NO_CHANGE)"]
+  H -- Yes --> J[ApplyNameUpdates]
+  J --> K["PublishNameReconciled (optional)"]
+  K --> L["FinalizeJobRunSuccess (UPDATED)"]
 
-    R -->|terminal error| T[TerminalFailHandler] --> ST[FinalizeJobRunFailed]
+  Q[QuarantineHandler] --> R[FinalizeJobRunQuarantined]
+  T[TerminalFailHandler] --> U[FinalizeJobRunFailed]
 ```

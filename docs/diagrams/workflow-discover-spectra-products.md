@@ -1,14 +1,20 @@
 ```mermaid
 flowchart TD
-  A[ValidateInput] --> B[BeginJobRun] --> C[AcquireIdempotencyLock]
-  C --> M{"DiscoverAcrossProviders</br> (Map)"}
-  M --> Q[QueryProviderForProducts]
-  Q --> N[NormalizeProviderProducts]
-  N --> D[DeduplicateAndAssignDatasetIds]
-  D --> E[PublishDatasetDiscoveredEvents]
-  E --> M
-  M --> S[SummarizeDiscovery]
-  S --> P[PublishSpectraProductsDiscovered]
-  P --> F[FinalizeJobRunSuccess]
+  A[ValidateInput] --> B{EnsureCorrelationId}
+  B --> C[BeginJobRun]
+  C --> D[AcquireIdempotencyLock]
+  D --> E{"DiscoverAcrossProviders (Map)"}
+
+  E --> F[QueryProviderForProducts]
+  F --> G[NormalizeProviderProducts]
+  G --> H[DeduplicateAndAssignDatasetIds]
+  H --> I[PersistDatasetMetadata]
+  I --> J[PublishDownloadAndValidateSpectraRequests]
+  J --> E
+
+  E --> K[SummarizeDiscovery]
+  K --> L[FinalizeJobRunSuccess]
+
+  TF[TerminalFailHandler] --> FF[FinalizeJobRunFailed]
 
 ```

@@ -1,11 +1,17 @@
 ```mermaid
 flowchart TD
-  A[ValidateInput] --> B[BeginJobRun] --> C[AcquireIdempotencyLock]
-  C --> D[CheckIfAlreadyIngested]
-  D --> E{AlreadyIngested?}
-  E -- yes --> S["FinalizeJobRunSuccess</br>(SKIPPED)"]
-  E -- no --> V[ValidatePhotometry] --> I[IngestMetadataAndProvenance]
-  I --> P[PublishPhotometryDatasetReady] --> F[FinalizeJobRunSuccess]
-  V -->|validation fail| Q[QuarantineHandler] --> QF[FinalizeJobRunQuarantined]
+  A[ValidateInput] --> B{EnsureCorrelationId}
+  B --> C[BeginJobRun]
+  C --> D[AcquireIdempotencyLock]
+  D --> E[CheckOperationalStatus]
+  E --> F{AlreadyIngested?}
+
+  F -- Yes --> G["FinalizeJobRunSuccess (SKIPPED_DUPLICATE)"]
+  F -- No --> H[ValidatePhotometry]
+  H --> I[IngestMetadataAndProvenance]
+  I --> J["FinalizeJobRunSuccess (INGESTED)"]
+
+  Q[QuarantineHandler] --> R[FinalizeJobRunQuarantined]
+  TF[TerminalFailHandler] --> FF[FinalizeJobRunFailed]
 
 ```

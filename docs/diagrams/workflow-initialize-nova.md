@@ -1,16 +1,31 @@
 ```mermaid
 flowchart TD
-  A[ValidateInput] --> B[BeginJobRun]
-  B --> C[AcquireIdempotencyLock]
-  C --> D[ResolveCandidate]
-  D --> E{VerifyClassicalNova}
-  E -- classical --> F[UpsertCriticalMetadata]
-  F --> G[PublishInitializeNovaCompleted]
-  G --> H[FinalizeJobRunSuccess]
+  A[ValidateInput] --> B{EnsureCorrelationId}
+  B --> C[BeginJobRun]
+  C --> D[AcquireIdempotencyLock]
+  D --> E[NormalizeCandidateName]
+  E --> F[CheckExistingNovaByName]
+  F --> G{ExistsInDB?}
 
-  E -- ambiguous --> Q[QuarantineHandler]
-  Q --> HQ[FinalizeJobRunQuarantined]
+  G -- Yes --> H[PublishIngestNewNova]
+  H --> I["FinalizeJobRunSuccess (EXISTS_AND_LAUNCHED)"]
 
-  E -- not classical --> T[TerminalFailHandler]
-  T --> HT[FinalizeJobRunFailed]
+  G -- No --> J[ResolveCandidateAgainstPublicArchives]
+  J --> K{CandidateIsNova?}
+
+  K -- No --> L["FinalizeJobRunSuccess (NOT_FOUND)"]
+
+  K -- Yes --> M{CandidateIsClassicalNova?}
+  M -- No --> N["FinalizeJobRunSuccess (NOT_A_CLASSICAL_NOVA)"]
+
+  M -- Ambiguous --> Q[QuarantineHandler]
+  Q --> R[FinalizeJobRunQuarantined]
+
+  M -- Yes --> O[CreateNovaId]
+  O --> P[UpsertMinimalNovaMetadata]
+  P --> H2[PublishIngestNewNova]
+  H2 --> S["FinalizeJobRunSuccess (CREATED_AND_LAUNCHED)"]
+
+  %% Terminal failure path (workflow-level)
+  T[TerminalFailHandler] --> U[FinalizeJobRunFailed]
 ```

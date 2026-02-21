@@ -1,14 +1,20 @@
 ```mermaid
 flowchart TD
-  A[ValidateInput] --> B[BeginJobRun] --> C[AcquireIdempotencyLock]
-  C --> D[CheckOperationalStatus]
-  D --> E{AlreadyValidated?}
+  A[ValidateInput] --> B{EnsureCorrelationId}
+  B --> C[BeginJobRun]
+  C --> D[AcquireIdempotencyLock]
+  D --> E[LoadDatasetMetadata]
+  E --> F[CheckOperationalStatus]
+  F --> G{AlreadyValidated?}
 
-  E -- yes --> P["PublishSpectraDatasetValidated</br> (optional)"] --> S["FinalizeJobRunSuccess</br> (SKIPPED)"]
-  E -- no --> DL[EnsureDownloaded] --> V[ValidateBytes] --> R[RecordValidationResult]
-  R --> P2[PublishSpectraDatasetValidated] --> S2[FinalizeJobRunSuccess]
+  G -- Yes --> H["FinalizeJobRunSuccess (SKIPPED_DUPLICATE)"]
 
-  DL -->|checksum mismatch| Q[QuarantineHandler] --> SQ[FinalizeJobRunQuarantined]
-  V -->|validation fail| Q
+  G -- No --> I[AcquireArtifact]
+  I --> J["ValidateBytes (Profile-Driven)"]
+  J --> K[RecordValidationResult]
+  K --> L["FinalizeJobRunSuccess (VALIDATED)"]
+
+  Q[QuarantineHandler] --> R[FinalizeJobRunQuarantined]
+  TF[TerminalFailHandler] --> FF[FinalizeJobRunFailed]
 
 ```
