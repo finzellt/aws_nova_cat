@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "correlation_id": "11111111-1111-1111-1111-111111111111",
+  "nova_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "result": "SUCCEEDED",
+  "metadata": {
+    "coordinates": { "ra_deg": 0.0, "dec_deg": 0.0 },
+    "constellation": "Example",
+    "aliases": ["Example Nova"]
+  }
+}

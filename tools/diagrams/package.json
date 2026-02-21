@@ -1,0 +1,16 @@
+{
+  "name": "diagram-tools",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Local tooling for rendering Mermaid diagrams used in project documentation.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "render": "python render_mermaid.py"
+  },
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^10.9.1"
+  }
+}
