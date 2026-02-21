@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0.0",
+  "correlation_id": "33333333-3333-3333-3333-333333333333",
+  "nova_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "dataset_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+  "provider": "providerA",
+  "product_locator": { "url": "https://example.invalid/product.fits" },
+  "expected_fingerprint": null
+}

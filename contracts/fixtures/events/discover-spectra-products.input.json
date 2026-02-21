@@ -1,0 +1,6 @@
+{
+  "schema_version": "1.0.0",
+  "correlation_id": "22222222-2222-2222-2222-222222222222",
+  "nova_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "providers": ["providerA", "providerB"]
+}
