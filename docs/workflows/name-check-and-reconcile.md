@@ -1,66 +1,88 @@
-# Workflow Spec: NameCheckAndReconcile
+# Workflow Spec: name_check_and_reconcile
 
 ## Purpose
-Resolve an unresolved name to a stable `nova_id` and update alias/public_name as needed.
-This is the ONLY workflow allowed to use unresolved names as primary inputs.
+Post-establishment naming enrichment workflow.
+
+This workflow checks whether an already-established nova (`nova_id`) has received:
+- a new official designation, or
+- newly recognized aliases / naming changes
+
+It is designed to run a limited number of times (e.g., during the first ~6 weeks after eruption) and can stop once naming stabilizes.
+
+**Invariant:** This workflow is NOT a name-only front door. It operates on `nova_id`.
 
 ## Triggers
-- Manual/operator trigger (given candidate_name)
-- Upstream ingestion pipeline that discovers a name without stable ID
+- Scheduled runs for newly established novae (time-bucketed)
+- Manual/operator trigger for an existing `nova_id`
+- Optional future trigger after references refresh if new aliases are discovered
 
 ## Event Contracts
 ### Input Event Schema
-- Schema name: `NameCheckAndReconcile`
-- Required: `candidate_name`
-- Optional: hint fields, correlation_id
+- Schema name: `name_check_and_reconcile`
+- Schema path: `schemas/events/name_check_and_reconcile/latest.json`
+- Required identifiers: `nova_id`
+- Optional: `correlation_id` (workflow generates if missing)
 
-### Output Event Schema
-- Schema name: `NameResolved` (or equivalent)
-- Required: `nova_id`
-- Includes: confidence, canonical_name, alias updates summary
+### Output Event Schema (Downstream Published Event)
+- If naming updates occur, publish an update event:
+  - Schema name: `name_reconciled` (or equivalent)
+  - Schema path: `schemas/events/name_reconciled/latest.json` *(only if such a schema exists in repo)*
+- If no changes occur: no downstream workflow event required.
 
 ## State Machine (Explicit State List)
-1. ValidateInput (Pass)
-2. BeginJobRun (Task)
-3. AcquireIdempotencyLock (Task)
-4. NormalizeName (Task)
-5. QueryResolvers (Parallel)
-   - QueryInternalAliases (Task)
-   - QueryExternalResolverA (Task)
-   - QueryExternalResolverB (Task)
-6. ReconcileResults (Task)
-7. Decision (Choice)
-   - Resolved -> ApplyNameUpdates
-   - Ambiguous -> QuarantineHandler
-   - No match -> CreateNovaIdAndInitialize (Task) -> ApplyNameUpdates
-8. ApplyNameUpdates (Task)
-9. PublishNameResolved (Task)
-10. FinalizeJobRunSuccess (Task)
-11. QuarantineHandler (Task)
-12. FinalizeJobRunQuarantined (Task)
-13. TerminalFailHandler (Task)
-14. FinalizeJobRunFailed (Task)
+1. **ValidateInput** (Pass)
+2. **EnsureCorrelationId** (Choice + Pass)
+3. **BeginJobRun** (Task)
+4. **AcquireIdempotencyLock** (Task)
+5. **FetchCurrentNamingState** (Task)
+6. **QueryNamingAuthorities** (Parallel)
+   - QueryAuthorityA (Task)
+   - QueryAuthorityB (Task)
+7. **ReconcileNaming** (Task)
+8. **NamingChanged?** (Choice)
+   - No -> **FinalizeJobRunSuccess** (outcome = `NO_CHANGE`)
+   - Yes -> continue
+9. **ApplyNameUpdates** (Task)
+10. **PublishNameReconciled** (Task) *(optional, if event exists)*
+11. **FinalizeJobRunSuccess** (Task) (outcome = `UPDATED`)
+12. **QuarantineHandler** (Task)
+13. **FinalizeJobRunQuarantined** (Task)
+14. **TerminalFailHandler** (Task)
+15. **FinalizeJobRunFailed** (Task)
 
-## Retry / Timeout Policy
-- NormalizeName:
-  - Timeout 10s; Retry MaxAttempts 2; Backoff 2s, 10s
-- Query* resolvers:
-  - Timeout 30s; Retry MaxAttempts 3; Backoff 2s, 10s, 30s
-- ReconcileResults:
-  - Timeout 20s; Retry only on internal transient errors; MaxAttempts 2
+## Retry / Timeout Policy (per state)
+- BeginJobRun / AcquireIdempotencyLock:
+  - Timeout 10s; Retry MaxAttempts 3; Backoff 2s, 10s, 30s
+- FetchCurrentNamingState:
+  - Timeout 20s; Retry MaxAttempts 3; Backoff 2s, 10s, 30s
+- QueryAuthority*:
+  - Timeout 60s; Retry MaxAttempts 3; Backoff 2s, 10s, 30s
+- ReconcileNaming:
+  - Timeout 20s; Retry MaxAttempts 2 (internal transient only)
 - ApplyNameUpdates:
   - Timeout 20s; Retry MaxAttempts 3; Backoff 2s, 10s, 30s
-- PublishNameResolved:
+- PublishNameReconciled:
   - Timeout 10s; Retry MaxAttempts 2
 
 ## Failure Classification Policy
-- Retryable: transient resolver failures, throttling, 5xx
-- Terminal: schema/version mismatch; invalid candidate_name
-- Quarantine: multiple plausible matches; conflicting authoritative sources; non-monotonic identity changes (merge ambiguity)
+- Retryable:
+  - transient authority failures, throttling, timeouts, 5xx
+- Terminal:
+  - schema/version mismatch
+  - missing/invalid `nova_id`
+- Quarantine:
+  - conflicting authorities producing ambiguous canonical designation
+  - non-monotonic changes that would imply identity merge/split ambiguity
 
 ## Idempotency Guarantees & Invariants
-- Workflow idempotency key (time-bucketed): `NameCheckAndReconcile:{normalized_name}:{schema_version}:{time_bucket}`
-- Invariant: outputs always include `nova_id` and downstream workflows MUST use UUIDs only.
+- Workflow idempotency key (time-bucketed): `NameCheckAndReconcile:{nova_id}:{schema_version}:{time_bucket}`
+- Invariant: names are updated only as enrichment; UUID identity remains stable.
+- Invariant: `idempotency_key` is internal-only (not in event schemas).
 
-## JobRun / Attempt Emissions + Required Log Fields
-(same conventions as InitializeNova)
+## JobRun / Attempt Emissions and Required Log Fields
+- JobRun outcome includes: `UPDATED` or `NO_CHANGE`.
+- Required structured log fields:
+  - workflow_name, execution_arn, job_run_id, state_name, attempt_number
+  - schema_version, correlation_id, nova_id
+  - naming_sources[], updates_applied (bool), update_summary
+  - error_classification, error_fingerprint (if applicable)

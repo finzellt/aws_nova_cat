@@ -1,39 +1,74 @@
-# Workflow Spec: DiscoverSpectraProducts
+# Workflow Spec: discover_spectra_products
 
 ## Purpose
-Discover candidate spectra products for a `nova_id` across multiple archives/providers, normalize into a minimal internal product shape,
-deduplicate, and assign stable `dataset_id` values. Does NOT download files.
+
+Discover candidate spectra products for `nova_id` across multiple providers.
+
+Responsibilities:
+
+- Query providers
+- Normalize provider metadata
+- Assign stable `dataset_id`
+- Persist dataset metadata (including provider + locator + format hints)
+- Publish continuation events for downstream validation
+
+Does NOT download files.
+
+Provider-specific access patterns are contained within provider adapters.
+
+---
 
 ## Triggers
-- Scheduled discovery refresh (time-bucketed)
-- Triggered after IngestNewNova
-- Manual/operator re-run
+- Triggered by `ingest_new_nova` via `discover_spectra_products`
+- Scheduled (time-bucketed)
+- Manual/operator invocation
 
 ## Event Contracts
+
 ### Input Event Schema
-- Schema name: `DiscoverSpectraProducts`
+- Schema name: `discover_spectra_products`
+- Schema path: `schemas/events/discover_spectra_products/latest.json`
 - Required: `nova_id`
-- Optional: providers list, cursor, correlation_id
+- Optional: `correlation_id` (generated if missing)
 
-### Output Event Schema
-- Schema name: `SpectraProductsDiscovered`
-- Includes: list of dataset_id(s) discovered/confirmed; per-provider summary
+### Output Event Schema (Downstream Published Event)
+- Schema name: `download_and_validate_spectra`
+- Schema path: `schemas/events/download_and_validate_spectra/latest.json`
 
-## State Machine (Explicit State List)
-1. ValidateInput (Pass)
-2. BeginJobRun (Task)
-3. AcquireIdempotencyLock (Task)
-4. DiscoverAcrossProviders (Map)  <-- Pattern A
-   - QueryProviderForProducts (Task)
-   - NormalizeProviderProducts (Task)  <-- provider-specific normalization boundary
-   - DeduplicateAndAssignDatasetIds (Task)
-   - PublishDatasetDiscoveredEvents (Task)  (one per dataset or batched)
-   - ProviderItemFailureHandler (Catch -> QuarantineProvider + Continue)
-5. SummarizeDiscovery (Task)
-6. PublishSpectraProductsDiscovered (Task)
-7. FinalizeJobRunSuccess (Task)
-8. TerminalFailHandler (Task)
-9. FinalizeJobRunFailed (Task)
+This is the intended consumer schema.
+
+---
+
+## State Machine
+1. ValidateInput
+2. EnsureCorrelationId
+3. BeginJobRun
+4. AcquireIdempotencyLock
+5. DiscoverAcrossProviders (Map)
+   - QueryProviderForProducts
+   - NormalizeProviderProducts
+   - DeduplicateAndAssignDatasetIds
+   - PersistDatasetMetadata
+   - PublishDownloadAndValidateSpectraRequests
+6. SummarizeDiscovery
+7. FinalizeJobRunSuccess
+8. TerminalFailHandler
+9. FinalizeJobRunFailed
+
+---
+
+## Important Metadata Persistence
+Each dataset entry must store:
+
+- dataset_id
+- nova_id
+- provider
+- product locator(s)
+- optional format hints (instrument, pipeline tag, etc.)
+
+This supports profile-driven validation in downstream workflow.
+
+---
 
 ## Retry / Timeout Policy
 - QueryProviderForProducts:
@@ -47,20 +82,22 @@ deduplicate, and assign stable `dataset_id` values. Does NOT download files.
 - Map MaxConcurrency:
   - MVP default 1 (sequential providers, lowest complexity/cost); tunable later
 
-## Failure Classification Policy
-- Retryable: transient provider failures, throttling
-- Terminal: invalid/missing nova_id; schema/version mismatch; provider list invalid
-- Quarantine:
-  - provider returns malformed records
-  - ambiguous product identity key construction
-  - normalization failures due to unknown schema variants
+---
 
-## Idempotency Guarantees & Invariants
-- Workflow idempotency key (time-bucketed): `DiscoverSpectraProducts:{nova_id}:{schema_version}:{time_bucket}`
-- Dataset identity key (conceptual; must be stable):
-  - `dataset_identity = provider + product_timestamp + (url OR size OR provider_key)`
-- Dedupe key: `DatasetIdentity:{dataset_identity}:{schema_version}`
-- Invariant: this workflow outputs only UUIDs (dataset_id, nova_id), never unresolved names.
+## Idempotency
 
-## JobRun / Attempt Emissions + Required Log Fields
-- Required fields include: nova_id, providers[], provider, dataset_count_new, dataset_count_existing, quarantined_count.
+Workflow idempotency key:
+`DiscoverSpectraProducts:{nova_id}:{schema_version}:{time_bucket}`
+
+Dataset identity key (conceptual):
+`provider + product_timestamp + (url OR size OR provider_key)`
+
+Idempotency key is internal-only.
+
+---
+
+## Invariants
+- No names used.
+- Only UUIDs published downstream.
+- Event payload acts as continuation payload.
+- Provider information must be persisted for downstream profile selection.

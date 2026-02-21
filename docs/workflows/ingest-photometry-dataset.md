@@ -1,56 +1,72 @@
-# Workflow Spec: IngestPhotometryDataset
+# Workflow Spec: ingest_photometry_dataset
 
 ## Purpose
 Dataset-scoped validation and ingestion of a photometry dataset, registering provenance and readiness for use.
 
+Note: This workflow can act as a front door when the system has a photometry file/locator and can assign a dataset_id in that process
+(if your upstream establishes dataset_id before launch, this workflow assumes it is provided).
+
 ## Triggers
 - Manual upload/registration yields dataset_id and locator
-- Future: discovery workflows (out of MVP scope)
+- Operator trigger for known dataset_id
 
 ## Event Contracts
 ### Input Event Schema
-- Schema name: `IngestPhotometryDataset`
-- Required: `dataset_id`, `nova_id`, data_locator, provenance
-- Optional: correlation_id
+- Schema name: `ingest_photometry_dataset`
+- Schema path: `schemas/events/ingest_photometry_dataset/latest.json`
+- Required identifiers: `dataset_id`, `nova_id` (if known), plus locator/provenance fields
+- Optional: `correlation_id` (workflow generates if missing)
 
-### Output Event Schema
-- Schema name: `PhotometryDatasetReady` (or equivalent)
-- Includes: dataset_id, validation summary, provenance summary
+### Output Event Schema (Downstream Published Event)
+- Typically no downstream workflow event required.
+- If you maintain a “ready” event schema, it would be:
+  - `schemas/events/photometry_dataset_ready/latest.json` *(optional, if exists)*
 
 ## State Machine (Explicit State List)
-1. ValidateInput (Pass)
-2. BeginJobRun (Task)
-3. AcquireIdempotencyLock (Task)
-4. CheckIfAlreadyIngested (Task)
-5. AlreadyIngested? (Choice)
-   - Yes: FinalizeSuccess (SKIPPED_DUPLICATE)
-   - No: continue
-6. ValidatePhotometry (Task)
-7. IngestMetadataAndProvenance (Task)
-8. PublishPhotometryDatasetReady (Task)
-9. FinalizeJobRunSuccess (Task)
-10. QuarantineHandler (Task)
-11. FinalizeJobRunQuarantined (Task)
-12. TerminalFailHandler (Task)
-13. FinalizeJobRunFailed (Task)
+1. **ValidateInput** (Pass)
+2. **EnsureCorrelationId** (Choice + Pass)
+3. **BeginJobRun** (Task)
+4. **AcquireIdempotencyLock** (Task)
+5. **CheckOperationalStatus** (Task)  <-- checks prior ingestion status for dataset_id
+6. **AlreadyIngested?** (Choice)
+   - Yes -> **FinalizeJobRunSuccess** (outcome = `SKIPPED_DUPLICATE`)
+   - No  -> continue
+7. **ValidatePhotometry** (Task)
+8. **IngestMetadataAndProvenance** (Task)
+9. **FinalizeJobRunSuccess** (Task) (outcome = `INGESTED`)
+10. **QuarantineHandler** (Task)
+11. **FinalizeJobRunQuarantined** (Task)
+12. **TerminalFailHandler** (Task)
+13. **FinalizeJobRunFailed** (Task)
 
-## Retry / Timeout Policy
+## Retry / Timeout Policy (per state)
+- BeginJobRun / AcquireIdempotencyLock:
+  - Timeout 10s; Retry MaxAttempts 3; Backoff 2s, 10s, 30s
+- CheckOperationalStatus:
+  - Timeout 10s; Retry MaxAttempts 3; Backoff 2s, 10s, 30s
 - ValidatePhotometry:
   - Timeout 5m
-  - Retry: none for deterministic validation errors; Retry MaxAttempts 2 for internal transient only
+  - Retry: none for deterministic validation errors; MaxAttempts 2 for internal transient only
 - IngestMetadataAndProvenance:
   - Timeout 30s; Retry MaxAttempts 3; Backoff 2s, 10s, 30s
-- PublishPhotometryDatasetReady:
-  - Timeout 10s; Retry MaxAttempts 2
 
 ## Failure Classification Policy
-- Retryable: transient infra failures, throttling
-- Terminal: schema mismatch; missing dataset_id/nova_id; missing required provenance fields
-- Quarantine: data readable but invalid columns/units/time formats; suspicious timestamps
+- Retryable:
+  - transient infra failures, throttling
+- Terminal:
+  - schema mismatch/version mismatch
+  - missing required identifiers/locator/provenance fields
+- Quarantine:
+  - data readable but invalid columns/units/time formats
+  - suspicious timestamps or ambiguous units
 
 ## Idempotency Guarantees & Invariants
 - Workflow idempotency key: `IngestPhotometryDataset:{dataset_id}:{schema_version}`
-- Invariant: downstream usage depends on UUIDs only.
+- Invariant: `idempotency_key` is internal-only (not in event schemas).
 
-## JobRun / Attempt Emissions + Required Log Fields
-- Required fields: nova_id, dataset_id, data_locator, validation_status, provenance_key(s).
+## JobRun / Attempt Emissions and Required Log Fields
+- Required structured log fields:
+  - workflow_name, execution_arn, job_run_id, state_name, attempt_number
+  - schema_version, correlation_id, dataset_id, nova_id (if present)
+  - validation_status, provenance_summary_key(s)
+  - error_classification, error_fingerprint (if applicable)
