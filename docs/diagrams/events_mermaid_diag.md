@@ -37,7 +37,7 @@ Downstream steps operate on nova_id / dataset_id
   %% -----------------------------
   DSP["DiscoverSpectraProductsEvent
 (nova_id)"]
-  DVS["DownloadAndValidateSpectraEvent
+  DVS["AcquireAndValidateSpectraEvent
 (nova_id, dataset_id, file_urls[])"]
 
   %% -----------------------------

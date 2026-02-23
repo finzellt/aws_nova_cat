@@ -83,14 +83,15 @@ class DiscoverSpectraProductsEvent(EventBase):
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
-class DownloadAndValidateSpectraEvent(EventBase):
+class AcquireAndValidateSpectraEvent(EventBase):
+    # Formerly download_and_validate_spectra (renamed for source-agnostic acquisition).
     event_version: str = Field(default="1.0.0")
-    job_type: JobType = Field(default=JobType.download_and_validate_spectra)
+    job_type: JobType = Field(default=JobType.acquire_and_validate_spectra)
     nova_id: UUID
     dataset_id: UUID
     # idempotent-safe “work list” should be explicit
     file_urls: list[str] = Field(
-        default_factory=list, description="Upstream URLs to download/validate."
+        default_factory=list, description="Upstream URLs to acquire/validate."
     )
     attributes: dict[str, Any] = Field(default_factory=dict)
 

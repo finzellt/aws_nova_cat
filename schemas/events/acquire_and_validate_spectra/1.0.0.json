@@ -6,7 +6,7 @@
         "IngestNewNova",
         "RefreshReferences",
         "DiscoverSpectraProducts",
-        "DownloadAndValidateSpectra",
+        "AcquireAndValidateSpectra",
         "IngestPhotometryDataset",
         "NameCheckAndReconcile"
       ],
@@ -14,7 +14,7 @@
       "type": "string"
     }
   },
-  "$id": "nova-cat://schemas/events/download_and_validate_spectra/1.0.0",
+  "$id": "nova-cat://schemas/events/acquire_and_validate_spectra/1.0.0",
   "additionalProperties": false,
   "properties": {
     "attributes": {
@@ -38,7 +38,7 @@
       "type": "string"
     },
     "file_urls": {
-      "description": "Upstream URLs to download/validate.",
+      "description": "Upstream URLs to acquire/validate.",
       "items": {
         "type": "string"
       },
@@ -52,7 +52,7 @@
     },
     "job_type": {
       "$ref": "#/$defs/JobType",
-      "default": "DownloadAndValidateSpectra"
+      "default": "AcquireAndValidateSpectra"
     },
     "nova_id": {
       "format": "uuid",
@@ -64,6 +64,6 @@
     "nova_id",
     "dataset_id"
   ],
-  "title": "DownloadAndValidateSpectraEvent",
+  "title": "AcquireAndValidateSpectraEvent",
   "type": "object"
 }

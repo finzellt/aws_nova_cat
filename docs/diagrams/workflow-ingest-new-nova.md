@@ -1,16 +1,11 @@
 ```mermaid
 flowchart TD
-  A[ValidateInput] --> B{EnsureCorrelationId}
-  B --> C[BeginJobRun]
-  C --> D[AcquireIdempotencyLock]
-  D --> E{"LaunchDownstream (Parallel)"}
-
-  E --> F[LaunchRefreshReferences]
-  E --> G[LaunchDiscoverSpectraProducts]
-  F --> H[SummarizeLaunch]
-  G --> H
-  H --> I[FinalizeJobRunSuccess]
-
-  T[TerminalFailHandler] --> U[FinalizeJobRunFailed]
+  A[ValidateInput] --> B[BeginJobRun] --> C[AcquireIdempotencyLock]
+  C --> D[EnsureInitialized]
+  D --> P{"LaunchDownstream</br> (Parallel)"}
+  P --> R[LaunchRefreshReferences]
+  P --> S[LaunchDiscoverSpectraProducts]
+  R --> M[SummarizeLaunch] --> E[PublishIngestNewNovaLaunched] --> F[FinalizeJobRunSuccess]
+  S --> M
 
 ```
