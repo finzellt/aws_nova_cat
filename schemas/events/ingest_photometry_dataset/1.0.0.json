@@ -14,7 +14,7 @@
         "IngestNewNova",
         "RefreshReferences",
         "DiscoverSpectraProducts",
-        "DownloadAndValidateSpectra",
+        "AcquireAndValidateSpectra",
         "IngestPhotometryDataset",
         "NameCheckAndReconcile"
       ],

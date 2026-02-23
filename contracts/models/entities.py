@@ -437,7 +437,7 @@ class JobType(str, Enum):
     ingest_new_nova = "IngestNewNova"
     refresh_references = "RefreshReferences"
     discover_spectra_products = "DiscoverSpectraProducts"
-    download_and_validate_spectra = "DownloadAndValidateSpectra"
+    acquire_and_validate_spectra = "AcquireAndValidateSpectra"
     ingest_photometry_dataset = "IngestPhotometryDataset"
     name_check_and_reconcile = "NameCheckAndReconcile"
 
