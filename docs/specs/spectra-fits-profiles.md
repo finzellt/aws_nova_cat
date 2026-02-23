@@ -34,7 +34,7 @@ Workflow involvement:
 
 - `discover_spectra_products`
   - Persists provider, locator, and format hints.
-- `download_and_validate_spectra`
+- `acquire_and_validate_spectra`
   - Performs acquisition.
   - Applies FITS Profile.
   - Validates and normalizes into canonical internal model.
