@@ -5,16 +5,19 @@ flowchart TD
   C --> D[AcquireIdempotencyLock]
   D --> E{"DiscoverAcrossProviders (Map)"}
 
-  E --> F[QueryProviderForProducts]
-  F --> G[NormalizeProviderProducts]
-  G --> H[DeduplicateAndAssignDatasetIds]
-  H --> I[PersistDatasetMetadata]
-  I --> J[PublishDownloadAndValidateSpectraRequests]
-  J --> E
+  subgraph MAP_ITERATOR
+    F[QueryProviderForProducts]
+    G[NormalizeProviderProducts]
+    H[DeduplicateAndAssignDataProductIds]
+    I[PersistDataProductMetadata]
+    J[PublishAcquireAndValidateSpectraRequests]
 
-  E --> K[SummarizeDiscovery]
+    F --> G --> H --> I --> J
+  end
+
+  E --> F
+  J --> K[SummarizeDiscovery]
   K --> L[FinalizeJobRunSuccess]
 
   TF[TerminalFailHandler] --> FF[FinalizeJobRunFailed]
-
 ```

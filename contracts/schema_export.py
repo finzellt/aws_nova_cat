@@ -17,8 +17,8 @@ from contracts.models.entities import (
     Reference,
 )
 from contracts.models.events import (
+    AcquireAndValidateSpectraEvent,
     DiscoverSpectraProductsEvent,
-    DownloadAndValidateSpectraEvent,
     IngestNewNovaEvent,
     IngestPhotometryDatasetEvent,
     InitializeNovaEvent,
@@ -50,7 +50,7 @@ TARGETS: list[SchemaTarget] = [
     SchemaTarget("events", "ingest_new_nova", IngestNewNovaEvent),
     SchemaTarget("events", "refresh_references", RefreshReferencesEvent),
     SchemaTarget("events", "discover_spectra_products", DiscoverSpectraProductsEvent),
-    SchemaTarget("events", "download_and_validate_spectra", DownloadAndValidateSpectraEvent),
+    SchemaTarget("events", "acquire_and_validate_spectra", AcquireAndValidateSpectraEvent),
     SchemaTarget("events", "ingest_photometry_dataset", IngestPhotometryDatasetEvent),
     SchemaTarget("events", "name_check_and_reconcile", NameCheckAndReconcileEvent),
 ]
