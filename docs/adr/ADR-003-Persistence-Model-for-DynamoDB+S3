@@ -1,0 +1,115 @@
+
+# ADR-003: Persistence Model for DynamoDB + S3
+
+Date: 2026-02-21
+Status: Accepted
+Epic: 3 (Persistence + Storage Architecture)
+
+## Context
+
+Nova Cat is a serverless, low-throughput system (<1000 novae; <250GB; ~<25 downloads/month) built on AWS Lambda + Step Functions + DynamoDB + S3.
+
+Epic 1 established contracts:
+- Pydantic is the source of truth.
+- Versioned JSON Schemas are generated and committed under:
+  - `schemas/events/<event_name_snake_case>/latest.json`
+
+Epic 2 established orchestration:
+- Workflows operate on a single `nova_id` at a time (UUID-first).
+- Names are resolved only at the boundary (`initialize_nova`); downstream workflows are UUID-only.
+- Boundary events are continuation payloads (upstream output schema is downstream input schema).
+- Idempotency keys are internal-only (not present in boundary event schemas).
+- Operational records exist: JobRun (execution) and Attempt (task-level invocations, including retries).
+
+Updated spectra requirements:
+- `discover_spectra_products` uses provider-specific adapters (avoid Step Functions branching).
+- `download_and_validate_spectra` performs profile-driven FITS validation + canonicalization alignment with IVOA Spectrum DM / ObsCore where possible.
+- Failures classified into QUARANTINE vs TERMINAL vs RETRYABLE.
+- FITS profiles are documented in `docs/specs/spectra-fits-profiles.md`.
+
+We need a minimal persistence model that makes workflows deterministic—especially:
+- dataset state transitions
+- retry safety (avoid duplicate processing)
+- profile selection outputs and validation results
+- stable provider locators and hints for reproducibility
+
+## Decision
+
+### DynamoDB
+
+Use a **single DynamoDB table** (`NovaCat`) with a simple `(PK, SK)` model:
+- Primary storage is **per-nova partitioned**: `PK = NOVA#<nova_id>`
+- Small global lookup namespaces coexist in the same table:
+  - Name resolution mappings: `PK = NAME#<normalized_name>`
+  - Optional S3 reverse mappings via GSI3
+
+Add only the minimal GSIs required by access patterns:
+- GSI1: Dataset eligibility per nova (`ELIG#...`)
+- GSI2: Name resolution (`NAME#...`)
+- GSI3: S3 object reverse lookup (for S3-triggered ingestion)
+
+Persist dataset state explicitly:
+- `processing_status` records operational truth (READY/IN_PROGRESS/QUARANTINED/etc.)
+- `eligibility` is a query-driving field (DOWNLOAD/INGEST/NONE) and is indexed for direct queries
+
+Use a **lease mechanism** on dataset items to avoid duplicate processing under retries/concurrency:
+- `lease_owner` + `lease_expires_at`
+- Conditional updates reclaim expired leases
+
+Persist profile-driven validation outputs on the dataset:
+- header signature hash + hints + chosen profile + notes
+- validation status + reason codes
+- fingerprints/checksums to short-circuit and classify outcomes deterministically
+
+### S3
+
+Use two buckets:
+- Private data bucket for raw, quarantine, derived, bundles
+- Public site bucket for release-based static publishing
+
+Adopt deterministic, UUID-first prefixes:
+- `raw/<type>/<nova_id>/<dataset_id>/...`
+- `quarantine/<type>/<nova_id>/<dataset_id>/<timestamp>/...`
+- `derived/<type>/<nova_id>/<dataset_id>/...`
+- `bundles/<nova_id>/full.zip` + `manifest.json`
+
+Treat FITS profiles as repo/code artifacts by default (change-controlled deployments). Optionally store runtime profile assets in S3 later if needed.
+
+## Rationale
+
+- **Cost + simplicity**: one table, a few GSIs, and two buckets are easier to operate and reason about than multiple tables/buckets with cross-resource coupling.
+- **Access-pattern driven**: all known workflow queries are either:
+  - single-partition queries (per nova), or
+  - small global lookups (name or S3 key) supported by dedicated index keys.
+- **Determinism**: eligibility is queryable, leases make retries safe, and fingerprints + profile selection outputs are persisted for reproducibility.
+- **Separation of concerns**: DynamoDB stores small structured metadata; S3 stores large bytes and artifacts.
+
+## Alternatives Considered
+
+1) **Multiple DynamoDB tables** (Novae, Datasets, References, Ops)
+- Pros: simpler mental separation
+- Cons: more infrastructure, more IAM surface area, more cross-table coordination
+- Rejected for MVP: access patterns are modest and mostly per-nova.
+
+2) **No GSIs; use partition queries + filter expressions**
+- Pros: fewer indexes
+- Cons: “download-eligible datasets” becomes a filtered scan within a partition; OK at tiny scale but pushes policy into workflow code.
+- Rejected: we want eligibility as a first-class, queryable invariant.
+
+3) **Store profile definitions in S3 (runtime-managed)**
+- Pros: can update without redeploying code
+- Cons: change control gets harder; determinism can drift across executions unless versions are pinned carefully.
+- Deferred: keep profiles in repo for now.
+
+## Consequences
+
+- Slightly more “single-table” structure than separate tables, but still readable via item types and prefixes.
+- Dataset eligibility changes require updating both item fields and GSI1 keys (a small and explicit cost).
+- Leases introduce time-based reclaim logic; Step Functions tasks must be written to acquire/refresh/release leases consistently.
+- Public vs private buckets require deliberate publishing steps (good for safety).
+
+## Implementation Notes (Non-normative)
+
+- Use ISO-8601 UTC timestamps consistently.
+- Keep DynamoDB items small; store large payloads/logs in CloudWatch or S3 pointers.
+- Consider TTL only for ephemeral items (optional), not for core scientific metadata.
