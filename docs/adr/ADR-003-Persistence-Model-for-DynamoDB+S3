@@ -1,115 +1,213 @@
+# ADR-003: Finalized Persistence Model for DynamoDB + S3
 
-# ADR-003: Persistence Model for DynamoDB + S3
+## Status
 
-Date: 2026-02-21
-Status: Accepted
-Epic: 3 (Persistence + Storage Architecture)
+Accepted
+
+Supersedes earlier draft persistence model assumptions.
+
+---
 
 ## Context
 
-Nova Cat is a serverless, low-throughput system (<1000 novae; <250GB; ~<25 downloads/month) built on AWS Lambda + Step Functions + DynamoDB + S3.
+Nova Cat requires a persistence layer that:
 
-Epic 1 established contracts:
-- Pydantic is the source of truth.
-- Versioned JSON Schemas are generated and committed under:
-  - `schemas/events/<event_name_snake_case>/latest.json`
+- Supports singular-nova–scoped workflows
+- Is cost-efficient and serverless
+- Remains deterministic under retries and replays
+- Prevents identity drift (names and locators)
+- Supports atomic spectra acquisition and validation
+- Enables operational traceability
 
-Epic 2 established orchestration:
-- Workflows operate on a single `nova_id` at a time (UUID-first).
-- Names are resolved only at the boundary (`initialize_nova`); downstream workflows are UUID-only.
-- Boundary events are continuation payloads (upstream output schema is downstream input schema).
-- Idempotency keys are internal-only (not present in boundary event schemas).
-- Operational records exist: JobRun (execution) and Attempt (task-level invocations, including retries).
+Earlier drafts included a `dataset` abstraction and partial lifecycle semantics. As workflow specifications matured (Epic 3), the persistence model required stabilization and formalization.
 
-Updated spectra requirements:
-- `discover_spectra_products` uses provider-specific adapters (avoid Step Functions branching).
-- `download_and_validate_spectra` performs profile-driven FITS validation + canonicalization alignment with IVOA Spectrum DM / ObsCore where possible.
-- Failures classified into QUARANTINE vs TERMINAL vs RETRYABLE.
-- FITS profiles are documented in `docs/specs/spectra-fits-profiles.md`.
+This ADR documents the finalized persistence architecture for MVP.
 
-We need a minimal persistence model that makes workflows deterministic—especially:
-- dataset state transitions
-- retry safety (avoid duplicate processing)
-- profile selection outputs and validation results
-- stable provider locators and hints for reproducibility
+---
 
 ## Decision
 
-### DynamoDB
+Nova Cat will use a single DynamoDB table with namespaced partition keys and atomic data products.
 
-Use a **single DynamoDB table** (`NovaCat`) with a simple `(PK, SK)` model:
-- Primary storage is **per-nova partitioned**: `PK = NOVA#<nova_id>`
-- Small global lookup namespaces coexist in the same table:
-  - Name resolution mappings: `PK = NAME#<normalized_name>`
-  - Optional S3 reverse mappings via GSI3
+### 1. Single-table, namespaced design
 
-Add only the minimal GSIs required by access patterns:
-- GSI1: Dataset eligibility per nova (`ELIG#...`)
-- GSI2: Name resolution (`NAME#...`)
-- GSI3: S3 object reverse lookup (for S3-triggered ingestion)
+The table is heterogeneous.
 
-Persist dataset state explicitly:
-- `processing_status` records operational truth (READY/IN_PROGRESS/QUARANTINED/etc.)
-- `eligibility` is a query-driving field (DOWNLOAD/INGEST/NONE) and is indexed for direct queries
+Partition key (`PK`) namespaces:
 
-Use a **lease mechanism** on dataset items to avoid duplicate processing under retries/concurrency:
-- `lease_owner` + `lease_expires_at`
-- Conditional updates reclaim expired leases
+- Per-nova partitions:
+  `PK = "<nova_id>"`
 
-Persist profile-driven validation outputs on the dataset:
-- header signature hash + hints + chosen profile + notes
-- validation status + reason codes
-- fingerprints/checksums to short-circuit and classify outcomes deterministically
+- Global identity partitions:
+  `PK = "NAME#<normalized_name>"`
+  `PK = "LOCATOR#<provider>#<locator_identity>"`
 
-### S3
+Sort key (`SK`) prefixes distinguish item types within a nova partition:
 
-Use two buckets:
-- Private data bucket for raw, quarantine, derived, bundles
-- Public site bucket for release-based static publishing
+- `NOVA`
+- `PRODUCT#...`
+- `FILE#...`
+- `REF#...`
+- `NOVAREF#...`
+- `JOBRUN#...`
+- `ATTEMPT#...`
 
-Adopt deterministic, UUID-first prefixes:
-- `raw/<type>/<nova_id>/<dataset_id>/...`
-- `quarantine/<type>/<nova_id>/<dataset_id>/<timestamp>/...`
-- `derived/<type>/<nova_id>/<dataset_id>/...`
-- `bundles/<nova_id>/full.zip` + `manifest.json`
+This allows per-nova locality while supporting global identity resolution without GSIs.
 
-Treat FITS profiles as repo/code artifacts by default (change-controlled deployments). Optionally store runtime profile assets in S3 later if needed.
+---
 
-## Rationale
+### 2. Atomic data products (dataset removed)
 
-- **Cost + simplicity**: one table, a few GSIs, and two buckets are easier to operate and reason about than multiple tables/buckets with cross-resource coupling.
-- **Access-pattern driven**: all known workflow queries are either:
-  - single-partition queries (per nova), or
-  - small global lookups (name or S3 key) supported by dedicated index keys.
-- **Determinism**: eligibility is queryable, leases make retries safe, and fingerprints + profile selection outputs are persisted for reproducibility.
-- **Separation of concerns**: DynamoDB stores small structured metadata; S3 stores large bytes and artifacts.
+The prior `dataset` abstraction is removed.
 
-## Alternatives Considered
+Instead:
 
-1) **Multiple DynamoDB tables** (Novae, Datasets, References, Ops)
-- Pros: simpler mental separation
-- Cons: more infrastructure, more IAM surface area, more cross-table coordination
-- Rejected for MVP: access patterns are modest and mostly per-nova.
+- Spectra are atomic units identified by stable `data_product_id`
+- Each spectra product has independent lifecycle and cooldown state
+- Photometry is modeled as a singleton `PHOTOMETRY_TABLE` data product per nova
 
-2) **No GSIs; use partition queries + filter expressions**
-- Pros: fewer indexes
-- Cons: “download-eligible datasets” becomes a filtered scan within a partition; OK at tiny scale but pushes policy into workflow code.
-- Rejected: we want eligibility as a first-class, queryable invariant.
+This enforces correctness and simplifies retry/quarantine semantics.
 
-3) **Store profile definitions in S3 (runtime-managed)**
-- Pros: can update without redeploying code
-- Cons: change control gets harder; determinism can drift across executions unless versions are pinned carefully.
-- Deferred: keep profiles in repo for now.
+---
+
+### 3. Identity resolution model
+
+Identity resolution occurs in two phases:
+
+#### A. Name-based resolution
+- `NameMapping` items map aliases to stable `nova_id`
+- `normalized_name` is canonicalized for deterministic lookup
+
+#### B. Coordinate-based duplicate detection
+If no name match exists:
+
+- Existing nova coordinates are retrieved
+- Angular separation is computed in code
+- Classification thresholds:
+  - `< 2"` → alias attached to existing nova
+  - `2–10"` → identity quarantine
+  - `> 10"` → create new nova
+
+Identity quarantine is persisted as a new `Nova` item with:
+- `status = QUARANTINED`
+
+No downstream ingestion workflows are launched for quarantined identity records.
+
+Spatial indexing (HEALPix or similar) is deferred; MVP uses in-memory comparison due to small scale (<1000 novae).
+
+---
+
+### 4. Nova identity fields
+
+The `Nova` entity includes core astronomical identity fields:
+
+- `ra_deg` (ICRS degrees)
+- `dec_deg` (ICRS degrees)
+- `coord_frame`
+- `coord_epoch`
+- `first_observed_at`
+
+Derived fields (e.g., constellation, galactic coordinates) are not persisted.
+
+---
+
+### 5. Spectra lifecycle and eligibility
+
+Each spectra `DataProduct` includes:
+
+- Acquisition status
+- Validation status
+- Cooldown fields (`attempt_count`, `next_eligible_attempt_at`, etc.)
+- Profile selection outputs and fingerprints
+
+An eligibility GSI supports listing acquisition-eligible spectra products:
+
+- `GSI1PK = <nova_id>`
+- `GSI1SK = ELIG#<eligibility>#SPECTRA#...`
+
+Eligibility index attributes are removed immediately after `ValidateBytes` once a definitive classification (`VALID`, `QUARANTINED`, or `TERMINAL_INVALID`) is determined.
+
+Cooldown is enforced per-product.
+
+Provider-level throttling controls are deferred post-MVP.
+
+---
+
+### 6. Locator stability
+
+`LocatorAlias` items map:
+
+`(provider + locator_identity) → data_product_id`
+
+This guarantees stable `data_product_id` assignment even if provider URLs change.
+
+Locator normalization rules must be deterministic.
+
+---
+
+### 7. Quarantine semantics
+
+Two quarantine classes exist:
+
+- Identity quarantine (coordinate ambiguity)
+- Spectra quarantine (validation classification)
+
+Quarantine is human-gated.
+
+No automatic re-entry occurs without explicit manual action.
+
+Notification behavior (SNS) is defined in workflow specifications, not in the persistence model.
+
+---
+
+### 8. Operational traceability
+
+Two operational entities are persisted:
+
+- `JobRun` (one per workflow execution)
+- `Attempt` (one per task invocation, including retries)
+
+These support:
+
+- Debugging
+- Retry analysis
+- Cooldown enforcement auditing
+
+Idempotency keys remain internal to workflows and are not persisted in boundary schemas.
+
+---
 
 ## Consequences
 
-- Slightly more “single-table” structure than separate tables, but still readable via item types and prefixes.
-- Dataset eligibility changes require updating both item fields and GSI1 keys (a small and explicit cost).
-- Leases introduce time-based reclaim logic; Step Functions tasks must be written to acquire/refresh/release leases consistently.
-- Public vs private buckets require deliberate publishing steps (good for safety).
+### Positive
 
-## Implementation Notes (Non-normative)
+- Deterministic identity resolution
+- Atomic correctness for spectra lifecycle
+- Clear quarantine boundaries
+- Access-pattern-driven DynamoDB design
+- Clean separation between persistence model and workflow orchestration
+- Stable foundation for CDK implementation
 
-- Use ISO-8601 UTC timestamps consistently.
-- Keep DynamoDB items small; store large payloads/logs in CloudWatch or S3 pointers.
-- Consider TTL only for ephemeral items (optional), not for core scientific metadata.
+### Trade-offs
+
+- Coordinate duplicate detection uses in-memory comparison (acceptable at current scale)
+- Provider-level throttling not yet implemented
+- Derived astronomical metadata not stored
+
+---
+
+## Alternatives Considered
+
+- Persisting dataset abstraction → rejected in favor of atomic products
+- Spatial indexing via HEALPix → deferred due to scale
+- Provider-wide cooldown enforcement → deferred
+- Persisting derived astronomical fields → deferred to enrichment layer
+
+---
+
+## Future Work
+
+- Implement DynamoDB + GSI definitions in CDK
+- Wire SNS for quarantine notifications
+- Consider spatial indexing if nova count increases significantly
+- Consider provider-level throttling controls if needed
