@@ -62,8 +62,12 @@ Canonical nova record.
 - `nova_id` (UUID string)
 - `primary_name` (mutable)
 - `primary_name_normalized` (deterministic normalization for lookups)
-- `status` (ACTIVE | MERGED | DEPRECATED)
+- `ra_deg` (float; ICRS right ascension in degrees)
+- `dec_deg` (float; ICRS declination in degrees)
+- `coord_frame` (string; e.g., `"ICRS"`; optional but recommended for explicitness)
+- `coord_epoch` (string; e.g., `"J2000"`; optional but recommended for explicitness)
 - `discovery_date` (optional, derived from references)
+- `status` (ACTIVE | MERGED | DEPRECATED)
 - `created_at`, `updated_at` (ISO-8601 UTC)
 
 #### Example:
