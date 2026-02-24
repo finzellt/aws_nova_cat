@@ -77,6 +77,40 @@ This workflow does not branch by provider in Step Functions; provider variabilit
 
 ---
 
+## Data Product Identity & Locator Alias Policy (MVP)
+
+Discovery performs **metadata-level deduplication** when possible, and defers ambiguous cases to post-acquisition checks.
+
+### Identity Ladder (Discovery-time)
+
+For each discovered provider record, the workflow MUST determine an `identity_strategy`:
+
+1. **NATIVE_ID (Strong)**
+   If a provider-native product identifier is available, it MUST be used as the primary identity key.
+
+2. **METADATA_KEY (Strong, fallback)**
+   If no native ID exists, a strong metadata key MAY be used if sufficient fields are present.
+   Recommended minimum fields:
+   - `provider`
+   - `instrument`
+   - `observation_time` (or equivalent timestamp)
+   Additional fields may be included (e.g., telescope, program_id, pipeline_tag).
+
+3. **WEAK (Defer)**
+   If neither (1) nor (2) can be constructed deterministically, identity is considered WEAK and definitive dedupe MUST be deferred to `acquire_and_validate_spectra` (byte-level fingerprint match).
+
+The workflow SHOULD persist `identity_strategy` (`NATIVE_ID|METADATA_KEY|WEAK`) on the data product record for diagnostics.
+
+### Locator Alias Rule
+
+If a discovered record resolves to an existing `data_product_id`, and the newly discovered locator is not already recorded, it MUST be persisted as an additional locator alias.
+
+### Publication Rule
+
+If a discovered record resolves to an existing `data_product_id` that is already `VALIDATED`, the workflow MUST NOT publish a new `acquire_and_validate_spectra` request for it.
+
+---
+
 ## Persisted Metadata Requirements (Data Product Entity)
 
 Each newly discovered spectra data product MUST persist:
@@ -90,6 +124,7 @@ Each newly discovered spectra data product MUST persist:
 ### Acquisition descriptors (MVP Mode 1)
 - provider-native product identifier (if available)
 - one or more locator fields sufficient for the downstream acquisition step (URL/API reference/etc.)
+- one primary locator plus zero or more locator aliases (additional access paths discovered later)
 
 ### Provenance / format hints (to support FITS profiles)
 - `instrument` (if available)
@@ -138,6 +173,23 @@ Each newly discovered spectra data product MUST persist:
   - ambiguous/unsafe identity mapping (cannot assign stable data_product_id deterministically)
 
 Note: item-level quarantines should not fail the entire workflow; they should be counted and surfaced in summary/metrics.
+
+### Quarantine Handling
+
+When a workflow transitions to **QuarantineHandler**, it MUST:
+
+1. Persist quarantine status and relevant diagnostic metadata.
+2. Emit a JobRun outcome of `QUARANTINED`.
+3. Publish a notification event to an SNS topic for operational review.
+
+SNS notification requirements:
+- Include workflow name
+- Include primary identifier (e.g., `nova_id` or `data_product_id`)
+- Include `correlation_id`
+- Include `error_fingerprint`
+- Include brief classification reason
+
+The SNS notification is best-effort and MUST NOT cause the workflow to fail if notification delivery fails.
 
 ---
 

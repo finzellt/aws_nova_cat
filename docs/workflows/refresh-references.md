@@ -63,6 +63,23 @@ Also computes and sets `discovery_date` metadata using the earliest credible ref
   - item-level reference parse failures (continue Map)
   - discovery date cannot be selected due to irreconcilable conflicts (rare)
 
+### Quarantine Handling
+
+When a workflow transitions to **QuarantineHandler**, it MUST:
+
+1. Persist quarantine status and relevant diagnostic metadata.
+2. Emit a JobRun outcome of `QUARANTINED`.
+3. Publish a notification event to an SNS topic for operational review.
+
+SNS notification requirements:
+- Include workflow name
+- Include primary identifier (e.g., `nova_id` or `data_product_id`)
+- Include `correlation_id`
+- Include `error_fingerprint`
+- Include brief classification reason
+
+The SNS notification is best-effort and MUST NOT cause the workflow to fail if notification delivery fails.
+
 ## Idempotency Guarantees & Invariants
 - Workflow idempotency key (time-bucketed): `RefreshReferences:{nova_id}:{schema_version}:{time_bucket}`
 - Reference upsert dedupe key: `ReferenceUpsert:{source}:{source_key}:{schema_version}`

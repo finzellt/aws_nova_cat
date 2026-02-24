@@ -74,6 +74,23 @@ It is designed to run a limited number of times (e.g., during the first ~6 weeks
   - conflicting authorities producing ambiguous canonical designation
   - non-monotonic changes that would imply identity merge/split ambiguity
 
+### Quarantine Handling
+
+When a workflow transitions to **QuarantineHandler**, it MUST:
+
+1. Persist quarantine status and relevant diagnostic metadata.
+2. Emit a JobRun outcome of `QUARANTINED`.
+3. Publish a notification event to an SNS topic for operational review.
+
+SNS notification requirements:
+- Include workflow name
+- Include primary identifier (e.g., `nova_id` or `data_product_id`)
+- Include `correlation_id`
+- Include `error_fingerprint`
+- Include brief classification reason
+
+The SNS notification is best-effort and MUST NOT cause the workflow to fail if notification delivery fails.
+
 ## Idempotency Guarantees & Invariants
 - Workflow idempotency key (time-bucketed): `NameCheckAndReconcile:{nova_id}:{schema_version}:{time_bucket}`
 - Invariant: names are updated only as enrichment; UUID identity remains stable.

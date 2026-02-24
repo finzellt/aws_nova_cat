@@ -56,12 +56,16 @@ Terminology:
    - No  -> continue
 9. **AcquireArtifact** (Task)
 10. **ValidateBytes (Profile-Driven)** (Task)
-11. **RecordValidationResult** (Task)
-12. **FinalizeJobRunSuccess** (Task) (outcome = `VALIDATED`)
-13. **QuarantineHandler** (Task)
-14. **FinalizeJobRunQuarantined** (Task)
-15. **TerminalFailHandler** (Task)
-16. **FinalizeJobRunFailed** (Task)
+11. **DuplicateByFingerprint?** (Choice)
+   - Yes -> **RecordDuplicateLinkage** -> **FinalizeJobRunSuccess** (outcome = `DUPLICATE_OF_EXISTING`)
+   - No  -> continue
+12. **RecordDuplicateLinkage** (Task)
+13. **RecordValidationResult** (Task)
+14. **FinalizeJobRunSuccess** (Task) (outcome = `VALIDATED`)
+15. **QuarantineHandler** (Task)
+16. **FinalizeJobRunQuarantined** (Task)
+17. **TerminalFailHandler** (Task)
+18. **FinalizeJobRunFailed** (Task)
 
 ---
 
@@ -77,6 +81,8 @@ Minimum viable fields:
 - `last_error_fingerprint`
 - `next_eligible_attempt_at`  ← primary anti-ping control
 - `last_successful_fingerprint` (when validated)
+- `content_fingerprint` (when acquired)
+- `duplicate_of_data_product_id` (when duplicate detected)
 
 Rich attempt details belong in JobRun/Attempt records and logs.
 
@@ -114,6 +120,27 @@ Future-friendly:
 6. Produce validation summary + fingerprint
 
 If no profile matches, or required metadata/units are missing/unresolvable → QUARANTINE.
+
+---
+
+## Post-acquisition Duplicate Detection (Byte-level)
+
+Some providers may expose the same underlying product under multiple identifiers or locators.
+Discovery attempts metadata-level dedupe, but definitive dedupe may require acquired bytes.
+
+After acquisition (and once bytes are available), the workflow MUST:
+
+1. Compute a stable `content_fingerprint` (e.g., SHA-256 of canonical bytes or a deterministic normalization).
+2. Check whether an existing **VALIDATED** data product already has the same fingerprint.
+3. If a match exists:
+   - Mark the current data product as a duplicate of the canonical product (e.g., `duplicate_of_data_product_id = <canonical>`).
+   - Optionally append this product’s locator(s) as aliases to the canonical product.
+   - Finalize the JobRun successfully with outcome `DUPLICATE_OF_EXISTING`.
+   - The current data product MUST NOT be marked `VALIDATED`.
+4. If no match exists:
+   - Continue normal validation result recording and mark `VALIDATED`.
+
+This preserves stable UUIDs while avoiding duplicate scientific products downstream.
 
 ---
 
@@ -155,6 +182,23 @@ Cooldown behavior:
   - unknown profile / missing required metadata
   - invalid/unknown units
   - failed domain sanity checks
+
+### Quarantine Handling
+
+When a workflow transitions to **QuarantineHandler**, it MUST:
+
+1. Persist quarantine status and relevant diagnostic metadata.
+2. Emit a JobRun outcome of `QUARANTINED`.
+3. Publish a notification event to an SNS topic for operational review.
+
+SNS notification requirements:
+- Include workflow name
+- Include primary identifier (e.g., `nova_id` or `data_product_id`)
+- Include `correlation_id`
+- Include `error_fingerprint`
+- Include brief classification reason
+
+The SNS notification is best-effort and MUST NOT cause the workflow to fail if notification delivery fails.
 
 ---
 
