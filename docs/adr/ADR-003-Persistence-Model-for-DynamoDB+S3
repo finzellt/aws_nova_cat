@@ -190,7 +190,8 @@ Locator normalization rules must be deterministic.
 
 Two quarantine classes exist:
 
-- Identity quarantine (coordinate ambiguity)
+- Identity quarantine (coordinate ambiguity). Identity quarantine may include a quarantine_reason_code.
+For coordinate-based ambiguity, this is COORDINATE_AMBIGUITY.
 - Spectra quarantine (validation classification)
 
 Quarantine is human-gated.

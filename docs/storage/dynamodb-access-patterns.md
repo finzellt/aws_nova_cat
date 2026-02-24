@@ -76,8 +76,10 @@ Purpose: Resolve a candidate name to a stable `nova_id`, or create a new `Nova`.
 ### D) Identity quarantine (2"–10")
 
 **Write**
-- Insert a new `Nova` item with `status = "QUARANTINED"`
-  `PK = "<new_nova_id>"`, `SK = "NOVA"`
+- Insert new Nova item with:
+    - status = QUARANTINED
+    - quarantine_reason_code = COORDINATE_AMBIGUITY
+    - `PK = "<new_nova_id>"`, `SK = "NOVA"`
 
 **Side effects**
 - Finalize (`QUARANTINED`)
