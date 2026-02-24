@@ -1,0 +1,255 @@
+# ADR-003: Finalized Persistence Model for DynamoDB + S3
+
+## Status
+
+Accepted
+
+Supersedes earlier draft persistence model assumptions.
+
+---
+
+## Context
+
+Nova Cat requires a persistence layer that:
+
+- Supports singular-nova–scoped workflows
+- Is cost-efficient and serverless
+- Remains deterministic under retries and replays
+- Prevents identity drift (names and locators)
+- Supports atomic spectra acquisition and validation
+- Enables operational traceability
+
+Earlier drafts included a `dataset` abstraction and partial lifecycle semantics. As workflow specifications matured (Epic 3), the persistence model required stabilization and formalization.
+
+This ADR documents the finalized persistence architecture for MVP.
+
+---
+
+## Decision
+
+Nova Cat will use a single DynamoDB table with namespaced partition keys and atomic data products.
+
+### 1. Single-table, namespaced design
+
+The table is heterogeneous.
+
+Partition key (`PK`) namespaces:
+
+- Per-nova partitions:
+  `PK = "<nova_id>"`
+
+- Global identity partitions:
+  `PK = "NAME#<normalized_name>"`
+  `PK = "LOCATOR#<provider>#<locator_identity>"`
+
+Sort key (`SK`) prefixes distinguish item types within a nova partition:
+
+- `NOVA`
+- `PRODUCT#...`
+- `FILE#...`
+- `REF#...`
+- `NOVAREF#...`
+- `JOBRUN#...`
+- `ATTEMPT#...`
+
+This allows per-nova locality while supporting global identity resolution without GSIs.
+
+---
+
+### 2. Atomic Data Products (Dataset Removed)
+
+The prior `dataset` abstraction is removed.
+
+Instead:
+
+- Spectra are modeled as atomic units identified by stable `data_product_id`
+- Each spectra product has independent lifecycle and cooldown state
+- Photometry is modeled as a singleton `PHOTOMETRY_TABLE` data product per nova
+
+This enforces correctness and simplifies retry/quarantine semantics.
+
+#### Definition of `data_product_id`
+
+`data_product_id` is a stable UUID that uniquely identifies a single atomic spectra data product within Nova Cat.
+
+It is minted during `discover_spectra_products`.
+
+The identifier is generated deterministically from a stable provider-side identity key.
+
+The identity key is composed of:
+
+1. `provider`
+2. Provider-native product identifier (preferred when available)
+
+If no provider-native identifier exists, the identity key is composed of:
+
+- `provider`
+- Normalized canonical locator fields (e.g., URL, archive identifier)
+
+Conceptually:
+
+```
+identity_key = hash(provider + provider_product_key)
+data_product_id = UUID(identity_key)
+```
+
+Fallback (when provider-native ID is unavailable):
+
+```
+identity_key = hash(provider + normalized_canonical_locator)
+data_product_id = UUID(identity_key)
+```
+
+Properties:
+
+- Deterministic: the same provider identity yields the same UUID.
+- Immutable once created.
+- Does not encode semantic meaning.
+- Remains stable even if provider URLs change (so long as canonical identity fields remain stable).
+- Never reused across distinct products.
+- Not versioned; lifecycle updates occur in-place.
+
+---
+
+### 3. Identity resolution model
+
+Identity resolution occurs in two phases:
+
+#### A. Name-based resolution
+- `NameMapping` items map aliases to stable `nova_id`
+- `normalized_name` is canonicalized for deterministic lookup
+
+#### B. Coordinate-based duplicate detection
+If no name match exists:
+
+- Existing nova coordinates are retrieved
+- Angular separation is computed in code
+- Classification thresholds:
+  - `< 2"` → alias attached to existing nova
+  - `2–10"` → identity quarantine
+  - `> 10"` → create new nova
+
+Identity quarantine is persisted as a new `Nova` item with:
+- `status = QUARANTINED`
+
+No downstream ingestion workflows are launched for quarantined identity records.
+
+Spatial indexing (HEALPix or similar) is deferred; MVP uses in-memory comparison due to small scale (<1000 novae).
+
+---
+
+### 4. Nova identity fields
+
+The `Nova` entity includes core astronomical identity fields:
+
+- `ra_deg` (ICRS degrees)
+- `dec_deg` (ICRS degrees)
+- `coord_frame`
+- `coord_epoch`
+- `first_observed_at`
+
+Derived fields (e.g., constellation, galactic coordinates) are not persisted.
+
+---
+
+### 5. Spectra lifecycle and eligibility
+
+Each spectra `DataProduct` includes:
+
+- Acquisition status
+- Validation status
+- Cooldown fields (`attempt_count`, `next_eligible_attempt_at`, etc.)
+- Profile selection outputs and fingerprints
+
+An eligibility GSI supports listing acquisition-eligible spectra products:
+
+- `GSI1PK = <nova_id>`
+- `GSI1SK = ELIG#<eligibility>#SPECTRA#...`
+
+Eligibility index attributes are removed immediately after `ValidateBytes` once a definitive classification (`VALID`, `QUARANTINED`, or `TERMINAL_INVALID`) is determined.
+
+Cooldown is enforced per-product.
+
+Provider-level throttling controls are deferred post-MVP.
+
+---
+
+### 6. Locator stability
+
+`LocatorAlias` items map:
+
+`(provider + locator_identity) → data_product_id`
+
+This guarantees stable `data_product_id` assignment even if provider URLs change.
+
+Locator normalization rules must be deterministic.
+
+---
+
+### 7. Quarantine semantics
+
+Two quarantine classes exist:
+
+- Identity quarantine (coordinate ambiguity). Identity quarantine may include a quarantine_reason_code.
+For coordinate-based ambiguity, this is COORDINATE_AMBIGUITY.
+- Spectra quarantine (validation classification)
+
+Quarantine is human-gated.
+
+No automatic re-entry occurs without explicit manual action.
+
+Notification behavior (SNS) is defined in workflow specifications, not in the persistence model.
+
+---
+
+### 8. Operational traceability
+
+Two operational entities are persisted:
+
+- `JobRun` (one per workflow execution)
+- `Attempt` (one per task invocation, including retries)
+
+These support:
+
+- Debugging
+- Retry analysis
+- Cooldown enforcement auditing
+
+Idempotency keys remain internal to workflows and are not persisted in boundary schemas.
+
+---
+
+## Consequences
+
+### Positive
+
+- Deterministic identity resolution
+- Atomic correctness for spectra lifecycle
+- Clear quarantine boundaries
+- Access-pattern-driven DynamoDB design
+- Clean separation between persistence model and workflow orchestration
+- Stable foundation for CDK implementation
+
+### Trade-offs
+
+- Coordinate duplicate detection uses in-memory comparison (acceptable at current scale)
+- Provider-level throttling not yet implemented
+- Derived astronomical metadata not stored
+
+---
+
+## Alternatives Considered
+
+- Persisting dataset abstraction → rejected in favor of atomic products
+- Spatial indexing via HEALPix → deferred due to scale
+- Provider-wide cooldown enforcement → deferred
+- Persisting derived astronomical fields → deferred to enrichment layer
+
+---
+
+## Future Work
+
+- Implement DynamoDB + GSI definitions in CDK
+- Wire SNS for quarantine notifications
+- Consider spatial indexing if nova count increases significantly
+- Consider provider-level throttling controls if needed
