@@ -11,7 +11,8 @@ flowchart TD
   H --> I[IngestMetadataAndProvenance]
   I --> J["FinalizeJobRunSuccess (INGESTED)"]
 
-  Q[QuarantineHandler] --> R[FinalizeJobRunQuarantined]
+  Q[QuarantineHandler] --> SS["(SNS Notification)"]
+  SS --> R[FinalizeJobRunQuarantined]
   TF[TerminalFailHandler] --> FF[FinalizeJobRunFailed]
 
 ```

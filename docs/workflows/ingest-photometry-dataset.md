@@ -60,6 +60,24 @@ Note: This workflow can act as a front door when the system has a photometry fil
   - data readable but invalid columns/units/time formats
   - suspicious timestamps or ambiguous units
 
+### Quarantine Handling
+
+When a workflow transitions to **QuarantineHandler**, it MUST:
+
+1. Persist quarantine status and relevant diagnostic metadata.
+2. Emit a JobRun outcome of `QUARANTINED`.
+3. Publish a notification event to an SNS topic for operational review.
+
+SNS notification requirements:
+- Include workflow name
+- Include primary identifier (e.g., `nova_id` or `data_product_id`)
+- Include `correlation_id`
+- Include `error_fingerprint`
+- Include brief classification reason
+
+The SNS notification is best-effort and MUST NOT cause the workflow to fail if notification delivery fails.
+
+
 ## Idempotency Guarantees & Invariants
 - Workflow idempotency key: `IngestPhotometryDataset:{dataset_id}:{schema_version}`
 - Invariant: `idempotency_key` is internal-only (not in event schemas).

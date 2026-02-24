@@ -13,6 +13,7 @@ flowchart TD
   J --> K["PublishNameReconciled (optional)"]
   K --> L["FinalizeJobRunSuccess (UPDATED)"]
 
-  Q[QuarantineHandler] --> R[FinalizeJobRunQuarantined]
+  Q[QuarantineHandler] --> SS["(SNS Notification)"]
+  SS --> R[FinalizeJobRunQuarantined]
   T[TerminalFailHandler] --> U[FinalizeJobRunFailed]
 ```

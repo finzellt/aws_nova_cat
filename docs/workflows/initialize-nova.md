@@ -140,6 +140,23 @@ Other workflows may be triggered directly when `nova_id` already exists.
 
 **Note:** outcomes `NOT_FOUND` and `NOT_A_CLASSICAL_NOVA` are NOT failures; they are terminal-success outcomes without downstream launch.
 
+### Quarantine Handling
+
+When a workflow transitions to **QuarantineHandler**, it MUST:
+
+1. Persist quarantine status and relevant diagnostic metadata.
+2. Emit a JobRun outcome of `QUARANTINED`.
+3. Publish a notification event to an SNS topic for operational review.
+
+SNS notification requirements:
+- Include workflow name
+- Include primary identifier (e.g., `nova_id` or `data_product_id`)
+- Include `correlation_id`
+- Include `error_fingerprint`
+- Include brief classification reason
+
+The SNS notification is best-effort and MUST NOT cause the workflow to fail if notification delivery fails.
+
 ---
 
 ## Idempotency Guarantees & Invariants
