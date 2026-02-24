@@ -219,7 +219,7 @@ There are two product types:
 ###### Identity
 
 - `schema_version` (internal item evolution)
-- `data_product_id` (stable UUID)
+- `data_product_id` (stable, deterministically generated UUID; see ADR-003)
 - `product_type = "SPECTRA"`
 - `provider` (string; may be `DONATION` or similar for donated sources)
 

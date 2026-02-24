@@ -149,7 +149,7 @@ Purpose: Discover spectra products across providers, assign stable `data_product
   → determines whether a stable `data_product_id` already exists
 
 ### Writes (per discovered product)
-- If locator alias does not exist:
+- Generate deterministic `data_product_id` from provider identity fields; insert `LocatorAlias` if not present.
   - Insert `LocatorAlias`:
     `PK = "LOCATOR#<provider>#<locator_identity>"`
     `SK = "DATA_PRODUCT#<data_product_id>"`

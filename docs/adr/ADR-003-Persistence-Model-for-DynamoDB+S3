@@ -56,17 +56,58 @@ This allows per-nova locality while supporting global identity resolution withou
 
 ---
 
-### 2. Atomic data products (dataset removed)
+### 2. Atomic Data Products (Dataset Removed)
 
 The prior `dataset` abstraction is removed.
 
 Instead:
 
-- Spectra are atomic units identified by stable `data_product_id`
+- Spectra are modeled as atomic units identified by stable `data_product_id`
 - Each spectra product has independent lifecycle and cooldown state
 - Photometry is modeled as a singleton `PHOTOMETRY_TABLE` data product per nova
 
 This enforces correctness and simplifies retry/quarantine semantics.
+
+#### Definition of `data_product_id`
+
+`data_product_id` is a stable UUID that uniquely identifies a single atomic spectra data product within Nova Cat.
+
+It is minted during `discover_spectra_products`.
+
+The identifier is generated deterministically from a stable provider-side identity key.
+
+The identity key is composed of:
+
+1. `provider`
+2. Provider-native product identifier (preferred when available)
+
+If no provider-native identifier exists, the identity key is composed of:
+
+- `provider`
+- Normalized canonical locator fields (e.g., URL, archive identifier)
+
+Conceptually:
+
+```
+identity_key = hash(provider + provider_product_key)
+data_product_id = UUID(identity_key)
+```
+
+Fallback (when provider-native ID is unavailable):
+
+```
+identity_key = hash(provider + normalized_canonical_locator)
+data_product_id = UUID(identity_key)
+```
+
+Properties:
+
+- Deterministic: the same provider identity yields the same UUID.
+- Immutable once created.
+- Does not encode semantic meaning.
+- Remains stable even if provider URLs change (so long as canonical identity fields remain stable).
+- Never reused across distinct products.
+- Not versioned; lifecycle updates occur in-place.
 
 ---
 
