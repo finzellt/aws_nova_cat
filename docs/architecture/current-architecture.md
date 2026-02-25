@@ -95,14 +95,14 @@ data_product_id = UUID(identity_key)
 
 Fields include:
 
+Fields include:
+
 - nova_id
-- public_name
-- ra_deg
-- dec_deg
-- coord_frame
-- coord_epoch
-- first_observed_at
+- primary_name
+- primary_name_normalized
 - status
+- position (ra_deg, dec_deg, frame, epoch)
+- discovery_date
 
 Derived astronomical metadata (e.g., constellation) is not persisted.
 

@@ -30,10 +30,17 @@ To prevent repeated hammering of external providers, acquisition workflows MUST 
 
 ### Persisted Fields (Minimum Required)
 
-Each data product SHOULD persist:
+Each spectra data product SHOULD persist:
 
+Scientific state:
+
+- `acquisition_status`
+  - `STUB | ACQUIRED | FAILED`
 - `validation_status`
-  - `DISCOVERED | VALIDATED | QUARANTINED | FAILED`
+  - `UNVALIDATED | VALID | QUARANTINED`
+
+Operational metadata:
+
 - `attempt_count_total`
 - `last_attempt_at`
 - `last_attempt_outcome`
@@ -41,8 +48,6 @@ Each data product SHOULD persist:
 - `last_error_fingerprint`
 - `next_eligible_attempt_at`  ← primary anti-ping control
 - `last_successful_fingerprint` (when validated)
-
-Detailed attempt diagnostics belong in JobRun/Attempt records.
 
 ---
 
@@ -98,6 +103,16 @@ Examples:
 - spectra content fails integrity/format/domain sanity checks
 - provider returns malformed or inconsistent records requiring review
 - unknown or incompatible FITS profile
+
+### Scientific vs Operational State
+
+Scientific state (validation_status, acquisition_status) reflects
+data quality and lifecycle stage only.
+
+Retryability and terminal classification are operational concepts
+and are recorded in JobRun/Attempt records and last_attempt_outcome.
+
+Scientific enums MUST NOT encode retryability.
 
 ---
 
