@@ -128,11 +128,38 @@ No dataset abstraction exists.
 
 ## 3.3 Photometry Table
 
-One logical photometry table per nova.
+One logical photometry table exists per nova.
 
-Versioning is coarse-grained via immutable snapshot keys in S3.
+The photometry table is modeled as a `DataProduct` of type `PHOTOMETRY_TABLE` and is stored at a stable canonical S3 key.
 
-DynamoDB stores pointer to current snapshot.
+### Canonical Behavior (MVP)
+
+- The photometry table is rebuilt and overwritten **in place** on each ingestion.
+- There is exactly one authoritative current table per nova.
+- No snapshotting occurs during routine ingestion under the same schema version.
+
+### Schema Versioning Policy
+
+Photometry versioning is triggered **only when the photometry schema version changes**.
+
+When a schema change occurs:
+
+1. The existing canonical table is copied to an immutable snapshot location.
+2. A new canonical table is written using the new schema version.
+
+Snapshots are therefore:
+- Schema-boundary artifacts
+- Immutable
+- Not created during normal ingestion
+
+In MVP:
+- `photometry_schema_version` is fixed.
+- Schema migration workflows are documented but may not yet be implemented.
+
+DynamoDB stores:
+- The canonical S3 key
+- The current `photometry_schema_version`
+- Ingestion summary metadata
 
 ---
 
@@ -209,9 +236,15 @@ Eligibility index removed immediately after validation.
 
 ---
 
-## 4.6 ingest_photometry_dataset
-- Dataset-scoped ingestion
-- Validate and persist metadata
+## 4.6 ingest_photometry
+
+- Accepts API-driven photometry upload
+- Resolves name → `nova_id`
+- Rebuilds and overwrites the canonical photometry table
+- Updates ingestion summary fields
+- If schema version changes (future capability), snapshots prior table before overwrite
+
+No dataset abstraction exists.
 
 ---
 
@@ -257,8 +290,15 @@ Item types:
 S3 layout:
 - raw/
 - derived/
+- quarantine/
+- bundles/
 - site/releases/
-- photometry/<nova_id>/snapshots/
+
+Photometry canonical key:
+- derived/photometry/<nova_id>/photometry_table.parquet
+
+Photometry snapshots (schema change only):
+- derived/photometry/<nova_id>/snapshots/schema=<old_schema_version>/...
 
 ---
 
