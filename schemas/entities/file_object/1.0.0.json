@@ -1,36 +1,24 @@
 {
   "$defs": {
-    "ContentDigest": {
-      "additionalProperties": false,
-      "properties": {
-        "algorithm": {
-          "const": "sha256",
-          "default": "sha256",
-          "title": "Algorithm",
-          "type": "string"
-        },
-        "value": {
-          "description": "Hex digest.",
-          "maxLength": 128,
-          "minLength": 64,
-          "title": "Value",
-          "type": "string"
-        }
-      },
-      "required": [
-        "value"
-      ],
-      "title": "ContentDigest",
-      "type": "object"
-    },
     "FileRole": {
       "enum": [
-        "primary",
-        "preview",
-        "auxiliary",
-        "metadata"
+        "RAW_FITS",
+        "QUARANTINE_CONTEXT",
+        "NORMALIZED",
+        "PLOT",
+        "MANIFEST",
+        "DATA_BUNDLE",
+        "OTHER"
       ],
       "title": "FileRole",
+      "type": "string"
+    },
+    "ProductType": {
+      "enum": [
+        "PHOTOMETRY_TABLE",
+        "SPECTRA"
+      ],
+      "title": "ProductType",
       "type": "string"
     },
     "Provenance": {
@@ -143,38 +131,31 @@
   },
   "$id": "nova-cat://schemas/entities/file_object/1.0.0",
   "additionalProperties": false,
-  "description": "Logical file contract (not storage layout): identity + integrity + descriptive metadata.",
+  "description": "Registry entry for an S3 object associated with a data product.\n\nThis is not the S3 layout spec; it's a lightweight index/provenance record.",
   "properties": {
-    "created_at": {
-      "format": "date-time",
-      "title": "Created At",
+    "bucket": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Bucket",
       "type": "string"
     },
-    "digest": {
+    "byte_length": {
       "anyOf": [
         {
-          "$ref": "#/$defs/ContentDigest"
+          "minimum": 0,
+          "type": "integer"
         },
         {
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "title": "Byte Length"
     },
-    "file_id": {
-      "format": "uuid",
-      "title": "File Id",
-      "type": "string"
-    },
-    "filename": {
-      "maxLength": 512,
-      "minLength": 1,
-      "title": "Filename",
-      "type": "string"
-    },
-    "media_type": {
+    "content_type": {
       "anyOf": [
         {
+          "maxLength": 256,
           "type": "string"
         },
         {
@@ -182,8 +163,63 @@
         }
       ],
       "default": null,
-      "description": "IANA media type if known, e.g. 'application/fits'.",
-      "title": "Media Type"
+      "title": "Content Type"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "created_by": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Workflow and run context (e.g., '<job_type>:<job_run_id>').",
+      "title": "Created By"
+    },
+    "data_product_id": {
+      "format": "uuid",
+      "title": "Data Product Id",
+      "type": "string"
+    },
+    "etag": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Etag"
+    },
+    "file_id": {
+      "format": "uuid",
+      "title": "File Id",
+      "type": "string"
+    },
+    "key": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "title": "Key",
+      "type": "string"
+    },
+    "nova_id": {
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    },
+    "product_type": {
+      "$ref": "#/$defs/ProductType"
     },
     "provenance": {
       "anyOf": [
@@ -197,26 +233,25 @@
       "default": null
     },
     "role": {
-      "$ref": "#/$defs/FileRole",
-      "default": "primary"
+      "$ref": "#/$defs/FileRole"
     },
     "schema_version": {
       "default": "1.0.0",
       "title": "Schema Version",
       "type": "string"
     },
-    "size_bytes": {
+    "sha256": {
       "anyOf": [
         {
-          "minimum": 0,
-          "type": "integer"
+          "maxLength": 256,
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "title": "Size Bytes"
+      "title": "Sha256"
     },
     "updated_at": {
       "format": "date-time",
@@ -236,12 +271,17 @@
         }
       ],
       "default": null,
-      "description": "Upstream URL if externally sourced.",
+      "description": "Optional upstream URL if the object was sourced externally.",
       "title": "Url"
     }
   },
   "required": [
-    "filename"
+    "nova_id",
+    "data_product_id",
+    "product_type",
+    "role",
+    "bucket",
+    "key"
   ],
   "title": "FileObject",
   "type": "object"

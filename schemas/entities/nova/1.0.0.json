@@ -2,9 +2,10 @@
   "$defs": {
     "NovaStatus": {
       "enum": [
-        "candidate",
-        "confirmed",
-        "retracted"
+        "ACTIVE",
+        "QUARANTINED",
+        "MERGED",
+        "DEPRECATED"
       ],
       "title": "NovaStatus",
       "type": "string"
@@ -13,7 +14,7 @@
       "additionalProperties": false,
       "properties": {
         "dec_deg": {
-          "description": "Declination in degrees.",
+          "description": "Declination in degrees (ICRS).",
           "maximum": 90.0,
           "minimum": -90.0,
           "title": "Dec Deg",
@@ -34,7 +35,7 @@
         },
         "frame": {
           "$ref": "#/$defs/SkyCoordFrame",
-          "default": "icrs"
+          "default": "ICRS"
         },
         "provenance": {
           "anyOf": [
@@ -48,7 +49,7 @@
           "default": null
         },
         "ra_deg": {
-          "description": "Right ascension in degrees.",
+          "description": "Right ascension in degrees (ICRS).",
           "exclusiveMaximum": 360.0,
           "minimum": 0.0,
           "title": "Ra Deg",
@@ -171,7 +172,7 @@
     },
     "SkyCoordFrame": {
       "enum": [
-        "icrs"
+        "ICRS"
       ],
       "title": "SkyCoordFrame",
       "type": "string"
@@ -179,16 +180,8 @@
   },
   "$id": "nova-cat://schemas/entities/nova/1.0.0",
   "additionalProperties": false,
-  "description": "Core nova record.\n\nIdentity: nova_id (UUID) is the only authoritative internal identifier.\nNaming: public_name is the current canonical display name.\nAliases: pragmatic search terms (often copied from SIMBAD / observed elsewhere).",
+  "description": "Canonical nova record.\n\nIdentity: nova_id (UUID) is the only authoritative internal identifier.\nNaming: primary_name is the current canonical display name.\nCoordinates: flattened in persistence, but modeled here as Position for clarity.",
   "properties": {
-    "aliases": {
-      "description": "Known external name strings used for discovery/matching (e.g., SIMBAD alias list).",
-      "items": {
-        "type": "string"
-      },
-      "title": "Aliases",
-      "type": "array"
-    },
     "created_at": {
       "format": "date-time",
       "title": "Created At",
@@ -207,6 +200,19 @@
       "default": null,
       "title": "Discovery Date"
     },
+    "manual_review_status": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Manual Review Status"
+    },
     "nova_id": {
       "description": "Stable, system-wide identifier for this nova.",
       "format": "uuid",
@@ -224,6 +230,18 @@
       ],
       "default": null
     },
+    "primary_name": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Primary Name",
+      "type": "string"
+    },
+    "primary_name_normalized": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Primary Name Normalized",
+      "type": "string"
+    },
     "provenance": {
       "anyOf": [
         {
@@ -235,11 +253,18 @@
       ],
       "default": null
     },
-    "public_name": {
-      "maxLength": 256,
-      "minLength": 1,
-      "title": "Public Name",
-      "type": "string"
+    "quarantine_reason_code": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Quarantine Reason Code"
     },
     "schema_version": {
       "default": "1.0.0",
@@ -248,7 +273,7 @@
     },
     "status": {
       "$ref": "#/$defs/NovaStatus",
-      "default": "candidate"
+      "default": "ACTIVE"
     },
     "updated_at": {
       "format": "date-time",
@@ -257,7 +282,8 @@
     }
   },
   "required": [
-    "public_name"
+    "primary_name",
+    "primary_name_normalized"
   ],
   "title": "Nova",
   "type": "object"

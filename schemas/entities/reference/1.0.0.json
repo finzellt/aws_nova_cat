@@ -146,7 +146,6 @@
         "conference_abstract",
         "poster",
         "catalog",
-        "dataset",
         "software",
         "other"
       ],
@@ -156,7 +155,7 @@
   },
   "$id": "nova-cat://schemas/entities/reference/1.0.0",
   "additionalProperties": false,
-  "description": "Global bibliographic/work record (paper, poster, catalog entry, dataset record, etc.).\nDeduplicated by stable external identifiers when available.",
+  "description": "Global bibliographic/work record (paper, poster, catalog entry, etc.).\nDeduplicated by stable external identifiers when available.",
   "properties": {
     "authors": {
       "items": {

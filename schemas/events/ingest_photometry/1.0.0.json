@@ -14,9 +14,9 @@
       "type": "string"
     }
   },
-  "$id": "nova-cat://schemas/events/initialize_nova/1.0.0",
+  "$id": "nova-cat://schemas/events/ingest_photometry/1.0.0",
   "additionalProperties": false,
-  "description": "Name-only front door.\n\nInput is a candidate name; the workflow resolves identity and emits a nova_id downstream.",
+  "description": "Photometry ingestion front door.\n\nAccepts either:\n- candidate_name (workflow will resolve to nova_id), OR\n- nova_id (already resolved)\n\nNo dataset abstraction exists.",
   "properties": {
     "attributes": {
       "additionalProperties": true,
@@ -24,10 +24,18 @@
       "type": "object"
     },
     "candidate_name": {
-      "maxLength": 256,
-      "minLength": 1,
-      "title": "Candidate Name",
-      "type": "string"
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Candidate Name"
     },
     "correlation_id": {
       "format": "uuid",
@@ -46,7 +54,34 @@
     },
     "job_type": {
       "$ref": "#/$defs/JobType",
-      "default": "InitializeNova"
+      "default": "IngestPhotometryEvent"
+    },
+    "nova_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Nova Id"
+    },
+    "photometry_schema_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Photometry Schema Version"
     },
     "source": {
       "anyOf": [
@@ -62,9 +97,6 @@
       "title": "Source"
     }
   },
-  "required": [
-    "candidate_name"
-  ],
-  "title": "InitializeNovaEvent",
+  "title": "IngestPhotometryEvent",
   "type": "object"
 }

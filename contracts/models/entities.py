@@ -582,7 +582,7 @@ class JobType(str, Enum):
     refresh_references = "RefreshReferences"
     discover_spectra_products = "DiscoverSpectraProducts"
     acquire_and_validate_spectra = "AcquireAndValidateSpectra"
-    ingest_photometry_table = "IngestPhotometryTable"
+    ingest_photometry = "IngestPhotometryEvent"
     name_check_and_reconcile = "NameCheckAndReconcile"
 
 

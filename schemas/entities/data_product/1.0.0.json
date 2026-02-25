@@ -1,0 +1,575 @@
+{
+  "$defs": {
+    "AcquisitionStatus": {
+      "enum": [
+        "STUB",
+        "ACQUIRED",
+        "FAILED"
+      ],
+      "title": "AcquisitionStatus",
+      "type": "string"
+    },
+    "Eligibility": {
+      "enum": [
+        "ACQUIRE",
+        "NONE"
+      ],
+      "title": "Eligibility",
+      "type": "string"
+    },
+    "Locator": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/LocatorKind"
+        },
+        "role": {
+          "$ref": "#/$defs/LocatorRole",
+          "default": "PRIMARY"
+        },
+        "value": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "Locator",
+      "type": "object"
+    },
+    "LocatorKind": {
+      "enum": [
+        "URL",
+        "S3",
+        "OTHER"
+      ],
+      "title": "LocatorKind",
+      "type": "string"
+    },
+    "LocatorRole": {
+      "enum": [
+        "PRIMARY",
+        "MIRROR"
+      ],
+      "title": "LocatorRole",
+      "type": "string"
+    },
+    "ManualReviewStatus": {
+      "enum": [
+        "PENDING",
+        "CLEARED_RETRY_APPROVED",
+        "CLEARED_TERMINAL"
+      ],
+      "title": "ManualReviewStatus",
+      "type": "string"
+    },
+    "ProductType": {
+      "enum": [
+        "PHOTOMETRY_TABLE",
+        "SPECTRA"
+      ],
+      "title": "ProductType",
+      "type": "string"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Scientific provenance: enough to trace 'what said this' and 'when',\nwithout overfitting to any single upstream system.",
+      "properties": {
+        "asserted_by": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human or system actor that asserted this fact (e.g., ORCID, service name).",
+          "title": "Asserted By"
+        },
+        "citation": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional citation string or bibcode/doi reference.",
+          "title": "Citation"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/ProvenanceMethod",
+          "default": "imported"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source": {
+          "description": "Canonical identifier for upstream source (e.g., 'SIMBAD', 'ADS', 'ASAS-SN', 'AAVSO', 'UserUpload').",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_record_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upstream record identifier, if provided.",
+          "title": "Source Record Id"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "ProvenanceMethod": {
+      "enum": [
+        "manual",
+        "scraped",
+        "computed",
+        "imported"
+      ],
+      "title": "ProvenanceMethod",
+      "type": "string"
+    },
+    "ValidationStatus": {
+      "enum": [
+        "UNVALIDATED",
+        "VALID",
+        "QUARANTINED",
+        "INVALID"
+      ],
+      "title": "ValidationStatus",
+      "type": "string"
+    }
+  },
+  "$id": "nova-cat://schemas/entities/data_product/1.0.0",
+  "additionalProperties": false,
+  "description": "Core unit of work.\n\nThere are two product types:\n- PHOTOMETRY_TABLE (exactly one per nova)\n- SPECTRA (many per nova; one item per atomic spectra product)\n\nThis contract is intentionally permissive: fields are type-dependent.",
+  "properties": {
+    "acquisition_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AcquisitionStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "attempt_count": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Attempt Count"
+    },
+    "byte_length": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Byte Length"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "data_product_id": {
+      "format": "uuid",
+      "title": "Data Product Id",
+      "type": "string"
+    },
+    "derived_s3_prefix": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Derived S3 Prefix"
+    },
+    "eligibility": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Eligibility"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "etag": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Etag"
+    },
+    "fits_profile_id": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fits Profile Id"
+    },
+    "header_signature_hash": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Header Signature Hash"
+    },
+    "hints": {
+      "additionalProperties": true,
+      "title": "Hints",
+      "type": "object"
+    },
+    "ingestion_count": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ingestion Count"
+    },
+    "last_attempt_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Attempt At"
+    },
+    "last_error_fingerprint": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Error Fingerprint"
+    },
+    "last_ingestion_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Ingestion At"
+    },
+    "last_ingestion_source": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Ingestion Source"
+    },
+    "locator_identity": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Normalized stable locator identity (e.g., provider_product_id:<id> or url:<normalized_url>).",
+      "title": "Locator Identity"
+    },
+    "locators": {
+      "items": {
+        "$ref": "#/$defs/Locator"
+      },
+      "title": "Locators",
+      "type": "array"
+    },
+    "manual_review_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ManualReviewStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "next_eligible_attempt_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Next Eligible Attempt At"
+    },
+    "normalization_notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Normalization Notes",
+      "type": "array"
+    },
+    "nova_id": {
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    },
+    "product_type": {
+      "$ref": "#/$defs/ProductType"
+    },
+    "profile_selection_inputs": {
+      "additionalProperties": true,
+      "title": "Profile Selection Inputs",
+      "type": "object"
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "provider": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provider"
+    },
+    "quarantine_reason_code": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Quarantine Reason Code"
+    },
+    "raw_s3_bucket": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Raw S3 Bucket"
+    },
+    "raw_s3_key": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Raw S3 Key"
+    },
+    "s3_bucket": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "S3 Bucket"
+    },
+    "s3_key": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "S3 Key"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sha256": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sha256"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "validation_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValidationStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "nova_id",
+    "product_type"
+  ],
+  "title": "DataProduct",
+  "type": "object"
+}
