@@ -115,7 +115,7 @@ Purpose: Coordinate per-nova ingestion steps for an existing `nova_id`.
   `PK = "<nova_id>"`, `SK = "PRODUCT#PHOTOMETRY_TABLE"`
 
 ### Notes
-- If `Nova.status != "ACTIVE"`, the workflow should short-circuit and finalize without launching downstream ingestion steps.
+- If `Nova.status != ACTIVE`, the workflow should short-circuit and finalize without launching downstream ingestion steps.
 
 ---
 

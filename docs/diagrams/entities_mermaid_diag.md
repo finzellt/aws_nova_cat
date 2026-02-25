@@ -2,38 +2,73 @@
 classDiagram
   direction LR
 
+  %% ============================
+  %% Core Domain
+  %% ============================
+
   class Nova {
     +UUID nova_id
-    +string public_name
-    +string[] aliases
+    +string primary_name
+    +string primary_name_normalized
+    +NovaStatus status
+    +Position position
+    +datetime discovery_date
+    +string schema_version
     +datetime created_at
     +datetime updated_at
+  }
+
+  class NameMapping {
+    +string name_raw
+    +string name_normalized
+    +NameKind name_kind
+    +UUID nova_id
+    +NameMappingSource source
     +string schema_version
   }
 
-  class Dataset {
-    +UUID dataset_id
+  %% ============================
+  %% Data Products
+  %% ============================
+
+  class DataProduct {
+    +UUID data_product_id
     +UUID nova_id
-    +DatasetKind kind
-    +DatasetStatus status
-    +UUID[] file_ids
-    +datetime created_at
-    +datetime updated_at
+    +ProductType product_type
+    +string provider?
+    +string locator_identity?
+    +AcquisitionStatus acquisition_status?
+    +ValidationStatus validation_status?
+    +Eligibility eligibility?
+    +int attempt_count?
+    +datetime next_eligible_attempt_at?
+    +string fits_profile_id?
+    +string s3_key?
+    +string schema_version
+  }
+
+  class LocatorAlias {
+    +string provider
+    +string locator_identity
+    +UUID data_product_id
+    +UUID nova_id
     +string schema_version
   }
 
   class FileObject {
     +UUID file_id
-    +string filename
-    +string media_type
-    +int size_bytes
-    +string role
-    +string url
-    +ContentDigest digest
-    +datetime created_at
-    +datetime updated_at
+    +UUID nova_id
+    +UUID data_product_id
+    +ProductType product_type
+    +FileRole role
+    +string bucket
+    +string key
     +string schema_version
   }
+
+  %% ============================
+  %% References
+  %% ============================
 
   class Reference {
     +UUID reference_id
@@ -41,10 +76,6 @@ classDiagram
     +Identifier[] identifiers
     +string title
     +int year
-    +string[] authors
-    +string url
-    +datetime created_at
-    +datetime updated_at
     +string schema_version
   }
 
@@ -52,11 +83,12 @@ classDiagram
     +UUID nova_reference_id
     +UUID nova_id
     +UUID reference_id
-    +string notes
-    +datetime created_at
-    +datetime updated_at
     +string schema_version
   }
+
+  %% ============================
+  %% Operational
+  %% ============================
 
   class JobRun {
     +UUID job_run_id
@@ -64,12 +96,8 @@ classDiagram
     +JobStatus status
     +UUID correlation_id
     +string idempotency_key
-    +datetime initiated_at
-    +datetime finished_at
-    +UUID nova_id
-    +UUID dataset_id
-    +datetime created_at
-    +datetime updated_at
+    +UUID nova_id?
+    +UUID data_product_id?
     +string schema_version
   }
 
@@ -78,19 +106,17 @@ classDiagram
     +UUID job_run_id
     +int attempt_number
     +AttemptStatus status
-    +datetime started_at
-    +datetime finished_at
-    +string error_code
-    +string error_message
-    +datetime created_at
-    +datetime updated_at
     +string schema_version
   }
 
-  %% Relationships / cardinalities
-  Nova "1" --> "0..*" Dataset : has
-  Dataset "1" --> "0..*" FileObject : contains
+  %% ============================
+  %% Relationships
+  %% ============================
+
+  Nova "1" --> "0..*" DataProduct : has
   Nova "1" --> "0..*" NovaReference : cites
   Reference "1" --> "0..*" NovaReference : linked_by
+  DataProduct "1" --> "0..*" FileObject : produces
+  DataProduct "1" --> "1" LocatorAlias : identity
   JobRun "1" --> "0..*" Attempt : attempts
 ```

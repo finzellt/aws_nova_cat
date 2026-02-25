@@ -1,5 +1,8 @@
 # ADR-0001: Contract Definition and Schema Governance
 
+> Superseded in part by ADR-0XX (Architecture Baseline and Alignment Policy).
+> References to Dataset/dataset_id are obsolete.
+
 ## Status
 Accepted
 

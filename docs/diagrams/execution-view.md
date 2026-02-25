@@ -10,6 +10,6 @@ flowchart LR
 
   DSP -->|data_product_id discovered| AAV[AcquireAndValidateSpectra]
 
-  UP[Upload/Registration] --> IPD[IngestPhotometryDataset]
+  UP[Upload/Registration] --> IPD[IngestPhotometry]
 
 ```

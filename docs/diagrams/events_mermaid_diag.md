@@ -1,54 +1,67 @@
 ```mermaid
 flowchart TD
-  %% -----------------------------
-  %% Contract invariants
-  %% -----------------------------
+
+  %% ==============================
+  %% Contract Invariants
+  %% ==============================
+
   subgraph Invariants
-    I1["All events include:
+    I1["All boundary events include:
 - event_version
 - correlation_id
-- idempotency_key
 - initiated_at"]
-    I2["UUIDs are authoritative after resolution:
-Downstream steps operate on nova_id / dataset_id
-(not names)"]
+    I2["Idempotency keys are INTERNAL ONLY
+(not part of event schemas)"]
+    I3["UUID-first execution:
+Downstream workflows operate on:
+- nova_id
+- data_product_id
+- reference_id"]
   end
 
-  %% -----------------------------
-  %% Entry points
-  %% -----------------------------
+  %% ==============================
+  %% Entry Points
+  %% ==============================
+
   subgraph Entry_Points
     EN1["InitializeNovaEvent
-(public_name, aliases[])"]
-    EN2["IngestPhotometryDatasetEvent
-(name and/or coordinates, file_urls[])"]
+(candidate_name)"]
+
+    EN2["IngestPhotometryEvent
+(candidate_name OR nova_id)"]
+
     EN3["IngestNewNovaEvent
 (nova_id)"]
   end
 
-  %% -----------------------------
-  %% Resolution / governance
-  %% -----------------------------
+  %% ==============================
+  %% Identity & Governance
+  %% ==============================
+
   NR["NameCheckAndReconcileEvent
 (nova_id, proposed_public_name?, proposed_aliases?)"]
 
-  %% -----------------------------
-  %% Spectra discovery pipeline
-  %% -----------------------------
+  %% ==============================
+  %% Spectra Pipeline
+  %% ==============================
+
   DSP["DiscoverSpectraProductsEvent
 (nova_id)"]
-  DVS["AcquireAndValidateSpectraEvent
-(nova_id, dataset_id, file_urls[])"]
 
-  %% -----------------------------
-  %% Papers pipeline
-  %% -----------------------------
-  RP["RefreshPapersEvent
+  DVS["AcquireAndValidateSpectraEvent
+(nova_id, provider, data_product_id)"]
+
+  %% ==============================
+  %% Reference Pipeline
+  %% ==============================
+
+  RR["RefreshReferencesEvent
 (nova_id)"]
 
-  %% -----------------------------
-  %% Main flows
-  %% -----------------------------
+  %% ==============================
+  %% Main Flows
+  %% ==============================
+
   EN1 --> EN3
   EN3 --> NR
 
@@ -56,17 +69,18 @@ Downstream steps operate on nova_id / dataset_id
   DSP --> DVS
   DVS --> NR
 
-  EN3 --> RP
-  RP --> NR
+  EN3 --> RR
+  RR --> NR
 
   EN2 --> NR
 
-  %% -----------------------------
+  %% ==============================
   %% Notes
-  %% -----------------------------
-  N1["Note: Multi-nova inputs (e.g., photometry tables)
-must be resolved/split before creating per-nova datasets.
-Persistent Dataset is single-nova (nova_id)."]
+  %% ==============================
 
-  EN2 -.-> N1
+  N1["Spectra:
+One data_product_id per execution
+(Atomic Mode 1)"]
+
+  DSP -.-> N1
 ```

@@ -1,5 +1,8 @@
 # ADR-003: Workflow Orchestration and Execution Model
 
+> Superseded in part by ADR-0XX (Architecture Baseline and Alignment Policy).
+> References to Dataset/dataset_id are obsolete.
+
 ## Status
 Proposed
 
