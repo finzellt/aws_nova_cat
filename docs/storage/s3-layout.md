@@ -139,9 +139,10 @@ raw/photometry/uploads/<ingest_file_id>/manifest.json
 
 ---
 
-### 4B. Canonical Photometry Table (Per Nova)
+## 4B. Canonical Photometry Table (Per Nova)
 
 Stable location for the current photometry table:
+
 
 ```
 derived/photometry/<nova_id>/photometry_table.parquet
@@ -149,13 +150,47 @@ derived/photometry/<nova_id>/metadata.json
 derived/photometry/<nova_id>/plots/lightcurve.png
 ```
 
+
 Rules:
 
-- This is the authoritative table for the nova.
-- Updated in-place when new ingestion occurs.
-- Versioning (if needed) can rely on S3 object versioning.
+- Exactly one canonical photometry table exists per nova.
+- Routine ingestion rebuilds and overwrites the canonical table.
+- The canonical table represents the current schema version.
+- No snapshot is created during routine ingestion.
 
 ---
+
+## 4C. Photometry Schema-Change Snapshots (Forward-Compatible)
+
+Snapshots are created **only when the photometry schema version changes**.
+
+When a schema migration occurs:
+
+1. The previous canonical table is copied to an immutable snapshot location.
+2. A new canonical table is written at the standard canonical key.
+
+Recommended snapshot layout:
+
+```
+derived/photometry/<nova_id>/snapshots/schema=<old_schema_version>/photometry_table.parquet
+derived/photometry/<nova_id>/snapshots/schema=<old_schema_version>/metadata.json
+```
+
+Optional timestamp disambiguation:
+
+```
+derived/photometry/<nova_id>/snapshots/schema=<old_schema_version>/at=<timestamp>/photometry_table.parquet
+```
+
+
+Important:
+
+- Snapshots represent schema boundaries, not ingestion history.
+- S3 bucket versioning is optional and not relied upon for application semantics.
+- MVP may defer implementation of schema migrations while documenting the structure.
+
+---
+
 
 ## 5. Per-Nova Bundle Artifacts
 

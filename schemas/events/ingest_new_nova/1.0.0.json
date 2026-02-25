@@ -7,7 +7,7 @@
         "RefreshReferences",
         "DiscoverSpectraProducts",
         "AcquireAndValidateSpectra",
-        "IngestPhotometryDataset",
+        "IngestPhotometryEvent",
         "NameCheckAndReconcile"
       ],
       "title": "JobType",
@@ -16,6 +16,7 @@
   },
   "$id": "nova-cat://schemas/events/ingest_new_nova/1.0.0",
   "additionalProperties": false,
+  "description": "Coordinator workflow that bootstraps ingestion for an already-established nova_id.",
   "properties": {
     "attributes": {
       "additionalProperties": true,

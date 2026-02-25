@@ -18,7 +18,7 @@
         "RefreshReferences",
         "DiscoverSpectraProducts",
         "AcquireAndValidateSpectra",
-        "IngestPhotometryDataset",
+        "IngestPhotometryEvent",
         "NameCheckAndReconcile"
       ],
       "title": "JobType",
@@ -45,7 +45,7 @@
       "title": "Created At",
       "type": "string"
     },
-    "dataset_id": {
+    "data_product_id": {
       "anyOf": [
         {
           "format": "uuid",
@@ -56,7 +56,7 @@
         }
       ],
       "default": null,
-      "title": "Dataset Id"
+      "title": "Data Product Id"
     },
     "finished_at": {
       "anyOf": [

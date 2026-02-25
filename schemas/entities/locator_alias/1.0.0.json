@@ -1,0 +1,52 @@
+{
+  "$id": "nova-cat://schemas/entities/locator_alias/1.0.0",
+  "additionalProperties": false,
+  "description": "Global identity mapping: (provider + locator_identity) -> data_product_id\n\nNOTE: This is a global-partition item in the single table (PK = LOCATOR#...).",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "data_product_id": {
+      "format": "uuid",
+      "title": "Data Product Id",
+      "type": "string"
+    },
+    "locator_identity": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "title": "Locator Identity",
+      "type": "string"
+    },
+    "nova_id": {
+      "format": "uuid",
+      "title": "Nova Id",
+      "type": "string"
+    },
+    "provider": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Provider",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider",
+    "locator_identity",
+    "data_product_id",
+    "nova_id"
+  ],
+  "title": "LocatorAlias",
+  "type": "object"
+}

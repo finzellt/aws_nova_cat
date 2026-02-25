@@ -9,9 +9,11 @@ from pydantic import BaseModel
 
 from contracts.models.entities import (
     Attempt,
-    Dataset,
+    DataProduct,
     FileObject,
     JobRun,
+    LocatorAlias,
+    NameMapping,
     Nova,
     NovaReference,
     Reference,
@@ -20,7 +22,7 @@ from contracts.models.events import (
     AcquireAndValidateSpectraEvent,
     DiscoverSpectraProductsEvent,
     IngestNewNovaEvent,
-    IngestPhotometryDatasetEvent,
+    IngestPhotometryEvent,
     InitializeNovaEvent,
     NameCheckAndReconcileEvent,
     RefreshReferencesEvent,
@@ -37,27 +39,38 @@ class SchemaTarget:
 
 
 TARGETS: list[SchemaTarget] = [
-    # Entities
+    # ----------------------------
+    # Entities (persistent contracts)
+    # ----------------------------
     SchemaTarget("entities", "nova", Nova),
-    SchemaTarget("entities", "dataset", Dataset),
+    SchemaTarget("entities", "name_mapping", NameMapping),
+    SchemaTarget("entities", "locator_alias", LocatorAlias),
+    SchemaTarget("entities", "data_product", DataProduct),
     SchemaTarget("entities", "file_object", FileObject),
     SchemaTarget("entities", "reference", Reference),
     SchemaTarget("entities", "nova_reference", NovaReference),
     SchemaTarget("entities", "job_run", JobRun),
     SchemaTarget("entities", "attempt", Attempt),
-    # Events
+    # ----------------------------
+    # Events (workflow boundary contracts)
+    # ----------------------------
     SchemaTarget("events", "initialize_nova", InitializeNovaEvent),
     SchemaTarget("events", "ingest_new_nova", IngestNewNovaEvent),
     SchemaTarget("events", "refresh_references", RefreshReferencesEvent),
     SchemaTarget("events", "discover_spectra_products", DiscoverSpectraProductsEvent),
     SchemaTarget("events", "acquire_and_validate_spectra", AcquireAndValidateSpectraEvent),
-    SchemaTarget("events", "ingest_photometry_dataset", IngestPhotometryDatasetEvent),
+    SchemaTarget("events", "ingest_photometry", IngestPhotometryEvent),
     SchemaTarget("events", "name_check_and_reconcile", NameCheckAndReconcileEvent),
 ]
 
 
-def _schema_version(model: type[BaseModel]) -> str:
-    # Pydantic v2: we can look at the default field value without instantiating.
+def _version(model: type[BaseModel]) -> str:
+    """
+    Determine contract version for filename.
+
+    - Entities use `schema_version`
+    - Events use `event_version`
+    """
     field = model.model_fields.get("schema_version") or model.model_fields.get("event_version")
     if field is None:
         raise RuntimeError(f"{model.__name__} must define schema_version or event_version.")
@@ -69,17 +82,20 @@ def _schema_version(model: type[BaseModel]) -> str:
 
 def export_all() -> None:
     for t in TARGETS:
-        version = _schema_version(t.model)
+        version = _version(t.model)
         out_dir = SCHEMAS_ROOT / t.kind / t.name
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"{version}.json"
 
         schema = t.model.model_json_schema()
 
-        # Optional: enforce stable keys and a canonical "$id" for tooling
+        # Canonical "$id" for tooling / traceability
         schema["$id"] = f"nova-cat://schemas/{t.kind}/{t.name}/{version}"
 
-        out_path.write_text(json.dumps(schema, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        out_path.write_text(
+            json.dumps(schema, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         print(f"Wrote {out_path}")
 
 

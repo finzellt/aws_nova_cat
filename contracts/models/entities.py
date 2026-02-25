@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
@@ -93,25 +93,28 @@ class Provenance(PersistentBase):
 
 
 # ----------------------------
-# Nova
+# Nova + global identity
 # ----------------------------
 
 
 class NovaStatus(str, Enum):
-    candidate = "candidate"
-    confirmed = "confirmed"
-    retracted = "retracted"
+    # Aligns to the persistence model (ACTIVE/MERGED/DEPRECATED) plus the
+    # explicit workflow-driven quarantine state.
+    active = "ACTIVE"
+    quarantined = "QUARANTINED"
+    merged = "MERGED"
+    deprecated = "DEPRECATED"
 
 
 class SkyCoordFrame(str, Enum):
-    icrs = "icrs"
+    icrs = "ICRS"
 
 
 class Position(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ra_deg: float = Field(..., ge=0.0, lt=360.0, description="Right ascension in degrees.")
-    dec_deg: float = Field(..., ge=-90.0, le=90.0, description="Declination in degrees.")
+    ra_deg: float = Field(..., ge=0.0, lt=360.0, description="Right ascension in degrees (ICRS).")
+    dec_deg: float = Field(..., ge=-90.0, le=90.0, description="Declination in degrees (ICRS).")
     frame: SkyCoordFrame = Field(default=SkyCoordFrame.icrs)
     epoch: str | None = Field(default="J2000", description="Epoch label, e.g., 'J2000'.")
 
@@ -120,11 +123,11 @@ class Position(BaseModel):
 
 class Nova(PersistentBase):
     """
-    Core nova record.
+    Canonical nova record.
 
     Identity: nova_id (UUID) is the only authoritative internal identifier.
-    Naming: public_name is the current canonical display name.
-    Aliases: pragmatic search terms (often copied from SIMBAD / observed elsewhere).
+    Naming: primary_name is the current canonical display name.
+    Coordinates: flattened in persistence, but modeled here as Position for clarity.
     """
 
     schema_version: str = Field(default="1.0.0")
@@ -132,45 +135,34 @@ class Nova(PersistentBase):
     nova_id: UUID = Field(
         default_factory=uuid4, description="Stable, system-wide identifier for this nova."
     )
-    public_name: str = Field(..., min_length=1, max_length=256)
-    status: NovaStatus = Field(default=NovaStatus.candidate)
+    primary_name: str = Field(..., min_length=1, max_length=256)
+    primary_name_normalized: str = Field(..., min_length=1, max_length=256)
+    status: NovaStatus = Field(default=NovaStatus.active)
 
+    # Coordinates are modeled as a sub-object contractually; persistence may flatten them.
     position: Position | None = None
+
     discovery_date: datetime | None = None
 
-    # Aliases are search terms; we keep them simple and minimally validated.
-    aliases: list[str] = Field(
-        default_factory=list,
-        description="Known external name strings used for discovery/matching (e.g., SIMBAD alias list).",
-    )
+    # Optional quarantine context (only meaningful when status == QUARANTINED)
+    quarantine_reason_code: str | None = Field(default=None, max_length=128)
+    manual_review_status: str | None = Field(default=None, max_length=64)
 
     provenance: Provenance | None = None
 
-    @field_validator("public_name")
+    @field_validator("primary_name")
     @classmethod
     def reject_blank_name(cls, v: str) -> str:
         if not v.strip():
-            raise ValueError("public_name cannot be blank.")
+            raise ValueError("primary_name cannot be blank.")
         return v
 
-    @field_validator("aliases")
+    @field_validator("primary_name_normalized")
     @classmethod
-    def validate_aliases(cls, v: list[str]) -> list[str]:
-        # Keep aliases as "as-seen" search terms; only reject useless entries and exact duplicates.
-        out: list[str] = []
-        seen: set[str] = set()
-        for s in v:
-            if s is None:
-                continue
-            if s.strip() == "":
-                continue
-            if len(s) > 512:
-                raise ValueError("Alias too long (>512 chars).")
-            if s in seen:
-                continue
-            seen.add(s)
-            out.append(s)
-        return out
+    def reject_blank_normalized_name(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("primary_name_normalized cannot be blank.")
+        return v
 
     @field_validator("discovery_date")
     @classmethod
@@ -182,96 +174,255 @@ class Nova(PersistentBase):
         return v
 
 
+class NameKind(str, Enum):
+    primary = "PRIMARY"
+    alias = "ALIAS"
+
+
+class NameMappingSource(str, Enum):
+    user_input = "USER_INPUT"
+    ingestion = "INGESTION"
+    simbad = "SIMBAD"
+    tns = "TNS"
+    other = "OTHER"
+
+
+class NameMapping(PersistentBase):
+    """
+    Global identity mapping: normalized name -> nova_id.
+
+    NOTE: This is a global-partition item in the single table (PK = NAME#...).
+    """
+
+    schema_version: str = Field(default="1.0.0")
+
+    name_raw: str = Field(..., min_length=1, max_length=256)
+    name_normalized: str = Field(..., min_length=1, max_length=256)
+    name_kind: NameKind = Field(default=NameKind.alias)
+    nova_id: UUID
+    source: NameMappingSource = Field(default=NameMappingSource.other)
+
+    @field_validator("name_raw", "name_normalized")
+    @classmethod
+    def reject_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Name fields cannot be blank.")
+        return v
+
+
 # ----------------------------
-# Files and Datasets
+# DataProducts + LocatorAlias
 # ----------------------------
 
 
-class DatasetKind(str, Enum):
-    spectra = "spectra"
-    photometry = "photometry"
+class ProductType(str, Enum):
+    photometry_table = "PHOTOMETRY_TABLE"
+    spectra = "SPECTRA"
 
 
-class DatasetStatus(str, Enum):
-    discovered = "discovered"
-    validated = "validated"
-    published = "published"
-    rejected = "rejected"
+class LocatorKind(str, Enum):
+    url = "URL"
+    s3 = "S3"
+    other = "OTHER"
+
+
+class LocatorRole(str, Enum):
+    primary = "PRIMARY"
+    mirror = "MIRROR"
+
+
+class Locator(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: LocatorKind
+    role: LocatorRole = Field(default=LocatorRole.primary)
+    value: str = Field(..., min_length=1, max_length=2048)
+
+
+class AcquisitionStatus(str, Enum):
+    stub = "STUB"
+    acquired = "ACQUIRED"
+    failed = "FAILED"
+
+
+class ValidationStatus(str, Enum):
+    unvalidated = "UNVALIDATED"
+    valid = "VALID"
+    quarantined = "QUARANTINED"
+    invalid = "INVALID"
+
+
+class Eligibility(str, Enum):
+    acquire = "ACQUIRE"
+    none = "NONE"
+
+
+class ManualReviewStatus(str, Enum):
+    pending = "PENDING"
+    cleared_retry_approved = "CLEARED_RETRY_APPROVED"
+    cleared_terminal = "CLEARED_TERMINAL"
+
+
+class DataProduct(PersistentBase):
+    """
+    Core unit of work.
+
+    There are two product types:
+    - PHOTOMETRY_TABLE (exactly one per nova)
+    - SPECTRA (many per nova; one item per atomic spectra product)
+
+    This contract is intentionally permissive: fields are type-dependent.
+    """
+
+    schema_version: str = Field(default="1.0.0")
+
+    data_product_id: UUID = Field(default_factory=uuid4)
+    nova_id: UUID
+    product_type: ProductType
+
+    # --- spectra-only identity fields
+    provider: str | None = Field(default=None, max_length=128)
+    locator_identity: str | None = Field(
+        default=None,
+        max_length=2048,
+        description="Normalized stable locator identity (e.g., provider_product_id:<id> or url:<normalized_url>).",
+    )
+    locators: list[Locator] = Field(default_factory=list)
+    hints: dict[str, Any] = Field(default_factory=dict)
+
+    # --- lifecycle
+    acquisition_status: AcquisitionStatus | None = None
+    validation_status: ValidationStatus | None = None
+    eligibility: Eligibility | None = None
+
+    # --- cooldown/backoff fields (spectra)
+    attempt_count: int | None = Field(default=None, ge=0)
+    last_attempt_at: datetime | None = None
+    next_eligible_attempt_at: datetime | None = None
+    last_error_fingerprint: str | None = Field(default=None, max_length=256)
+
+    # --- fingerprints/checksums (spectra)
+    byte_length: int | None = Field(default=None, ge=0)
+    etag: str | None = Field(default=None, max_length=512)
+    sha256: str | None = Field(default=None, max_length=256)
+    header_signature_hash: str | None = Field(default=None, max_length=256)
+
+    # --- profile-driven validation outputs (spectra)
+    fits_profile_id: str | None = Field(default=None, max_length=256)
+    profile_selection_inputs: dict[str, Any] = Field(default_factory=dict)
+    normalization_notes: list[str] = Field(default_factory=list)
+
+    # --- quarantine gating (spectra and/or nova-level workflows may reference these)
+    quarantine_reason_code: str | None = Field(default=None, max_length=128)
+    manual_review_status: ManualReviewStatus | None = None
+
+    # --- S3 pointers (spectra raw) / (photometry derived)
+    raw_s3_bucket: str | None = Field(default=None, max_length=256)
+    raw_s3_key: str | None = Field(default=None, max_length=2048)
+    derived_s3_prefix: str | None = Field(default=None, max_length=2048)
+
+    # photometry-table current parquet pointer
+    s3_bucket: str | None = Field(default=None, max_length=256)
+    s3_key: str | None = Field(default=None, max_length=2048)
+
+    # photometry ingestion summary
+    last_ingestion_at: datetime | None = None
+    last_ingestion_source: str | None = Field(default=None, max_length=512)
+    ingestion_count: int | None = Field(default=None, ge=0)
+
+    provenance: Provenance | None = None
+
+    @model_validator(mode="after")
+    def validate_by_product_type(self) -> DataProduct:
+        if self.product_type == ProductType.spectra:
+            if not self.provider or not self.provider.strip():
+                raise ValueError("SPECTRA DataProduct requires provider.")
+            if not self.locator_identity or not self.locator_identity.strip():
+                raise ValueError("SPECTRA DataProduct requires locator_identity.")
+            if self.acquisition_status is None:
+                raise ValueError("SPECTRA DataProduct requires acquisition_status.")
+            if self.validation_status is None:
+                raise ValueError("SPECTRA DataProduct requires validation_status.")
+            if self.eligibility is None:
+                raise ValueError("SPECTRA DataProduct requires eligibility.")
+            if self.attempt_count is None:
+                # keep MVP-friendly: default to 0 when omitted
+                self.attempt_count = 0
+
+        if self.product_type == ProductType.photometry_table and (
+            self.provider is not None or self.locator_identity is not None or self.locators
+        ):
+            # Photometry is a singleton product per nova; no provider/locator identity required.
+            # Require only that we can point at the current parquet when present.
+            raise ValueError("PHOTOMETRY_TABLE DataProduct must not set provider/locator fields.")
+        return self
+
+
+class LocatorAlias(PersistentBase):
+    """
+    Global identity mapping: (provider + locator_identity) -> data_product_id
+
+    NOTE: This is a global-partition item in the single table (PK = LOCATOR#...).
+    """
+
+    schema_version: str = Field(default="1.0.0")
+
+    provider: str = Field(..., min_length=1, max_length=128)
+    locator_identity: str = Field(..., min_length=1, max_length=2048)
+    data_product_id: UUID
+    nova_id: UUID
+
+
+# ----------------------------
+# FileObject (optional registry for S3 objects)
+# ----------------------------
 
 
 class FileRole(str, Enum):
-    primary = "primary"
-    preview = "preview"
-    auxiliary = "auxiliary"
-    metadata = "metadata"
-
-
-class ContentDigest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    algorithm: Literal["sha256"] = "sha256"
-    value: str = Field(..., min_length=64, max_length=128, description="Hex digest.")
-
-    @field_validator("value")
-    @classmethod
-    def lower_hex(cls, v: str) -> str:
-        return v.lower()
+    raw_fits = "RAW_FITS"
+    quarantine_context = "QUARANTINE_CONTEXT"
+    normalized = "NORMALIZED"
+    plot = "PLOT"
+    manifest = "MANIFEST"
+    data_bundle = "DATA_BUNDLE"
+    other = "OTHER"
 
 
 class FileObject(PersistentBase):
     """
-    Logical file contract (not storage layout): identity + integrity + descriptive metadata.
+    Registry entry for an S3 object associated with a data product.
+
+    This is not the S3 layout spec; it's a lightweight index/provenance record.
     """
 
     schema_version: str = Field(default="1.0.0")
 
     file_id: UUID = Field(default_factory=uuid4)
 
-    filename: str = Field(..., min_length=1, max_length=512)
-    media_type: str | None = Field(
-        default=None, description="IANA media type if known, e.g. 'application/fits'."
-    )
-    size_bytes: int | None = Field(default=None, ge=0)
-    role: FileRole = Field(default=FileRole.primary)
-    url: HttpUrl | None = Field(default=None, description="Upstream URL if externally sourced.")
-    digest: ContentDigest | None = Field(default=None)
-
-    provenance: Provenance | None = None
-
-
-class Dataset(PersistentBase):
-    """
-    A coherent scientific dataset associated with a single nova.
-    Many datasets may reference the same nova via `nova_id`.
-    Datasets are the unit of ingestion, validation, and publication.
-    """
-
-    schema_version: str = Field(default="1.0.0")
-
-    dataset_id: UUID = Field(default_factory=uuid4)
-
     nova_id: UUID
-    kind: DatasetKind
-    status: DatasetStatus = Field(default=DatasetStatus.discovered)
+    data_product_id: UUID
+    product_type: ProductType
 
-    file_ids: list[UUID] = Field(default_factory=list)
+    role: FileRole
+    bucket: str = Field(..., min_length=1, max_length=256)
+    key: str = Field(..., min_length=1, max_length=2048)
 
-    title: str | None = Field(default=None, max_length=512)
-    observed_start: datetime | None = None
-    observed_end: datetime | None = None
+    content_type: str | None = Field(default=None, max_length=256)
+    byte_length: int | None = Field(default=None, ge=0)
+    etag: str | None = Field(default=None, max_length=512)
+    sha256: str | None = Field(default=None, max_length=256)
 
-    provenance: Provenance | None = None
-
-    attributes: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Free-form attributes for incremental enrichment (kept small; avoid embedding huge payloads).",
+    created_by: str | None = Field(
+        default=None,
+        max_length=512,
+        description="Workflow and run context (e.g., '<job_type>:<job_run_id>').",
     )
 
-    @model_validator(mode="after")
-    def validate_observation_window(self) -> Dataset:
-        if self.observed_start and self.observed_end and self.observed_end < self.observed_start:
-            raise ValueError("observed_end cannot be earlier than observed_start.")
-        return self
+    url: HttpUrl | None = Field(
+        default=None,
+        description="Optional upstream URL if the object was sourced externally.",
+    )
+    provenance: Provenance | None = None
 
 
 # ----------------------------
@@ -284,7 +435,6 @@ class ReferenceType(str, Enum):
     conference_abstract = "conference_abstract"
     poster = "poster"
     catalog = "catalog"
-    dataset = "dataset"
     software = "software"
     other = "other"
 
@@ -318,14 +468,13 @@ class Identifier(BaseModel):
 
 class Reference(PersistentBase):
     """
-    Global bibliographic/work record (paper, poster, catalog entry, dataset record, etc.).
+    Global bibliographic/work record (paper, poster, catalog entry, etc.).
     Deduplicated by stable external identifiers when available.
     """
 
     schema_version: str = Field(default="1.0.0")
 
     reference_id: UUID = Field(default_factory=uuid4)
-
     reference_type: ReferenceType = Field(default=ReferenceType.journal_article)
 
     identifiers: list[Identifier] = Field(
@@ -342,11 +491,6 @@ class Reference(PersistentBase):
     )
 
     provenance: Provenance | None = None
-
-    @field_validator("authors")
-    @classmethod
-    def strip_authors(cls, v: list[str]) -> list[str]:
-        return [" ".join(a.split()) for a in v if a and a.strip()]
 
     @model_validator(mode="after")
     def validate_identifiers(self) -> Reference:
@@ -438,7 +582,7 @@ class JobType(str, Enum):
     refresh_references = "RefreshReferences"
     discover_spectra_products = "DiscoverSpectraProducts"
     acquire_and_validate_spectra = "AcquireAndValidateSpectra"
-    ingest_photometry_dataset = "IngestPhotometryDataset"
+    ingest_photometry = "IngestPhotometryEvent"
     name_check_and_reconcile = "NameCheckAndReconcile"
 
 
@@ -470,7 +614,7 @@ class JobRun(PersistentBase):
 
     # Optional linkage for convenience/traceability
     nova_id: UUID | None = None
-    dataset_id: UUID | None = None
+    data_product_id: UUID | None = None
 
     initiated_by: str | None = Field(
         default=None, description="Actor or service initiating the run."

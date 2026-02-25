@@ -211,23 +211,60 @@ Note: In MVP, executions are normally launched from discovery output; this query
 
 ---
 
-## ingest_photometry_dataset
+## ingest_photometry
 
-Purpose: Ingest a new photometry source file via API, update the per-nova photometry table product, and write bytes/derived artifacts to S3.
+Purpose: Ingest a new photometry source file via API, update the per-nova photometry table product, and write derived artifacts to S3.
+
+There is no dataset abstraction.
 
 ### Reads
-- Resolve input name → `nova_id` via `NameMapping`:
-  - Query `PK = "NAME#<normalized_name>"`
 
-- Read photometry table data product:
-  `PK = "<nova_id>"`, `SK = "PRODUCT#PHOTOMETRY_TABLE"`
+Resolve input name → `nova_id` via `NameMapping`:
+
+PK = "NAME#<normalized_name>"
+
+Read photometry table `DataProduct`:
+
+PK = "<nova_id>"
+SK = "PRODUCT#PHOTOMETRY_TABLE"
 
 ### Writes
-- Update photometry table `DataProduct` in place:
-  - S3 pointer to current parquet
-  - ingestion summary fields (`last_ingestion_at`, `last_ingestion_source`, `ingestion_count`)
 
-- Optional: insert `FileObject` entries for uploaded raw file, per-nova split file, bundle manifests, and derived artifacts
+Update photometry table `DataProduct` in place:
+
+- `current_s3_key`
+- `photometry_schema_version`
+- `last_ingestion_at`
+- `last_ingestion_source`
+- `ingestion_count`
+
+### Canonical Overwrite Behavior
+
+For routine ingestion under the same schema version:
+
+- Rebuild and overwrite the canonical photometry table key:
+
+derived/photometry/<nova_id>/photometry_table.parquet
+
+### Schema-Change Snapshot Behavior (Forward-Compatible)
+
+If the photometry schema version changes:
+
+1. Copy the existing canonical table to an immutable snapshot key:
+
+derived/photometry/<nova_id>/snapshots/schema=<old_schema_version>/...
+
+2. Write the new canonical table using the new schema version.
+
+Snapshots are created only for schema migrations, not for normal ingestion.
+
+### Optional
+
+Insert `FileObject` entries for:
+
+- Raw uploaded file
+- Split per-nova file (if applicable)
+- Derived artifacts
 
 ---
 

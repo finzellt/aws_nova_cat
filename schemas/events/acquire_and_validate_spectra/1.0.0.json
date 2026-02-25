@@ -7,7 +7,7 @@
         "RefreshReferences",
         "DiscoverSpectraProducts",
         "AcquireAndValidateSpectra",
-        "IngestPhotometryDataset",
+        "IngestPhotometryEvent",
         "NameCheckAndReconcile"
       ],
       "title": "JobType",
@@ -16,6 +16,7 @@
   },
   "$id": "nova-cat://schemas/events/acquire_and_validate_spectra/1.0.0",
   "additionalProperties": false,
+  "description": "One data_product_id per execution (Mode 1).\n\nThe workflow reads locator/provenance/acquisition metadata from the persisted DataProduct record.\nBoundary event identifies the target data product only.",
   "properties": {
     "attributes": {
       "additionalProperties": true,
@@ -27,23 +28,15 @@
       "title": "Correlation Id",
       "type": "string"
     },
-    "dataset_id": {
+    "data_product_id": {
       "format": "uuid",
-      "title": "Dataset Id",
+      "title": "Data Product Id",
       "type": "string"
     },
     "event_version": {
       "default": "1.0.0",
       "title": "Event Version",
       "type": "string"
-    },
-    "file_urls": {
-      "description": "Upstream URLs to acquire/validate.",
-      "items": {
-        "type": "string"
-      },
-      "title": "File Urls",
-      "type": "array"
     },
     "initiated_at": {
       "format": "date-time",
@@ -58,11 +51,18 @@
       "format": "uuid",
       "title": "Nova Id",
       "type": "string"
+    },
+    "provider": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Provider",
+      "type": "string"
     }
   },
   "required": [
     "nova_id",
-    "dataset_id"
+    "provider",
+    "data_product_id"
   ],
   "title": "AcquireAndValidateSpectraEvent",
   "type": "object"
