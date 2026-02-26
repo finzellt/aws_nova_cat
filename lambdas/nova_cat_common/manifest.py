@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol
 
-from nova_cat_common.initialize import (
+from lambdas.nova_cat_common.initialize import (
     begin_jobrun,
     check_existing_nova_by_name,
     create_nova_id,
@@ -13,9 +13,22 @@ from nova_cat_common.initialize import (
     upsert_minimal_nova_metadata,
 )
 
-# Add more task modules as we go (ingest/discover/acquire families).
 
-_TASKS: dict[str, Callable[[dict, Any], dict]] = {
+class Recorder(Protocol):
+    @property
+    def job_run_id(self) -> str: ...
+
+    def jobrun_started(self) -> None: ...
+    def attempt_started(self, task_name: str, attempt_no: int) -> None: ...
+    def attempt_succeeded(self, task_name: str, attempt_no: int) -> None: ...
+    def attempt_failed(
+        self, task_name: str, attempt_no: int, error_type: str, error_message: str
+    ) -> None: ...
+
+
+TaskFn = Callable[[dict[str, Any], Recorder], dict[str, Any]]
+
+_TASKS: dict[str, TaskFn] = {
     "BeginJobRun": begin_jobrun,
     "NormalizeCandidateName": normalize_candidate_name,
     "CheckExistingNovaByName": check_existing_nova_by_name,
@@ -23,11 +36,11 @@ _TASKS: dict[str, Callable[[dict, Any], dict]] = {
     "UpsertMinimalNovaMetadata": upsert_minimal_nova_metadata,
     "PublishIngestNewNova": publish_ingest_new_nova,
     "FinalizeJobRunSuccess": finalize_jobrun_success,
-    # ... also map the ingest/discover/acquire state names used in CDK
 }
 
 
-def resolve_task(state_name: str) -> Callable[[dict, Any], dict]:
-    if state_name not in _TASKS:
-        raise KeyError(f"Unregistered task: {state_name}")
-    return _TASKS[state_name]
+def resolve_task(state_name: str) -> TaskFn:
+    try:
+        return _TASKS[state_name]
+    except KeyError as e:
+        raise KeyError(f"Unregistered task: {state_name}") from e

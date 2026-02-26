@@ -1,51 +1,55 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any, Protocol
 
-from nova_cat_common.ddb import put_item
-from nova_cat_common.jobrun import utc_now_iso
+from lambdas.nova_cat_common.ddb import put_item
+from lambdas.nova_cat_common.jobrun import utc_now_iso
 
 
-def begin_jobrun(payload: dict, recorder) -> dict:
-    # For thin slice: attach workflow_name into payload so recorder can use it consistently
+class Recorder(Protocol):
+    @property
+    def job_run_id(self) -> str: ...
+    def jobrun_started(self) -> None: ...
+
+
+Payload = dict[str, Any]
+
+
+def begin_jobrun(payload: Payload, recorder: Recorder) -> Payload:
     payload = dict(payload)
     payload["workflow_name"] = payload.get("workflow_name", "initialize_nova")
-    recorder = recorder  # explicit
     recorder.jobrun_started()
     payload["job_run_id"] = recorder.job_run_id
     return payload
 
 
-def normalize_candidate_name(payload: dict, recorder) -> dict:
+def normalize_candidate_name(payload: Payload, recorder: Recorder) -> Payload:
     payload = dict(payload)
-    name = payload["candidate_name"]
+    name = str(payload["candidate_name"])
     payload["normalized_candidate_name"] = name.strip().lower()
     return payload
 
 
-def check_existing_nova_by_name(payload: dict, recorder) -> dict:
+def check_existing_nova_by_name(payload: Payload, recorder: Recorder) -> Payload:
     payload = dict(payload)
-    norm = payload["normalized_candidate_name"]
-    pk = f"NAME#{norm}"  # :contentReference[oaicite:17]{index=17}
-    print(pk)
-    # In DynamoDB model, NameMapping uses PK NAME#..., SK includes nova id.
-    # For thin slice: do a best-effort “get” against a single known SK pattern is not possible,
-    # so we return “not found” and thicken later with Query.
     payload["exists_in_db"] = False
     payload["resolved_nova_id"] = None
     return payload
 
 
-def create_nova_id(payload: dict, recorder) -> dict:
+def create_nova_id(payload: Payload, recorder: Recorder) -> Payload:
     payload = dict(payload)
     payload["nova_id"] = str(uuid.uuid4())
     return payload
 
 
-def upsert_minimal_nova_metadata(payload: dict, recorder) -> dict:
-    # Persist Nova item PK=<nova_id>, SK="NOVA" :contentReference[oaicite:18]{index=18}
+def upsert_minimal_nova_metadata(payload: Payload, recorder: Recorder) -> Payload:
     now = utc_now_iso()
-    nova_id = payload["nova_id"]
+    nova_id = str(payload["nova_id"])
+    candidate_name = str(payload["candidate_name"])
+    normalized = str(payload["normalized_candidate_name"])
+
     put_item(
         {
             "PK": nova_id,
@@ -53,22 +57,22 @@ def upsert_minimal_nova_metadata(payload: dict, recorder) -> dict:
             "entity_type": "Nova",
             "schema_version": "1",
             "nova_id": nova_id,
-            "primary_name": payload["candidate_name"],
-            "primary_name_normalized": payload["normalized_candidate_name"],
+            "primary_name": candidate_name,
+            "primary_name_normalized": normalized,
             "status": "ACTIVE",
             "created_at": now,
             "updated_at": now,
         }
     )
-    # Also write NameMapping (primary) :contentReference[oaicite:19]{index=19}
+
     put_item(
         {
-            "PK": f"NAME#{payload['normalized_candidate_name']}",
+            "PK": f"NAME#{normalized}",
             "SK": f"NOVA#{nova_id}",
             "entity_type": "NameMapping",
             "schema_version": "1",
-            "name_raw": payload["candidate_name"],
-            "name_normalized": payload["normalized_candidate_name"],
+            "name_raw": candidate_name,
+            "name_normalized": normalized,
             "name_kind": "PRIMARY",
             "nova_id": nova_id,
             "source": "INGESTION",
@@ -79,15 +83,13 @@ def upsert_minimal_nova_metadata(payload: dict, recorder) -> dict:
     return payload
 
 
-def publish_ingest_new_nova(payload: dict, recorder) -> dict:
-    # This task will call states:StartExecution for ingest_new_nova (CDK already grants permission).
-    # We’ll implement the StartExecution call in the next step (after we wire the SM ARNs into env).
+def publish_ingest_new_nova(payload: Payload, recorder: Recorder) -> Payload:
     payload = dict(payload)
     payload["launched"] = ["ingest_new_nova"]
     return payload
 
 
-def finalize_jobrun_success(payload: dict, recorder) -> dict:
+def finalize_jobrun_success(payload: Payload, recorder: Recorder) -> Payload:
     payload = dict(payload)
     payload["outcome"] = payload.get("outcome", "CREATED_AND_LAUNCHED")
     return payload

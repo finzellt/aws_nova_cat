@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import aws_cdk as cdk
-from nova_cat_stack import NovaCatStack
+
+from infra.cdk.nova_cat_stack import NovaCatStack
 
 app = cdk.App()
 

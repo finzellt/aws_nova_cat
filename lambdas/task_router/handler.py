@@ -2,34 +2,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from nova_cat_common.errors import classify_exception
-from nova_cat_common.jobrun import JobRunRecorder
-from nova_cat_common.log import get_logger
-from nova_cat_common.manifest import resolve_task
+from lambdas.nova_cat_common.errors import classify_exception
+from lambdas.nova_cat_common.jobrun import JobRunRecorder
+from lambdas.nova_cat_common.log import get_logger
+from lambdas.nova_cat_common.manifest import resolve_task
 
 log = get_logger()
 
 
 def main(event: dict[str, Any], _context: Any) -> dict[str, Any]:
-    """
-    Expected payload from Step Functions:
-      {
-        "input": <original workflow input or accumulated payload>,
-        "context": {
-          "state_name": "...",
-          "execution_arn": "...",
-          "entered_time": "...",
-          "retry_count": 0
-        }
-      }
-    """
-    state_name = event["context"]["state_name"]
-    execution_arn = event["context"]["execution_arn"]
+    state_name = str(event["context"]["state_name"])
+    execution_arn = str(event["context"]["execution_arn"])
     attempt_no = int(event["context"].get("retry_count", 0)) + 1
 
-    payload = event["input"]
+    payload_obj = event["input"]
+    if not isinstance(payload_obj, dict):
+        raise TypeError("event['input'] must be a dict")
+    payload: dict[str, Any] = payload_obj
 
-    # Router-level log (workflow/task fields are required by specs; we’ll add the full set in common/log.py next)
     log.info(
         "task_start",
         extra={
@@ -40,16 +30,13 @@ def main(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     )
 
     recorder = JobRunRecorder.from_payload(payload, execution_arn=execution_arn)
-
-    # Emit Attempt STARTED (normative operational record type) :contentReference[oaicite:13]{index=13}
     recorder.attempt_started(task_name=state_name, attempt_no=attempt_no)
 
     try:
         fn = resolve_task(state_name)
-        out = fn(payload, recorder)
+        out: dict[str, Any] = fn(payload, recorder)
 
         recorder.attempt_succeeded(task_name=state_name, attempt_no=attempt_no)
-
         log.info(
             "task_success",
             extra={
@@ -60,7 +47,7 @@ def main(event: dict[str, Any], _context: Any) -> dict[str, Any]:
         )
         return out
 
-    except Exception as e:  # noqa: BLE001 (intentional)
+    except Exception as e:  # noqa: BLE001
         err = classify_exception(e)
         recorder.attempt_failed(
             task_name=state_name,
@@ -68,7 +55,6 @@ def main(event: dict[str, Any], _context: Any) -> dict[str, Any]:
             error_type=err.error_type,
             error_message=err.message,
         )
-
         log.exception(
             "task_failed",
             extra={
