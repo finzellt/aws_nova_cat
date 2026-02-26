@@ -1,6 +1,6 @@
 # Nova Cat — Current Architecture Snapshot
 
-_Last Updated: YYYY-MM-DD_
+_Last Updated: 2026-02-26_
 
 This document captures the **authoritative architectural baseline** of Nova Cat at this point in time.
 
