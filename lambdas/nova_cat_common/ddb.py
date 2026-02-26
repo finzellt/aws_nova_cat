@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import boto3  # type: ignore[import-untyped]
+import boto3
 
 _TABLE_NAME = os.environ["NOVA_CAT_TABLE_NAME"]
 _dynamodb = boto3.resource("dynamodb")
