@@ -1,0 +1,20 @@
+| State                          |        Type | Lambda family    | `op`                                                   | Input model                                                 | Output model |
+| ------------------------------ | ----------: | ---------------- | ------------------------------------------------------ | ----------------------------------------------------------- | ------------ |
+| ValidateInput                  |        Pass | —                | —                                                      | AcquireAndValidateSpectraEvent (validated at first Task)    | —            |
+| EnsureCorrelationId            | Choice/Pass | —                | —                                                      | —                                                           | —            |
+| BeginJobRun                    |        Task | governance_task  | `begin_jobrun`                                         | TaskInvocation(payload=AcquireAndValidateSpectraEvent dict) | TaskResult   |
+| AcquireIdempotencyLock         |        Task | idempotency_task | `acquire_lock`                                         | TaskInvocation                                              | TaskResult   |
+| LoadDataProductMetadata        |        Task | spectra_av_task  | `load_metadata`                                        | TaskInvocation                                              | TaskResult   |
+| CheckOperationalStatus         |        Task | spectra_av_task  | `check_status`                                         | TaskInvocation                                              | TaskResult   |
+| AlreadyValidated?              |      Choice | —                | —                                                      | —                                                           | —            |
+| CooldownActive?                |      Choice | —                | —                                                      | —                                                           | —            |
+| AcquireArtifact                |        Task | spectra_av_task  | `acquire_artifact` *(EPIC5_STUB allowed)*              | TaskInvocation                                              | TaskResult   |
+| ValidateBytes (Profile-Driven) |        Task | spectra_av_task  | `validate_profile` *(EPIC5_STUB allowed)*              | TaskInvocation                                              | TaskResult   |
+| DuplicateByFingerprint?        |      Choice | —                | —                                                      | —                                                           | —            |
+| RecordDuplicateLinkage         |        Task | spectra_av_task  | `record_duplicate_linkage` *(may be stub if no bytes)* | TaskInvocation                                              | TaskResult   |
+| RecordValidationResult         |        Task | spectra_av_task  | `record_validation_result`                             | TaskInvocation                                              | TaskResult   |
+| QuarantineHandler              |        Task | governance_task  | `quarantine_notify`                                    | TaskInvocation                                              | TaskResult   |
+| FinalizeJobRunSuccess          |        Task | governance_task  | `finalize_success`                                     | TaskInvocation(outcome set)                                 | TaskResult   |
+| FinalizeJobRunQuarantined      |        Task | governance_task  | `finalize_quarantined`                                 | TaskInvocation(outcome set)                                 | TaskResult   |
+| TerminalFailHandler            |        Task | governance_task  | `terminal_fail`                                        | TaskInvocation                                              | TaskResult   |
+| FinalizeJobRunFailed           |        Task | governance_task  | `finalize_failed`                                      | TaskInvocation                                              | TaskResult   |

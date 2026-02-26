@@ -8,6 +8,7 @@ __pycache__/
 cdk.out/
 infra/cdk.context.json
 tools/diagrams/node_modules/
+docs/_epic5/
 
 .DS_Store
 .idea/

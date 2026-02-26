@@ -1,0 +1,16 @@
+| State                                       |        Type | Lambda family          | `op`                                       | Input model                                               | Output model |
+| ------------------------------------------- | ----------: | ---------------------- | ------------------------------------------ | --------------------------------------------------------- | ------------ |
+| ValidateInput                               |        Pass | —                      | —                                          | DiscoverSpectraProductsEvent (validated at first Task)    | —            |
+| EnsureCorrelationId                         | Choice/Pass | —                      | —                                          | —                                                         | —            |
+| BeginJobRun                                 |        Task | governance_task        | `begin_jobrun`                             | TaskInvocation(payload=DiscoverSpectraProductsEvent dict) | TaskResult   |
+| AcquireIdempotencyLock                      |        Task | idempotency_task       | `acquire_lock`                             | TaskInvocation                                            | TaskResult   |
+| DiscoverAcrossProviders                     |         Map | —                      | —                                          | —                                                         | —            |
+| ├─ QueryProviderForProducts                 |        Task | spectra_discovery_task | `query_provider` *(stub provider allowed)* | TaskInvocation                                            | TaskResult   |
+| ├─ NormalizeProviderProducts                |        Task | spectra_discovery_task | `normalize_products`                       | TaskInvocation                                            | TaskResult   |
+| ├─ DeduplicateAndAssignDataProductIds       |        Task | spectra_discovery_task | `assign_data_product_ids`                  | TaskInvocation                                            | TaskResult   |
+| ├─ PersistDataProductMetadata               |        Task | spectra_discovery_task | `persist_metadata`                         | TaskInvocation                                            | TaskResult   |
+| └─ PublishAcquireAndValidateSpectraRequests |        Task | spectra_discovery_task | `publish_acquire_requests`                 | TaskInvocation → AcquireAndValidateSpectraEvent           | TaskResult   |
+| SummarizeDiscovery                          |        Task | spectra_discovery_task | `summarize_discovery`                      | TaskInvocation                                            | TaskResult   |
+| FinalizeJobRunSuccess                       |        Task | governance_task        | `finalize_success`                         | TaskInvocation                                            | TaskResult   |
+| TerminalFailHandler                         |        Task | governance_task        | `terminal_fail`                            | TaskInvocation                                            | TaskResult   |
+| FinalizeJobRunFailed                        |        Task | governance_task        | `finalize_failed`                          | TaskInvocation                                            | TaskResult   |
