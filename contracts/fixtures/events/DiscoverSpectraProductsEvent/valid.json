@@ -1,0 +1,10 @@
+{
+  "event_version": "1.0.0",
+  "correlation_id": "5a44e3f0-6b21-4b0b-b67f-6f63ad5a9d2d",
+  "initiated_at": "2026-02-28T18:00:00+00:00",
+  "nova_id": "b1c5f06d-9b2d-4b84-bd8c-ff3e7a217bb4",
+  "sources": [
+    "vizier"
+  ],
+  "attributes": {}
+}

@@ -1,0 +1,9 @@
+{
+  "event_version": "1.0.0",
+  "correlation_id": "9bbcd2a4-7f5c-4b9f-a9e2-4c0d2b55a0d2",
+  "initiated_at": "2026-02-28T18:00:00+00:00",
+  "candidate_name": "V1324 Sco",
+  "photometry_schema_version": "1.0",
+  "source": "atlas",
+  "attributes": {}
+}

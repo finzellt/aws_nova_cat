@@ -14,5 +14,5 @@ ignore = ["E501"]
 quote-style = "double"
 
 [tool.pytest.ini_options]
-testpaths = ["infra/tests", "services"]
+testpaths = ["tests","infra/tests", "services"]
 addopts = "-q"
