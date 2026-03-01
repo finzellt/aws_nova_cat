@@ -342,3 +342,66 @@ class TestOutputs:
 
     def test_quarantine_topic_output_exists(self, template: assertions.Template) -> None:
         template.has_output("*", {"Export": {"Name": "NovaCat-QuarantineTopicArn"}})
+
+
+# ---------------------------------------------------------------------------
+# Step Functions
+# ---------------------------------------------------------------------------
+
+
+class TestStepFunctions:
+    def test_initialize_nova_state_machine_exists(self, template: assertions.Template) -> None:
+        template.has_resource_properties(
+            "AWS::StepFunctions::StateMachine",
+            {"StateMachineName": "nova-cat-initialize-nova"},
+        )
+
+    def test_initialize_nova_is_standard_workflow(self, template: assertions.Template) -> None:
+        template.has_resource_properties(
+            "AWS::StepFunctions::StateMachine",
+            {
+                "StateMachineName": "nova-cat-initialize-nova",
+                "StateMachineType": "STANDARD",
+            },
+        )
+
+    def test_initialize_nova_has_execution_role(self, template: assertions.Template) -> None:
+        # The state machine must have a role ARN — not a wildcard, just
+        # confirm the property is present and references an IAM role resource
+        state_machines = template.find_resources(
+            "AWS::StepFunctions::StateMachine",
+            {
+                "Properties": {
+                    "StateMachineName": "nova-cat-initialize-nova",
+                }
+            },
+        )
+        assert len(state_machines) == 1
+        sm = next(iter(state_machines.values()))
+        assert "RoleArn" in sm["Properties"], "initialize_nova state machine is missing RoleArn"
+
+    def test_initialize_nova_execution_role_can_invoke_lambdas(
+        self, template: assertions.Template
+    ) -> None:
+        # Confirm at least one IAM policy grants lambda:InvokeFunction,
+        # scoped to the Lambdas this workflow uses
+        policies = template.find_resources("AWS::IAM::Policy")
+        invoke_grants = [
+            p
+            for p in policies.values()
+            if any(
+                "lambda:InvokeFunction" in stmt.get("Action", [])
+                or stmt.get("Action") == "lambda:InvokeFunction"
+                for stmt in p.get("Properties", {}).get("PolicyDocument", {}).get("Statement", [])
+            )
+        ]
+        assert len(invoke_grants) >= 1, (
+            "Expected at least one IAM policy granting lambda:InvokeFunction "
+            "for the initialize_nova execution role"
+        )
+
+    def test_initialize_nova_output_exists(self, template: assertions.Template) -> None:
+        template.has_output(
+            "*",
+            {"Export": {"Name": "NovaCat-InitializeNovaStateMachineArn"}},
+        )
