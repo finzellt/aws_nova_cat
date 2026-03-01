@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -22,6 +22,8 @@ class EventBase(BaseModel):
     - Boundary events MUST NOT include workflow idempotency keys or step dedupe keys.
     - correlation_id SHOULD be provided by callers; if absent, the workflow (via this model)
       generates one and propagates it downstream.
+    - initiated_at represents when the caller originated the request. It is distinct from
+      workflow execution start time and is useful for latency analysis and event age checks.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -52,8 +54,8 @@ class InitializeNovaEvent(EventBase):
     Input is a candidate name; the workflow resolves identity and emits a nova_id downstream.
     """
 
-    event_version: str = Field(default="1.0.0")
-    job_type: JobType = Field(default=JobType.initialize_nova)
+    event_version: Literal["1.0.0"] = "1.0.0"
+    job_type: Literal[JobType.initialize_nova] = JobType.initialize_nova
 
     candidate_name: str = Field(..., min_length=1, max_length=256)
 
@@ -66,40 +68,47 @@ class InitializeNovaEvent(EventBase):
 class IngestNewNovaEvent(EventBase):
     """
     Coordinator workflow that bootstraps ingestion for an already-established nova_id.
+
+    Note: force_refresh and similar behavioral knobs are passed via attributes rather than
+    typed fields, to keep the typed contract minimal and stable. Callers may include
+    {"force_refresh": true} in attributes; workflow implementations read from there.
     """
 
-    event_version: str = Field(default="1.0.0")
-    job_type: JobType = Field(default=JobType.ingest_new_nova)
+    event_version: Literal["1.0.0"] = "1.0.0"
+    job_type: Literal[JobType.ingest_new_nova] = JobType.ingest_new_nova
 
     nova_id: UUID
 
-    # minimal knobs to control ingestion behavior without coupling
-    force_refresh: bool = False
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
 class RefreshReferencesEvent(EventBase):
-    event_version: str = Field(default="1.0.0")
-    job_type: JobType = Field(default=JobType.refresh_references)
+    """
+    Note: ADS query hints (query_terms, since_year, etc.) are passed via attributes rather
+    than typed fields. The workflow spec requires only nova_id; query hints are implementation
+    details that may evolve without breaking the contract.
+    """
+
+    event_version: Literal["1.0.0"] = "1.0.0"
+    job_type: Literal[JobType.refresh_references] = JobType.refresh_references
 
     nova_id: UUID
 
-    # ADS query hints; keep generic
-    query_terms: list[str] = Field(default_factory=list)
-    since_year: int | None = None
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
 class DiscoverSpectraProductsEvent(EventBase):
-    event_version: str = Field(default="1.0.0")
-    job_type: JobType = Field(default=JobType.discover_spectra_products)
+    """
+    Note: Discovery source constraints (e.g., preferred providers) are passed via attributes
+    rather than typed fields, consistent with the workflow spec which requires only nova_id.
+    Callers may include {"sources": ["ESO", "MAST"]} in attributes.
+    """
+
+    event_version: Literal["1.0.0"] = "1.0.0"
+    job_type: Literal[JobType.discover_spectra_products] = JobType.discover_spectra_products
 
     nova_id: UUID
 
-    # optionally constrain discovery sources
-    sources: list[str] = Field(
-        default_factory=list, description="Preferred discovery sources (optional)."
-    )
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -109,16 +118,17 @@ class AcquireAndValidateSpectraEvent(EventBase):
 
     The workflow reads locator/provenance/acquisition metadata from the persisted DataProduct record.
     Boundary event identifies the target data product only.
+
+    Note: provider is included in the boundary event because the DynamoDB item key is
+    PRODUCT#SPECTRA#<provider>#<data_product_id> — the Lambda needs provider to construct
+    the lookup key without an extra read.
     """
 
-    event_version: str = Field(default="1.0.0")
-    job_type: JobType = Field(default=JobType.acquire_and_validate_spectra)
+    event_version: Literal["1.0.0"] = "1.0.0"
+    job_type: Literal[JobType.acquire_and_validate_spectra] = JobType.acquire_and_validate_spectra
 
     nova_id: UUID
-
-    # Provider is included because the persisted product item keying is provider-scoped.
     provider: str = Field(..., min_length=1, max_length=128)
-
     data_product_id: UUID
 
     attributes: dict[str, Any] = Field(default_factory=dict)
@@ -135,8 +145,8 @@ class IngestPhotometryEvent(EventBase):
     No dataset abstraction exists.
     """
 
-    event_version: str = Field(default="1.0.0")
-    job_type: JobType = Field(default=JobType.ingest_photometry)
+    event_version: Literal["1.0.0"] = "1.0.0"
+    job_type: Literal[JobType.ingest_photometry] = JobType.ingest_photometry
 
     candidate_name: str | None = Field(default=None, min_length=1, max_length=256)
     nova_id: UUID | None = None
@@ -157,10 +167,16 @@ class IngestPhotometryEvent(EventBase):
 
 
 class NameCheckAndReconcileEvent(EventBase):
-    event_version: str = Field(default="1.0.0")
-    job_type: JobType = Field(default=JobType.name_check_and_reconcile)
+    """
+    Note: proposed_public_name and proposed_aliases are passed via attributes rather than
+    typed fields. The workflow spec requires only nova_id; proposed naming hints are
+    operator-supplied inputs that may evolve without requiring a contract version bump.
+    Callers may include {"proposed_public_name": "V1234 Sco", "proposed_aliases": [...]}
+    in attributes.
+    """
+
+    event_version: Literal["1.0.0"] = "1.0.0"
+    job_type: Literal[JobType.name_check_and_reconcile] = JobType.name_check_and_reconcile
 
     nova_id: UUID
-    proposed_public_name: str | None = None
-    proposed_aliases: list[str] = Field(default_factory=list)
     attributes: dict[str, Any] = Field(default_factory=dict)

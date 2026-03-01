@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
-import aws_cdk as cdk
+"""
+Nova Cat CDK Application Entry Point
+"""
 
-from infra.stacks.app_stack import AppStack
+import aws_cdk as cdk
+from nova_cat.nova_cat_stack import NovaCatStack
 
 app = cdk.App()
 
-AppStack(app, "ServerlessMonorepoApp")
+NovaCatStack(
+    app,
+    "NovaCat",
+    env=cdk.Environment(
+        account=app.node.try_get_context("account"),
+        region="us-east-1",
+    ),
+    description="Nova Cat: serverless platform for aggregating and publishing classical nova data",
+)
 
 app.synth()
