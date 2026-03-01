@@ -20,8 +20,8 @@ from typing import Any
 
 import aws_cdk as cdk
 from constructs import Construct
-from constructs.compute import NovaCatCompute
-from constructs.storage import NovaCatStorage
+from nova_constructs.compute import NovaCatCompute
+from nova_constructs.storage import NovaCatStorage
 
 
 class NovaCatStack(cdk.Stack):

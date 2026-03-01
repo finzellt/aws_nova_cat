@@ -4,8 +4,7 @@ Nova Cat CDK Application Entry Point
 """
 
 import aws_cdk as cdk
-
-from infra.nova_cat.nova_cat_stack import NovaCatStack
+from nova_cat.nova_cat_stack import NovaCatStack
 
 app = cdk.App()
 

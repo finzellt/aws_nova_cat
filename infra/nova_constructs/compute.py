@@ -28,6 +28,7 @@ Lambda function inventory (12 functions):
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 import aws_cdk as cdk
@@ -42,7 +43,7 @@ from constructs import Construct
 # Acquisition Lambda gets a higher memory and longer timeout; others are conservative.
 _DEFAULT_MEMORY_MB = 256
 _DEFAULT_TIMEOUT = cdk.Duration.seconds(30)
-_PYTHON_RUNTIME = lambda_.Runtime.PYTHON_3_12
+_PYTHON_RUNTIME = lambda_.Runtime.PYTHON_3_11
 _LOG_RETENTION = logs.RetentionDays.THREE_MONTHS
 
 
@@ -94,31 +95,22 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
         service_dir="workflow_launcher",
         description=(
             "Starts downstream Step Functions executions and publishes SNS continuation events. "
-            "Handles PublishIngestNewNova, LaunchRefreshReferences, "
-            "LaunchDiscoverSpectraProducts, PublishAcquireAndValidateSpectraRequests. "
             "Used by: initialize_nova, ingest_new_nova, discover_spectra_products."
         ),
     ),
     "reference_manager": _FunctionSpec(
         service_dir="reference_manager",
         description=(
-            "Fetches references from ADS, upserts Reference entities, links NovaReference "
-            "records, and computes discovery_date. "
-            "Handles FetchReferenceCandidates, NormalizeReference, UpsertReferenceEntity, "
-            "LinkNovaReference, ComputeDiscoveryDate, UpsertDiscoveryDateMetadata. "
-            "Used by: refresh_references."
+            "Fetches ADS references, upserts Reference entities, links NovaReference "
+            "records, and computes discovery_date. Used by: refresh_references."
         ),
         timeout=cdk.Duration.seconds(90),  # ADS API calls
     ),
     "spectra_discoverer": _FunctionSpec(
         service_dir="spectra_discoverer",
         description=(
-            "Dispatches provider-specific discovery adapters, normalizes results, assigns "
-            "stable data_product_id values, persists DataProduct stubs, and publishes "
-            "AcquireAndValidateSpectra continuation events. "
-            "Handles QueryProviderForProducts, NormalizeProviderProducts, "
-            "DeduplicateAndAssignDataProductIds, PersistDataProductMetadata. "
-            "Used by: discover_spectra_products."
+            "Dispatches provider discovery adapters, assigns stable data_product_id values, "
+            "persists DataProduct stubs. Used by: discover_spectra_products."
         ),
         timeout=cdk.Duration.seconds(60),
     ),
@@ -135,10 +127,8 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
     "spectra_validator": _FunctionSpec(
         service_dir="spectra_validator",
         description=(
-            "Selects FITS profile, normalizes spectral arrays to canonical IVOA-aligned model, "
-            "runs domain sanity checks, and records validation outcomes. "
-            "Handles ValidateBytes, RecordValidationResult, RecordDuplicateLinkage, "
-            "CheckOperationalStatus. Used by: acquire_and_validate_spectra."
+            "Selects FITS profile, normalizes spectral arrays to IVOA-aligned model, "
+            "and records validation outcomes. Used by: acquire_and_validate_spectra."
         ),
         memory_mb=512,  # FITS parsing is memory-intensive
         timeout=cdk.Duration.minutes(5),  # Per execution-governance.md validation timeout
@@ -146,10 +136,8 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
     "photometry_ingestor": _FunctionSpec(
         service_dir="photometry_ingestor",
         description=(
-            "Validates an uploaded photometry file, rebuilds the canonical per-nova "
-            "photometry_table.parquet, and persists ingestion summary metadata. "
-            "Handles ValidatePhotometry, RebuildPhotometryTable, PersistPhotometryMetadata, "
-            "CheckOperationalStatus. Used by: ingest_photometry."
+            "Validates photometry files, rebuilds the canonical per-nova parquet table, "
+            "and persists ingestion metadata. Used by: ingest_photometry."
         ),
         memory_mb=512,  # Parquet rebuild may be memory-intensive
         timeout=cdk.Duration.minutes(5),
@@ -224,7 +212,9 @@ class NovaCatCompute(Construct):
                 function_name=f"nova-cat-{name.replace('_', '-')}",
                 runtime=_PYTHON_RUNTIME,
                 handler="handler.handle",
-                code=lambda_.Code.from_asset(f"{services_root}/{spec.service_dir}"),
+                code=lambda_.Code.from_asset(
+                    os.path.join(os.path.dirname(__file__), services_root, spec.service_dir)
+                ),
                 description=spec.description,
                 memory_size=spec.memory_mb,
                 timeout=spec.timeout,
