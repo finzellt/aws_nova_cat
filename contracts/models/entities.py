@@ -345,6 +345,14 @@ class DataProduct(PersistentBase):
             "Kept separate from validation_status per the scientific/operational state separation invariant."
         ),
     )
+    duplicate_of_data_product_id: UUID | None = Field(
+        default=None,
+        description=(
+            "If this product was found to be a byte-level duplicate of an existing validated product, "
+            "this field holds the canonical data_product_id. Set during acquire_and_validate_spectra "
+            "when content_fingerprint matches an existing VALID product."
+        ),
+    )
 
     # --- fingerprints/checksums (spectra)
     byte_length: int | None = Field(default=None, ge=0)
