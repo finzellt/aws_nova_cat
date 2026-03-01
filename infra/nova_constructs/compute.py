@@ -43,7 +43,7 @@ from constructs import Construct
 # Acquisition Lambda gets a higher memory and longer timeout; others are conservative.
 _DEFAULT_MEMORY_MB = 256
 _DEFAULT_TIMEOUT = cdk.Duration.seconds(30)
-_PYTHON_RUNTIME = lambda_.Runtime.PYTHON_3_11
+_PYTHON_RUNTIME = lambda_.Runtime.PYTHON_3_12
 _LOG_RETENTION = logs.RetentionDays.THREE_MONTHS
 
 
@@ -169,8 +169,23 @@ class NovaCatCompute(Construct):
     Compute layer for Nova Cat.
 
     Exposes each Lambda function as a named attribute (e.g. self.nova_resolver)
-    for use by the Step Functions construct in the next epic.
+    for use by the Step Functions construct.
     """
+
+    # Explicit attribute declarations so mypy can see dynamically assigned
+    # attributes (set via setattr in __init__). One entry per Lambda function.
+    nova_resolver: lambda_.Function
+    job_run_manager: lambda_.Function
+    idempotency_guard: lambda_.Function
+    archive_resolver: lambda_.Function
+    workflow_launcher: lambda_.Function
+    reference_manager: lambda_.Function
+    spectra_discoverer: lambda_.Function
+    spectra_acquirer: lambda_.Function
+    spectra_validator: lambda_.Function
+    photometry_ingestor: lambda_.Function
+    quarantine_handler: lambda_.Function
+    name_reconciler: lambda_.Function
 
     def __init__(
         self,
