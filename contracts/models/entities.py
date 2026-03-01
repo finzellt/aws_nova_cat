@@ -145,7 +145,7 @@ class Nova(PersistentBase):
     discovery_date: datetime | None = None
 
     # Optional quarantine context (only meaningful when status == QUARANTINED)
-    quarantine_reason_code: str | None = Field(default=None, max_length=128)
+    quarantine_reason_code: NovaQuarantineReasonCode | None = None
     manual_review_status: str | None = Field(default=None, max_length=64)
 
     provenance: Provenance | None = None
@@ -242,14 +242,16 @@ class Locator(BaseModel):
 class AcquisitionStatus(str, Enum):
     stub = "STUB"
     acquired = "ACQUIRED"
-    failed = "FAILED"
+    failed_retryable = "FAILED_RETRYABLE"
+    skipped_duplicate = "SKIPPED_DUPLICATE"
+    skipped_backoff = "SKIPPED_BACKOFF"
 
 
 class ValidationStatus(str, Enum):
     unvalidated = "UNVALIDATED"
     valid = "VALID"
     quarantined = "QUARANTINED"
-    invalid = "INVALID"
+    terminal_invalid = "TERMINAL_INVALID"
 
 
 class Eligibility(str, Enum):
@@ -261,6 +263,42 @@ class ManualReviewStatus(str, Enum):
     pending = "PENDING"
     cleared_retry_approved = "CLEARED_RETRY_APPROVED"
     cleared_terminal = "CLEARED_TERMINAL"
+
+
+class LastAttemptOutcome(str, Enum):
+    """
+    Operational outcome of the most recent acquisition/validation attempt.
+
+    Separate from ValidationStatus and AcquisitionStatus by design:
+    scientific state must not encode retryability (see execution-governance.md).
+    """
+
+    success = "SUCCESS"
+    retryable_failure = "RETRYABLE_FAILURE"
+    terminal_failure = "TERMINAL_FAILURE"
+    quarantine = "QUARANTINE"
+
+
+class NovaQuarantineReasonCode(str, Enum):
+    """
+    Quarantine reason codes for Nova identity quarantine (initialize_nova workflow).
+    """
+
+    coordinate_ambiguity = "COORDINATE_AMBIGUITY"
+    other = "OTHER"
+
+
+class SpectraQuarantineReasonCode(str, Enum):
+    """
+    Quarantine reason codes for spectra DataProduct validation quarantine
+    (acquire_and_validate_spectra workflow).
+    """
+
+    unknown_profile = "UNKNOWN_PROFILE"
+    missing_critical_metadata = "MISSING_CRITICAL_METADATA"
+    checksum_mismatch = "CHECKSUM_MISMATCH"
+    coordinate_proximity = "COORDINATE_PROXIMITY"
+    other = "OTHER"
 
 
 class DataProduct(PersistentBase):
@@ -300,6 +338,13 @@ class DataProduct(PersistentBase):
     last_attempt_at: datetime | None = None
     next_eligible_attempt_at: datetime | None = None
     last_error_fingerprint: str | None = Field(default=None, max_length=256)
+    last_attempt_outcome: LastAttemptOutcome | None = Field(
+        default=None,
+        description=(
+            "Operational outcome of the most recent attempt. "
+            "Kept separate from validation_status per the scientific/operational state separation invariant."
+        ),
+    )
 
     # --- fingerprints/checksums (spectra)
     byte_length: int | None = Field(default=None, ge=0)
@@ -313,7 +358,7 @@ class DataProduct(PersistentBase):
     normalization_notes: list[str] = Field(default_factory=list)
 
     # --- quarantine gating (spectra and/or nova-level workflows may reference these)
-    quarantine_reason_code: str | None = Field(default=None, max_length=128)
+    quarantine_reason_code: SpectraQuarantineReasonCode | None = None
     manual_review_status: ManualReviewStatus | None = None
 
     # --- S3 pointers (spectra raw) / (photometry derived)
@@ -513,6 +558,13 @@ class Reference(PersistentBase):
         return self
 
 
+class NovaReferenceRole(str, Enum):
+    discovery = "DISCOVERY"
+    spectra_source = "SPECTRA_SOURCE"
+    photometry_source = "PHOTOMETRY_SOURCE"
+    other = "OTHER"
+
+
 class NovaReference(PersistentBase):
     """
     Per-nova link connecting a Nova to a global Reference.
@@ -526,6 +578,16 @@ class NovaReference(PersistentBase):
     nova_id: UUID
     reference_id: UUID
 
+    role: NovaReferenceRole = Field(
+        default=NovaReferenceRole.other,
+        description="The role this reference plays for this nova (e.g., discovery paper, spectra source).",
+    )
+    added_by_workflow: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Name of the workflow that created this link (e.g., 'refresh_references').",
+    )
+
     notes: str | None = Field(default=None, max_length=4000)
 
     # Link-level provenance: how/why this Reference was associated with this nova (e.g., ADS query terms).
@@ -538,11 +600,11 @@ class NovaReference(PersistentBase):
 
 
 class AttemptStatus(str, Enum):
-    started = "started"
-    succeeded = "succeeded"
-    failed = "failed"
-    timed_out = "timed_out"
-    cancelled = "cancelled"
+    started = "STARTED"
+    succeeded = "SUCCEEDED"
+    failed = "FAILED"
+    timed_out = "TIMED_OUT"
+    cancelled = "CANCELLED"
 
 
 class Attempt(PersistentBase):
@@ -582,16 +644,17 @@ class JobType(str, Enum):
     refresh_references = "RefreshReferences"
     discover_spectra_products = "DiscoverSpectraProducts"
     acquire_and_validate_spectra = "AcquireAndValidateSpectra"
-    ingest_photometry = "IngestPhotometryEvent"
+    ingest_photometry = "IngestPhotometry"
     name_check_and_reconcile = "NameCheckAndReconcile"
 
 
 class JobStatus(str, Enum):
-    queued = "queued"
-    running = "running"
-    succeeded = "succeeded"
-    failed = "failed"
-    cancelled = "cancelled"
+    queued = "QUEUED"
+    running = "RUNNING"
+    succeeded = "SUCCEEDED"
+    failed = "FAILED"
+    quarantined = "QUARANTINED"
+    cancelled = "CANCELLED"
 
 
 class JobRun(PersistentBase):
@@ -604,7 +667,19 @@ class JobRun(PersistentBase):
     job_run_id: UUID = Field(default_factory=uuid4)
 
     job_type: JobType
+    workflow_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Human-readable Step Functions workflow name (e.g., 'acquire_and_validate_spectra').",
+    )
     status: JobStatus = Field(default=JobStatus.queued)
+
+    execution_arn: str | None = Field(
+        default=None,
+        max_length=2048,
+        description="Step Functions execution ARN for this run. Used to trace back to execution history.",
+    )
 
     correlation_id: UUID = Field(..., description="Correlates this run across events/services.")
     idempotency_key: str = Field(..., min_length=8, max_length=256)
