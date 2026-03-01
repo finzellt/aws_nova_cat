@@ -2,7 +2,7 @@
 Nova Cat Compute Construct
 
 Provisions all Lambda functions with:
-  - Consistent runtime (Python 3.12)
+  - Consistent runtime (Python 3.11)
   - Shared environment variables (table name, bucket names, SNS topic ARN)
   - Least-privilege IAM grants derived from each function's actual access patterns
     (see dynamodb-access-patterns.md for the source of truth)
@@ -43,7 +43,7 @@ from constructs import Construct
 # Acquisition Lambda gets a higher memory and longer timeout; others are conservative.
 _DEFAULT_MEMORY_MB = 256
 _DEFAULT_TIMEOUT = cdk.Duration.seconds(30)
-_PYTHON_RUNTIME = lambda_.Runtime.PYTHON_3_12
+_PYTHON_RUNTIME = lambda_.Runtime.PYTHON_3_11
 _LOG_RETENTION = logs.RetentionDays.THREE_MONTHS
 
 
