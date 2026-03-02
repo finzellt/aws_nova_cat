@@ -20,7 +20,7 @@ Design decisions:
     which resolves Lambda ARNs at deploy time rather than synth time.
     This means the ASL JSON stays portable and readable.
   - IAM role grants invoke permission only on the Lambdas actually used
-    by each state machine — not all 12.
+    by each state machine — not a wildcard grant.
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ class NovaCatWorkflows(Construct):
 
     Exposes:
       initialize_nova  — the initialize_nova state machine
+      ingest_new_nova  — the ingest_new_nova state machine (placeholder stub)
     """
 
     def __init__(
@@ -58,6 +59,31 @@ class NovaCatWorkflows(Construct):
         super().__init__(scope, construct_id)
 
         self._workflows_dir = os.path.join(os.path.dirname(__file__), "../workflows")
+
+        # ------------------------------------------------------------------
+        # ingest_new_nova state machine (placeholder)
+        #
+        # Provisioned before initialize_nova so its ARN can be injected into
+        # workflow_launcher as an environment variable. The placeholder ASL
+        # contains a single Fail state — it will be replaced when Epic 11
+        # implements the full workflow.
+        # ------------------------------------------------------------------
+        self.ingest_new_nova = self._create_state_machine(
+            name="ingest-new-nova",
+            asl_file="ingest_new_nova.asl.json",
+            substitutions={},
+            invokable_functions=[],
+        )
+
+        # Grant workflow_launcher permission to start ingest_new_nova executions
+        # and inject the ARN as an environment variable.
+        # This grant lives here (not in NovaCatCompute) because NovaCatWorkflows
+        # owns the state machine ARNs — NovaCatCompute has no knowledge of SFN.
+        _grant_start_execution(self.ingest_new_nova, compute.workflow_launcher)
+        compute.workflow_launcher.add_environment(
+            "INGEST_NEW_NOVA_STATE_MACHINE_ARN",
+            self.ingest_new_nova.attr_arn,
+        )
 
         # ------------------------------------------------------------------
         # initialize_nova state machine
@@ -105,6 +131,13 @@ class NovaCatWorkflows(Construct):
             value=self.initialize_nova.attr_arn,
             description="initialize_nova Step Functions state machine ARN",
             export_name="NovaCat-InitializeNovaStateMachineArn",
+        )
+        cdk.CfnOutput(
+            self,
+            "IngestNewNovaStateMachineArn",
+            value=self.ingest_new_nova.attr_arn,
+            description="ingest_new_nova Step Functions state machine ARN",
+            export_name="NovaCat-IngestNewNovaStateMachineArn",
         )
 
     def _create_state_machine(
@@ -171,12 +204,32 @@ class NovaCatWorkflows(Construct):
             state_machine_name=f"nova-cat-{name}",
             state_machine_type="STANDARD",
             role_arn=role.role_arn,
-            definition_substitutions=substitutions,
+            definition_substitutions=substitutions if substitutions else None,
             definition_string=cdk.Fn.sub(
                 json.dumps(asl_body, separators=(",", ":")),
                 substitutions,
-            ),
+            )
+            if substitutions
+            else json.dumps(asl_body, separators=(",", ":")),
         )
+
+
+def _grant_start_execution(
+    state_machine: sfn.CfnStateMachine,
+    fn: lambda_.Function,
+) -> None:
+    """
+    Grant a Lambda function permission to start executions on a state machine.
+
+    CfnStateMachine (L1) has no grant_start_execution helper, so we add the
+    policy statement directly to the Lambda's role.
+    """
+    fn.add_to_role_policy(
+        iam.PolicyStatement(
+            actions=["states:StartExecution"],
+            resources=[state_machine.attr_arn],
+        )
+    )
 
 
 def _to_pascal(kebab: str) -> str:

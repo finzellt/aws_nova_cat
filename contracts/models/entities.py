@@ -432,12 +432,15 @@ class LocatorAlias(PersistentBase):
 
 
 class FileRole(str, Enum):
-    raw_fits = "RAW_FITS"
-    quarantine_context = "QUARANTINE_CONTEXT"
-    normalized = "NORMALIZED"
-    plot = "PLOT"
-    manifest = "MANIFEST"
-    data_bundle = "DATA_BUNDLE"
+    spectra_raw_fits = "SPECTRA_RAW_FITS"
+    spectra_quarantine_context = "SPECTRA_QUARANTINE_CONTEXT"
+    spectra_normalized = "SPECTRA_NORMALIZED"
+    spectra_plot = "SPECTRA_PLOT"
+    photometry_table = "PHOTOMETRY_TABLE"
+    photometry_snapshot = "PHOTOMETRY_SNAPSHOT"
+    workflow_quarantine_context = "WORKFLOW_QUARANTINE_CONTEXT"  # ← covers initialize_nova case
+    bundle_manifest = "BUNDLE_MANIFEST"
+    bundle_zip = "BUNDLE_ZIP"
     other = "OTHER"
 
 
@@ -451,19 +454,16 @@ class FileObject(PersistentBase):
     schema_version: str = Field(default="1.0.0")
 
     file_id: UUID = Field(default_factory=uuid4)
-
-    nova_id: UUID
-    data_product_id: UUID
-    product_type: ProductType
-
+    nova_id: UUID | None = None  # None before nova exists (e.g. initialize_nova quarantine)
+    data_product_id: UUID | None = None  # None when not product-scoped
     role: FileRole
     bucket: str = Field(..., min_length=1, max_length=256)
     key: str = Field(..., min_length=1, max_length=2048)
-
-    content_type: str | None = Field(default=None, max_length=256)
+    content_type: str | None = None
     byte_length: int | None = Field(default=None, ge=0)
     etag: str | None = Field(default=None, max_length=512)
     sha256: str | None = Field(default=None, max_length=256)
+    provenance: Provenance | None = None
 
     created_by: str | None = Field(
         default=None,
@@ -475,7 +475,6 @@ class FileObject(PersistentBase):
         default=None,
         description="Optional upstream URL if the object was sourced externally.",
     )
-    provenance: Provenance | None = None
 
 
 # ----------------------------

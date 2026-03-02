@@ -470,12 +470,31 @@ Locator identity normalization rules:
 
 ### 5) FileObject (optional registry for S3 objects)
 
-Recommended if you want strong provenance of stored objects and easy listing of raw/derived artifacts per product.
+Recommended if you want strong provenance of stored objects and easy listing
+of raw/derived artifacts per nova or data product.
 
 #### Key
 
-- `PK = "<nova_id>"`
-- `SK = "FILE#<product_type>#<data_product_id>#<role>#<name_or_id>"`
+FileObject SKs are role-scoped — the SK structure depends on which identifiers
+are meaningful for that role. All SKs terminate in `#ID#<file_id>` for
+guaranteed uniqueness and direct-fetch capability.
+
+| Role | PK | SK |
+|---|---|---|
+| `WORKFLOW_QUARANTINE_CONTEXT` | `WORKFLOW#<correlation_id>` | `FILE#WORKFLOW_QUARANTINE_CONTEXT#ID#<file_id>` |
+| `SPECTRA_RAW_FITS` | `<nova_id>` | `FILE#SPECTRA_RAW_FITS#NOVA#<nova_id>#ID#<file_id>` |
+| `SPECTRA_QUARANTINE_CONTEXT` | `<nova_id>` | `FILE#SPECTRA_QUARANTINE_CONTEXT#NOVA#<nova_id>#PRODUCT#<data_product_id>#ID#<file_id>` |
+| `SPECTRA_NORMALIZED` | `<nova_id>` | `FILE#SPECTRA_NORMALIZED#NOVA#<nova_id>#PRODUCT#<data_product_id>#ID#<file_id>` |
+| `SPECTRA_PLOT` | `<nova_id>` | `FILE#SPECTRA_PLOT#NOVA#<nova_id>#PRODUCT#<data_product_id>#ID#<file_id>` |
+| `PHOTOMETRY_TABLE` | `<nova_id>` | `FILE#PHOTOMETRY_TABLE#NOVA#<nova_id>#ID#<file_id>` |
+| `PHOTOMETRY_SNAPSHOT` | `<nova_id>` | `FILE#PHOTOMETRY_SNAPSHOT#NOVA#<nova_id>#ID#<file_id>` |
+| `BUNDLE_MANIFEST` | `<nova_id>` | `FILE#BUNDLE_MANIFEST#NOVA#<nova_id>#ID#<file_id>` |
+| `BUNDLE_ZIP` | `<nova_id>` | `FILE#BUNDLE_ZIP#NOVA#<nova_id>#ID#<file_id>` |
+| `OTHER` | `<nova_id>` | `FILE#OTHER#NOVA#<nova_id>#ID#<file_id>` |
+
+> For `WORKFLOW_QUARANTINE_CONTEXT`, the PK is `WORKFLOW#<correlation_id>` because
+> no `nova_id` exists yet at the point of writing (e.g. quarantine during `initialize_nova`).
+> This is consistent with how pre-nova `JobRun` records are keyed.
 
 ---
 
@@ -483,40 +502,69 @@ Recommended if you want strong provenance of stored objects and easy listing of 
 
 - `schema_version` (internal item evolution)
 - `entity_type = "FileObject"`
-- `data_product_id`
-- `product_type`
-- `role`
-  (`RAW_FITS` | `QUARANTINE_CONTEXT` | `NORMALIZED` | `PLOT` | `MANIFEST` | `DATA_BUNDLE` | `OTHER`)
+- `file_id` — UUID; stable forever
+- `nova_id` — UUID | None (None before nova exists)
+- `data_product_id` — UUID | None (None when not product-scoped)
+- `role` — see role table above
 - `bucket`
 - `key`
 - `content_type`
 - `byte_length`
 - `etag`
 - `sha256`
-- `created_by` (workflow + `job_run_id`)
+- `created_by` — workflow + `job_run_id`
 - `created_at`
 - `updated_at`
 
-#### Example:
+---
+
+#### Access patterns
+
+| Pattern | Condition |
+|---|---|
+| All files for a nova | `PK=<nova_id>`, `begins_with(SK, "FILE#")` |
+| All files of a given role for a nova | `PK=<nova_id>`, `begins_with(SK, "FILE#<role>#")` |
+| All files for a specific data product | `PK=<nova_id>`, `begins_with(SK, "FILE#<role>#NOVA#<nova_id>#PRODUCT#<data_product_id>#")` |
+| Pre-nova workflow files | `PK=WORKFLOW#<correlation_id>`, `begins_with(SK, "FILE#")` |
+
+---
+
+#### Example items
+```json
+{
+  "PK": "WORKFLOW#a1b2c3d4-0000-0000-0000-000000000000",
+  "SK": "FILE#WORKFLOW_QUARANTINE_CONTEXT#ID#f1e2d3c4-0000-0000-0000-000000000000",
+  "entity_type": "FileObject",
+  "schema_version": "1.0.0",
+  "file_id": "f1e2d3c4-0000-0000-0000-000000000000",
+  "nova_id": null,
+  "data_product_id": null,
+  "role": "WORKFLOW_QUARANTINE_CONTEXT",
+  "bucket": "nova-cat-private-data",
+  "key": "quarantine/workflow/a1b2c3d4-0000-0000-0000-000000000000/context.json",
+  "content_type": "application/json",
+  "created_by": "initialize_nova:5a4fce02-3b02-4b5c-8d06-541d9f2d4f60",
+  "created_at": "2026-02-23T18:10:10Z",
+  "updated_at": "2026-02-23T18:10:10Z"
+}
+```
 ```json
 {
   "PK": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
-  "SK": "FILE#SPECTRA#2c7d1f4d-5b7a-4a4d-9f31-8d3b4fd0d4d9#RAW_FITS#primary",
+  "SK": "FILE#SPECTRA_RAW_FITS#NOVA#4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1#ID#d3c4e5f6-0000-0000-0000-000000000000",
   "entity_type": "FileObject",
-  "schema_version": "1",
+  "schema_version": "1.0.0",
+  "file_id": "d3c4e5f6-0000-0000-0000-000000000000",
+  "nova_id": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
   "data_product_id": "2c7d1f4d-5b7a-4a4d-9f31-8d3b4fd0d4d9",
-  "product_type": "SPECTRA",
-  "role": "RAW_FITS",
+  "role": "SPECTRA_RAW_FITS",
   "bucket": "nova-cat-private-data",
   "key": "raw/spectra/4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1/2c7d1f4d-5b7a-4a4d-9f31-8d3b4fd0d4d9/primary.fits",
   "content_type": "application/fits",
   "byte_length": 184233,
   "etag": "\"9b2cf535f27731c974343645a3985328\"",
   "sha256": "0c3b...a91f",
-  "created_by": {
-    "workflow": "acquire_and_validate_spectra",
-    "job_run_id": "5a4fce02-3b02-4b5c-8d06-541d9f2d4f60"
-  },
+  "created_by": "acquire_and_validate_spectra:5a4fce02-3b02-4b5c-8d06-541d9f2d4f60",
   "created_at": "2026-02-23T18:10:10Z",
   "updated_at": "2026-02-23T18:10:10Z"
 }
