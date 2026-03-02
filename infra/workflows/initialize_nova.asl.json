@@ -57,7 +57,7 @@
                     "ResultPath": "$.error"
                 }
             ],
-            "Next": "AcquireIdempotencyLock"
+            "Next": "NormalizeCandidateName"
         },
         "AcquireIdempotencyLock": {
             "Type": "Task",
@@ -66,7 +66,7 @@
             "Parameters": {
                 "task_name": "AcquireIdempotencyLock",
                 "workflow_name": "initialize_nova",
-                "candidate_name.$": "$.candidate_name",
+                "normalized_candidate_name.$": "$.normalization.normalized_candidate_name",
                 "correlation_id.$": "$.job_run.correlation_id",
                 "job_run_id.$": "$.job_run.job_run_id"
             },
@@ -92,7 +92,7 @@
                     "ResultPath": "$.error"
                 }
             ],
-            "Next": "NormalizeCandidateName"
+            "Next": "CheckExistingNovaByName"
         },
         "NormalizeCandidateName": {
             "Type": "Task",
@@ -127,7 +127,7 @@
                     "ResultPath": "$.error"
                 }
             ],
-            "Next": "CheckExistingNovaByName"
+            "Next": "AcquireIdempotencyLock"
         },
         "CheckExistingNovaByName": {
             "Type": "Task",
@@ -441,8 +441,7 @@
                 "normalized_candidate_name.$": "$.normalization.normalized_candidate_name",
                 "min_sep_arcsec.$": "$.coordinate_check.min_sep_arcsec",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id",
-                "job_run.$": "$.job_run"
+                "job_run_id.$": "$.job_run.job_run_id"
             },
             "ResultPath": "$.quarantine",
             "TimeoutSeconds": 10,
@@ -562,8 +561,7 @@
                 "candidate_name.$": "$.candidate_name",
                 "normalized_candidate_name.$": "$.normalization.normalized_candidate_name",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id",
-                "job_run.$": "$.job_run"
+                "job_run_id.$": "$.job_run.job_run_id"
             },
             "ResultPath": "$.quarantine",
             "TimeoutSeconds": 10,
