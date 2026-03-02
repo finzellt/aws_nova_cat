@@ -2,7 +2,7 @@
 Nova Cat Compute Construct
 
 Provisions all Lambda functions with:
-  - Consistent runtime (Python 3.12)
+  - Consistent runtime (Python 3.11)
   - Shared environment variables (table name, bucket names, SNS topic ARN)
   - Least-privilege IAM grants derived from each function's actual access patterns
     (see dynamodb-access-patterns.md for the source of truth)
@@ -169,8 +169,23 @@ class NovaCatCompute(Construct):
     Compute layer for Nova Cat.
 
     Exposes each Lambda function as a named attribute (e.g. self.nova_resolver)
-    for use by the Step Functions construct in the next epic.
+    for use by the Step Functions construct.
     """
+
+    # Explicit attribute declarations so mypy can see dynamically assigned
+    # attributes (set via setattr in __init__). One entry per Lambda function.
+    nova_resolver: lambda_.Function
+    job_run_manager: lambda_.Function
+    idempotency_guard: lambda_.Function
+    archive_resolver: lambda_.Function
+    workflow_launcher: lambda_.Function
+    reference_manager: lambda_.Function
+    spectra_discoverer: lambda_.Function
+    spectra_acquirer: lambda_.Function
+    spectra_validator: lambda_.Function
+    photometry_ingestor: lambda_.Function
+    quarantine_handler: lambda_.Function
+    name_reconciler: lambda_.Function
 
     def __init__(
         self,
@@ -200,6 +215,26 @@ class NovaCatCompute(Construct):
         }
 
         # ------------------------------------------------------------------
+        # nova_common Lambda Layer
+        #
+        # Shared utilities (Powertools Logger + Tracer, configure_logging)
+        # deployed as a layer so they don't need to be bundled into each
+        # Lambda zip. The layer asset follows Lambda's required structure:
+        #   nova_common_layer/python/nova_common/...
+        # which Lambda unpacks to /opt/python/nova_common/ at runtime.
+        # ------------------------------------------------------------------
+        nova_common_layer = lambda_.LayerVersion(
+            self,
+            "NovaCommonLayer",
+            layer_version_name="nova-cat-nova-common",
+            code=lambda_.Code.from_asset(
+                os.path.join(os.path.dirname(__file__), services_root, "nova_common_layer")
+            ),
+            compatible_runtimes=[_PYTHON_RUNTIME],
+            description="Nova Cat shared utilities: Powertools Logger, Tracer, configure_logging",
+        )
+
+        # ------------------------------------------------------------------
         # Build all Lambda functions from specs
         # ------------------------------------------------------------------
         self._functions: dict[str, lambda_.Function] = {}
@@ -220,7 +255,8 @@ class NovaCatCompute(Construct):
                 timeout=spec.timeout,
                 environment=shared_env,
                 log_retention=_LOG_RETENTION,
-                tracing=lambda_.Tracing.ACTIVE,  # X-Ray tracing; low cost at this scale
+                tracing=lambda_.Tracing.ACTIVE,
+                layers=[nova_common_layer],
             )
             self._functions[name] = fn
 

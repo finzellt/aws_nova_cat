@@ -22,6 +22,7 @@ import aws_cdk as cdk
 from constructs import Construct
 from nova_constructs.compute import NovaCatCompute
 from nova_constructs.storage import NovaCatStorage
+from nova_constructs.workflows import NovaCatWorkflows
 
 
 class NovaCatStack(cdk.Stack):
@@ -51,8 +52,15 @@ class NovaCatStack(cdk.Stack):
             private_bucket=self.storage.private_bucket,
             public_site_bucket=self.storage.public_site_bucket,
             quarantine_topic=self.storage.quarantine_topic,
-            # services/ lives two levels up from infra/
-            services_root="../../services",
+        )
+
+        # ------------------------------------------------------------------
+        # Workflows layer
+        # ------------------------------------------------------------------
+        self.workflows = NovaCatWorkflows(
+            self,
+            "Workflows",
+            compute=self.compute,
         )
 
         # ------------------------------------------------------------------
