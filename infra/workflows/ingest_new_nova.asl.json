@@ -1,0 +1,11 @@
+{
+    "Comment": "ingest_new_nova — Coordinates downstream enrichment workflows for a newly established nova. See workflow spec: ingest-new-nova.md. NOTE: This is a placeholder stub. Implementation pending Epic 11.",
+    "StartAt": "NotImplemented",
+    "States": {
+        "NotImplemented": {
+            "Type": "Fail",
+            "Error": "NotImplemented",
+            "Cause": "ingest_new_nova workflow is not yet implemented. This state machine is provisioned as a placeholder so workflow_launcher can hold a valid ARN at deploy time."
+        }
+    }
+}
