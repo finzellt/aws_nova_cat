@@ -32,10 +32,9 @@ It assumes the nova exists (created earlier by initialize_nova or other establis
    - **LaunchRefreshReferences** (Task) -> publishes `schemas/events/refresh_references/latest.json`
    - **LaunchDiscoverSpectraProducts** (Task) -> publishes `schemas/events/discover_spectra_products/latest.json`
    - (Optional future) launch other workflows
-6. **SummarizeLaunch** (Task)
-7. **FinalizeJobRunSuccess** (Task)
-8. **TerminalFailHandler** (Task)
-9. **FinalizeJobRunFailed** (Task)
+6. **FinalizeJobRunSuccess** (Task)
+7. **TerminalFailHandler** (Task)
+8. **FinalizeJobRunFailed** (Task)
 
 ## Retry / Timeout Policy (per state)
 - BeginJobRun:
@@ -43,8 +42,6 @@ It assumes the nova exists (created earlier by initialize_nova or other establis
 - AcquireIdempotencyLock:
   - Timeout: 10s; Retry MaxAttempts 3; Backoff 2s, 10s, 30s
 - LaunchRefreshReferences / LaunchDiscoverSpectraProducts:
-  - Timeout: 10s; Retry MaxAttempts 2; Backoff 2s, 10s
-- SummarizeLaunch:
   - Timeout: 10s; Retry MaxAttempts 2; Backoff 2s, 10s
 - Target overall workflow duration: <= 10 minutes
 

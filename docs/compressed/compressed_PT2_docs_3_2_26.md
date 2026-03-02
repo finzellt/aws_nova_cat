@@ -35,7 +35,7 @@ Input: `nova_id` | Idempotency: `IngestNewNova:{nova_id}:{schema_version}` | Tar
 Post-prefix states:
 1. LaunchDownstream (Parallel): LaunchRefreshReferences + LaunchDiscoverSpectraProducts
    (each 10s, retry 2×)
-2. SummarizeLaunch → FinalizeJobRunSuccess
+2. FinalizeJobRunSuccess
 
 Downstream failures do NOT retroactively fail this coordinator.
 
