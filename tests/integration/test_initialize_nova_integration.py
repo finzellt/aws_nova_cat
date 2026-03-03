@@ -70,6 +70,14 @@ def aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "NOVA_CAT_QUARANTINE_TOPIC_ARN", f"arn:aws:sns:{_REGION}:{_ACCOUNT}:{_QUARANTINE_TOPIC}"
     )
     monkeypatch.setenv("INGEST_NEW_NOVA_STATE_MACHINE_ARN", _SFN_ARN)
+    monkeypatch.setenv(
+        "REFRESH_REFERENCES_STATE_MACHINE_ARN",
+        "arn:aws:states:us-east-1:123456789012:stateMachine:nova-cat-refresh-references",
+    )
+    monkeypatch.setenv(
+        "DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN",
+        "arn:aws:states:us-east-1:123456789012:stateMachine:nova-cat-discover-spectra-products",
+    )
     monkeypatch.setenv("AWS_DEFAULT_REGION", _REGION)
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
@@ -180,7 +188,7 @@ def _run_prefix(
         {
             "task_name": "AcquireIdempotencyLock",
             "workflow_name": "initialize_nova",
-            "normalized_candidate_name": normalization["normalized_candidate_name"],
+            "primary_id": normalization["normalized_candidate_name"],
             "correlation_id": job_run["correlation_id"],
             "job_run_id": job_run["job_run_id"],
         },

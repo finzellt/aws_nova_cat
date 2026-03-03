@@ -18,6 +18,12 @@ Note on PK before nova_id is known:
   partitioned under "WORKFLOW#<correlation_id>" until a nova_id is assigned.
   For workflows that never produce a nova_id (NOT_FOUND, NOT_A_CLASSICAL_NOVA)
   this partition is permanent.
+
+Note on candidate_name vs nova_id:
+  initialize_nova always supplies candidate_name. Downstream workflows
+  (ingest_new_nova and later) operate on an already-resolved nova_id and
+  may not have a candidate_name. BeginJobRun accepts either — whichever
+  is present is stored on the JobRun item for traceability.
 """
 
 from __future__ import annotations
@@ -66,6 +72,10 @@ def _begin_job_run(event: dict[str, Any], context: object) -> dict[str, Any]:
     """
     Emit JobRun STARTED and generate a correlation_id if missing.
 
+    Either candidate_name (initialize_nova) or nova_id (ingest_new_nova and
+    downstream) must be present — whichever is supplied is stored on the
+    JobRun item for traceability.
+
     Returns:
         job_run_id     — new UUID for this execution
         correlation_id — caller-supplied or freshly generated
@@ -73,7 +83,8 @@ def _begin_job_run(event: dict[str, Any], context: object) -> dict[str, Any]:
         pk, sk         — DynamoDB key for subsequent FinalizeJobRun* updates
     """
     workflow_name: str = event["workflow_name"]
-    candidate_name: str = event["candidate_name"]
+    candidate_name: str | None = event.get("candidate_name")
+    nova_id: str | None = event.get("nova_id")
     correlation_id: str = event.get("correlation_id") or str(uuid.uuid4())
     job_run_id: str = str(uuid.uuid4())
     started_at: str = _now()
@@ -81,7 +92,7 @@ def _begin_job_run(event: dict[str, Any], context: object) -> dict[str, Any]:
     pk = f"WORKFLOW#{correlation_id}"
     sk = f"JOBRUN#{workflow_name}#{started_at}#{job_run_id}"
 
-    item = {
+    item: dict[str, Any] = {
         "PK": pk,
         "SK": sk,
         "entity_type": "JobRun",
@@ -89,12 +100,16 @@ def _begin_job_run(event: dict[str, Any], context: object) -> dict[str, Any]:
         "job_run_id": job_run_id,
         "workflow_name": workflow_name,
         "correlation_id": correlation_id,
-        "candidate_name": candidate_name,
         "status": "RUNNING",
         "started_at": started_at,
         "created_at": started_at,
         "updated_at": started_at,
     }
+
+    if candidate_name is not None:
+        item["candidate_name"] = candidate_name
+    if nova_id is not None:
+        item["nova_id"] = nova_id
 
     _table.put_item(
         Item=item,
@@ -106,6 +121,7 @@ def _begin_job_run(event: dict[str, Any], context: object) -> dict[str, Any]:
         extra={
             "job_run_id": job_run_id,
             "candidate_name": candidate_name,
+            "nova_id": nova_id,
         },
     )
 
@@ -125,7 +141,7 @@ def _finalize_job_run_success(event: dict[str, Any], context: object) -> dict[st
 
     Expected outcomes:
         CREATED_AND_LAUNCHED | EXISTS_AND_LAUNCHED |
-        NOT_FOUND | NOT_A_CLASSICAL_NOVA
+        NOT_FOUND | NOT_A_CLASSICAL_NOVA | LAUNCHED
     """
     job_run: dict[str, Any] = event["job_run"]
     outcome: str = event["outcome"]

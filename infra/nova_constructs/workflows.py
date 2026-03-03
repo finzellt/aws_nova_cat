@@ -45,8 +45,10 @@ class NovaCatWorkflows(Construct):
     the Lambda functions from NovaCatCompute.
 
     Exposes:
-      initialize_nova  — the initialize_nova state machine
-      ingest_new_nova  — the ingest_new_nova state machine (placeholder stub)
+      initialize_nova          — the initialize_nova state machine
+      ingest_new_nova          — the ingest_new_nova state machine
+      refresh_references       — the refresh_references state machine (placeholder stub)
+      discover_spectra_products — the discover_spectra_products state machine (placeholder stub)
     """
 
     def __init__(
@@ -61,28 +63,77 @@ class NovaCatWorkflows(Construct):
         self._workflows_dir = os.path.join(os.path.dirname(__file__), "../workflows")
 
         # ------------------------------------------------------------------
-        # ingest_new_nova state machine (placeholder)
+        # Downstream placeholder state machines
         #
-        # Provisioned before initialize_nova so its ARN can be injected into
-        # workflow_launcher as an environment variable. The placeholder ASL
-        # contains a single Fail state — it will be replaced when Epic 11
-        # implements the full workflow.
+        # Provisioned before ingest_new_nova and initialize_nova so their ARNs
+        # can be injected into workflow_launcher as environment variables.
+        # Placeholder ASLs contain a single Fail state — they will be replaced
+        # in their respective epics.
         # ------------------------------------------------------------------
-        self.ingest_new_nova = self._create_state_machine(
-            name="ingest-new-nova",
-            asl_file="ingest_new_nova.asl.json",
+        self.refresh_references = self._create_state_machine(
+            name="refresh-references",
+            asl_file="refresh_references.asl.json",
+            substitutions={},
+            invokable_functions=[],
+        )
+        self.discover_spectra_products = self._create_state_machine(
+            name="discover-spectra-products",
+            asl_file="discover_spectra_products.asl.json",
             substitutions={},
             invokable_functions=[],
         )
 
-        # Grant workflow_launcher permission to start ingest_new_nova executions
-        # and inject the ARN as an environment variable.
+        # ------------------------------------------------------------------
+        # ingest_new_nova state machine
+        # ------------------------------------------------------------------
+        self.ingest_new_nova = self._create_state_machine(
+            name="ingest-new-nova",
+            asl_file="ingest_new_nova.asl.json",
+            substitutions={
+                "BeginJobRunFunctionArn": compute.job_run_manager.function_arn,
+                "FinalizeJobRunSuccessFunctionArn": compute.job_run_manager.function_arn,
+                "FinalizeJobRunFailedFunctionArn": compute.job_run_manager.function_arn,
+                "AcquireIdempotencyLockFunctionArn": compute.idempotency_guard.function_arn,
+                "LaunchRefreshReferencesFunctionArn": compute.workflow_launcher.function_arn,
+                "LaunchDiscoverSpectraProductsFunctionArn": compute.workflow_launcher.function_arn,
+            },
+            invokable_functions=[
+                compute.job_run_manager,
+                compute.idempotency_guard,
+                compute.workflow_launcher,
+            ],
+        )
+
+        # Grant workflow_launcher permission to start executions and inject ARNs.
         # This grant lives here (not in NovaCatCompute) because NovaCatWorkflows
         # owns the state machine ARNs — NovaCatCompute has no knowledge of SFN.
-        _grant_start_execution(self.ingest_new_nova, compute.workflow_launcher)
+        _grant_start_execution(compute.workflow_launcher, cdk.Stack.of(self))
+
+        # Construct ARNs by name rather than referencing attr_arn to avoid a
+        # CDK dependency cycle: ingest_new_nova invokes workflow_launcher
+        # (grant_invoke), and workflow_launcher needs ingest_new_nova's ARN
+        # (env var). Using format_arn breaks the second edge of the cycle.
+        stack = cdk.Stack.of(self)
+
+        def _sfn_arn(name: str) -> str:
+            return stack.format_arn(
+                service="states",
+                resource="stateMachine",
+                resource_name=f"nova-cat-{name}",
+                arn_format=cdk.ArnFormat.COLON_RESOURCE_NAME,
+            )
+
         compute.workflow_launcher.add_environment(
             "INGEST_NEW_NOVA_STATE_MACHINE_ARN",
-            self.ingest_new_nova.attr_arn,
+            _sfn_arn("ingest-new-nova"),
+        )
+        compute.workflow_launcher.add_environment(
+            "REFRESH_REFERENCES_STATE_MACHINE_ARN",
+            _sfn_arn("refresh-references"),
+        )
+        compute.workflow_launcher.add_environment(
+            "DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN",
+            _sfn_arn("discover-spectra-products"),
         )
 
         # ------------------------------------------------------------------
@@ -138,6 +189,20 @@ class NovaCatWorkflows(Construct):
             value=self.ingest_new_nova.attr_arn,
             description="ingest_new_nova Step Functions state machine ARN",
             export_name="NovaCat-IngestNewNovaStateMachineArn",
+        )
+        cdk.CfnOutput(
+            self,
+            "RefreshReferencesStateMachineArn",
+            value=self.refresh_references.attr_arn,
+            description="refresh_references Step Functions state machine ARN",
+            export_name="NovaCat-RefreshReferencesStateMachineArn",
+        )
+        cdk.CfnOutput(
+            self,
+            "DiscoverSpectraProductsStateMachineArn",
+            value=self.discover_spectra_products.attr_arn,
+            description="discover_spectra_products Step Functions state machine ARN",
+            export_name="NovaCat-DiscoverSpectraProductsStateMachineArn",
         )
 
     def _create_state_machine(
@@ -215,19 +280,30 @@ class NovaCatWorkflows(Construct):
 
 
 def _grant_start_execution(
-    state_machine: sfn.CfnStateMachine,
     fn: lambda_.Function,
+    stack: cdk.Stack,
 ) -> None:
     """
-    Grant a Lambda function permission to start executions on a state machine.
+    Grant a Lambda function permission to start any nova-cat Step Functions
+    execution.
 
-    CfnStateMachine (L1) has no grant_start_execution helper, so we add the
-    policy statement directly to the Lambda's role.
+    Rather than referencing individual state machine ARNs (which creates a CDK
+    dependency cycle between the state machine role and the Lambda role), we
+    scope the grant to all nova-cat-* state machines in the same account and
+    region. This breaks the cycle while still being meaningfully scoped —
+    no other state machines in the account share the nova-cat- prefix.
     """
     fn.add_to_role_policy(
         iam.PolicyStatement(
             actions=["states:StartExecution"],
-            resources=[state_machine.attr_arn],
+            resources=[
+                stack.format_arn(
+                    service="states",
+                    resource="stateMachine",
+                    resource_name="nova-cat-*",
+                    arn_format=cdk.ArnFormat.COLON_RESOURCE_NAME,
+                )
+            ],
         )
     )
 

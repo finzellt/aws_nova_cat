@@ -1,11 +1,196 @@
 {
-    "Comment": "ingest_new_nova — Coordinates downstream enrichment workflows for a newly established nova. See workflow spec: ingest-new-nova.md. NOTE: This is a placeholder stub. Implementation pending Epic 11.",
-    "StartAt": "NotImplemented",
+    "Comment": "ingest_new_nova workflow — acquires idempotency lock, then launches refresh_references and discover_spectra_products in parallel.",
+    "StartAt": "BeginJobRun",
     "States": {
-        "NotImplemented": {
-            "Type": "Fail",
-            "Error": "NotImplemented",
-            "Cause": "ingest_new_nova workflow is not yet implemented. This state machine is provisioned as a placeholder so workflow_launcher can hold a valid ARN at deploy time."
+        "BeginJobRun": {
+            "Type": "Task",
+            "Resource": "${BeginJobRunFunctionArn}",
+            "Parameters": {
+                "task_name": "BeginJobRun",
+                "workflow_name": "ingest_new_nova",
+                "nova_id.$": "$.nova_id",
+                "correlation_id.$": "$.correlation_id"
+            },
+            "ResultPath": "$.job_run",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 1,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "AcquireIdempotencyLock"
+        },
+        "AcquireIdempotencyLock": {
+            "Type": "Task",
+            "Comment": "Acquire workflow-level idempotency lock. Key: ingest_new_nova:{nova_id}:{schema_version}:{time_bucket}.",
+            "Resource": "${AcquireIdempotencyLockFunctionArn}",
+            "Parameters": {
+                "task_name": "AcquireIdempotencyLock",
+                "workflow_name": "ingest_new_nova",
+                "primary_id.$": "$.nova_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.idempotency",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 1,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "LaunchDownstream"
+        },
+        "LaunchDownstream": {
+            "Type": "Parallel",
+            "Comment": "Launch refresh_references and discover_spectra_products concurrently. Branches are independent — failure of one does not affect the other.",
+            "Branches": [
+                {
+                    "StartAt": "LaunchRefreshReferences",
+                    "States": {
+                        "LaunchRefreshReferences": {
+                            "Type": "Task",
+                            "Resource": "${LaunchRefreshReferencesFunctionArn}",
+                            "Parameters": {
+                                "task_name": "LaunchRefreshReferences",
+                                "workflow_name": "ingest_new_nova",
+                                "nova_id.$": "$.nova_id",
+                                "correlation_id.$": "$.job_run.correlation_id",
+                                "job_run_id.$": "$.job_run.job_run_id"
+                            },
+                            "Retry": [
+                                {
+                                    "ErrorEquals": [
+                                        "RetryableError"
+                                    ],
+                                    "IntervalSeconds": 2,
+                                    "MaxAttempts": 3,
+                                    "BackoffRate": 1,
+                                    "JitterStrategy": "FULL"
+                                }
+                            ],
+                            "End": true
+                        }
+                    }
+                },
+                {
+                    "StartAt": "LaunchDiscoverSpectraProducts",
+                    "States": {
+                        "LaunchDiscoverSpectraProducts": {
+                            "Type": "Task",
+                            "Resource": "${LaunchDiscoverSpectraProductsFunctionArn}",
+                            "Parameters": {
+                                "task_name": "LaunchDiscoverSpectraProducts",
+                                "workflow_name": "ingest_new_nova",
+                                "nova_id.$": "$.nova_id",
+                                "correlation_id.$": "$.job_run.correlation_id",
+                                "job_run_id.$": "$.job_run.job_run_id"
+                            },
+                            "Retry": [
+                                {
+                                    "ErrorEquals": [
+                                        "RetryableError"
+                                    ],
+                                    "IntervalSeconds": 2,
+                                    "MaxAttempts": 3,
+                                    "BackoffRate": 1,
+                                    "JitterStrategy": "FULL"
+                                }
+                            ],
+                            "End": true
+                        }
+                    }
+                }
+            ],
+            "ResultPath": "$.downstream",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunSuccess"
+        },
+        "FinalizeJobRunSuccess": {
+            "Type": "Task",
+            "Resource": "${FinalizeJobRunSuccessFunctionArn}",
+            "Parameters": {
+                "task_name": "FinalizeJobRunSuccess",
+                "workflow_name": "ingest_new_nova",
+                "outcome": "LAUNCHED",
+                "nova_id.$": "$.nova_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 1,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "End": true
+        },
+        "TerminalFailHandler": {
+            "Type": "Task",
+            "Resource": "${FinalizeJobRunFailedFunctionArn}",
+            "Parameters": {
+                "task_name": "FinalizeJobRunFailed",
+                "workflow_name": "ingest_new_nova",
+                "error.$": "$.error",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 10,
+            "End": true
         }
     }
 }

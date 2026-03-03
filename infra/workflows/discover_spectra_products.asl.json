@@ -1,0 +1,11 @@
+{
+  "Comment": "discover_spectra_products workflow — placeholder stub pending Epic 12+.",
+  "StartAt": "NotImplemented",
+  "States": {
+    "NotImplemented": {
+      "Type": "Fail",
+      "Error": "NotImplemented",
+      "Cause": "discover_spectra_products workflow not yet implemented"
+    }
+  }
+}

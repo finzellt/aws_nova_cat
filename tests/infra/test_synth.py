@@ -326,7 +326,7 @@ class TestLambda:
 
 
 # ---------------------------------------------------------------------------
-# Stack outputs
+# Stack outputs  (replace the existing TestOutputs class)
 # ---------------------------------------------------------------------------
 
 
@@ -343,48 +343,58 @@ class TestOutputs:
     def test_quarantine_topic_output_exists(self, template: assertions.Template) -> None:
         template.has_output("*", {"Export": {"Name": "NovaCat-QuarantineTopicArn"}})
 
+    def test_initialize_nova_output_exists(self, template: assertions.Template) -> None:
+        template.has_output("*", {"Export": {"Name": "NovaCat-InitializeNovaStateMachineArn"}})
+
+    def test_ingest_new_nova_output_exists(self, template: assertions.Template) -> None:
+        template.has_output("*", {"Export": {"Name": "NovaCat-IngestNewNovaStateMachineArn"}})
+
+    def test_refresh_references_output_exists(self, template: assertions.Template) -> None:
+        template.has_output("*", {"Export": {"Name": "NovaCat-RefreshReferencesStateMachineArn"}})
+
+    def test_discover_spectra_products_output_exists(self, template: assertions.Template) -> None:
+        template.has_output(
+            "*", {"Export": {"Name": "NovaCat-DiscoverSpectraProductsStateMachineArn"}}
+        )
+
 
 # ---------------------------------------------------------------------------
 # Step Functions
 # ---------------------------------------------------------------------------
 
+_EXPECTED_STATE_MACHINES = [
+    "nova-cat-initialize-nova",
+    "nova-cat-ingest-new-nova",
+    "nova-cat-refresh-references",
+    "nova-cat-discover-spectra-products",
+]
+
 
 class TestStepFunctions:
-    def test_initialize_nova_state_machine_exists(self, template: assertions.Template) -> None:
-        template.has_resource_properties(
-            "AWS::StepFunctions::StateMachine",
-            {"StateMachineName": "nova-cat-initialize-nova"},
-        )
+    def test_all_state_machines_exist(self, template: assertions.Template) -> None:
+        for name in _EXPECTED_STATE_MACHINES:
+            template.has_resource_properties(
+                "AWS::StepFunctions::StateMachine",
+                {"StateMachineName": name},
+            )
 
-    def test_initialize_nova_is_standard_workflow(self, template: assertions.Template) -> None:
-        template.has_resource_properties(
-            "AWS::StepFunctions::StateMachine",
-            {
-                "StateMachineName": "nova-cat-initialize-nova",
-                "StateMachineType": "STANDARD",
-            },
-        )
+    def test_all_state_machines_are_standard_workflow(self, template: assertions.Template) -> None:
+        for name in _EXPECTED_STATE_MACHINES:
+            template.has_resource_properties(
+                "AWS::StepFunctions::StateMachine",
+                {"StateMachineName": name, "StateMachineType": "STANDARD"},
+            )
 
-    def test_initialize_nova_has_execution_role(self, template: assertions.Template) -> None:
-        # The state machine must have a role ARN — not a wildcard, just
-        # confirm the property is present and references an IAM role resource
-        state_machines = template.find_resources(
-            "AWS::StepFunctions::StateMachine",
-            {
-                "Properties": {
-                    "StateMachineName": "nova-cat-initialize-nova",
-                }
-            },
-        )
-        assert len(state_machines) == 1
-        sm = next(iter(state_machines.values()))
-        assert "RoleArn" in sm["Properties"], "initialize_nova state machine is missing RoleArn"
+    def test_all_state_machines_have_execution_role(self, template: assertions.Template) -> None:
+        state_machines = template.find_resources("AWS::StepFunctions::StateMachine")
+        for sm in state_machines.values():
+            assert "RoleArn" in sm["Properties"], (
+                f"State machine {sm['Properties'].get('StateMachineName')} is missing RoleArn"
+            )
 
     def test_initialize_nova_execution_role_can_invoke_lambdas(
         self, template: assertions.Template
     ) -> None:
-        # Confirm at least one IAM policy grants lambda:InvokeFunction,
-        # scoped to the Lambdas this workflow uses
         policies = template.find_resources("AWS::IAM::Policy")
         invoke_grants = [
             p
@@ -396,12 +406,21 @@ class TestStepFunctions:
             )
         ]
         assert len(invoke_grants) >= 1, (
-            "Expected at least one IAM policy granting lambda:InvokeFunction "
-            "for the initialize_nova execution role"
+            "Expected at least one IAM policy granting lambda:InvokeFunction"
         )
 
-    def test_initialize_nova_output_exists(self, template: assertions.Template) -> None:
-        template.has_output(
-            "*",
-            {"Export": {"Name": "NovaCat-InitializeNovaStateMachineArn"}},
+    def test_workflow_launcher_can_start_executions(self, template: assertions.Template) -> None:
+        """workflow_launcher must have states:StartExecution on nova-cat-* state machines."""
+        policies = template.find_resources("AWS::IAM::Policy")
+        start_grants = [
+            p
+            for p in policies.values()
+            if any(
+                "states:StartExecution" in stmt.get("Action", [])
+                or stmt.get("Action") == "states:StartExecution"
+                for stmt in p.get("Properties", {}).get("PolicyDocument", {}).get("Statement", [])
+            )
+        ]
+        assert len(start_grants) >= 1, (
+            "Expected at least one IAM policy granting states:StartExecution to workflow_launcher"
         )

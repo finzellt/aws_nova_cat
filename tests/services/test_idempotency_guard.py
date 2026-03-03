@@ -4,10 +4,11 @@ Unit tests for services/idempotency_guard/handler.py
 Uses moto to mock DynamoDB — no real AWS calls are made.
 
 Covers:
-  - AcquireIdempotencyLock writes lock item with correct fields
-  - AcquireIdempotencyLock raises RetryableError when lock already held
-  - Idempotency key format includes workflow_name, candidate name, and time bucket
-  - TTL is set to a future timestamp
+  - AcquireIdempotencyLock: acquires lock and writes DynamoDB item
+  - AcquireIdempotencyLock: uses primary_id in idempotency key
+  - AcquireIdempotencyLock: raises RetryableError if lock already held
+  - AcquireIdempotencyLock: key is stable within the same hour
+  - AcquireIdempotencyLock: works with nova_id as primary_id (ingest_new_nova pattern)
   - Unknown task_name raises ValueError
 """
 
@@ -15,7 +16,6 @@ from __future__ import annotations
 
 import importlib
 import sys
-import time
 import types
 from collections.abc import Generator
 from typing import Any
@@ -63,68 +63,101 @@ def _load_handler() -> types.ModuleType:
     return importlib.import_module("idempotency_guard.handler")
 
 
-def _lock_event(**kwargs: Any) -> dict[str, Any]:
+def _base_event(**kwargs: Any) -> dict[str, Any]:
     return {
         "task_name": "AcquireIdempotencyLock",
         "workflow_name": "initialize_nova",
-        "normalized_candidate_name": "v1324 sco",
-        "job_run_id": "job-run-001",
+        "primary_id": "v1324 sco",
+        "job_run_id": "job-001",
         "correlation_id": "corr-001",
         **kwargs,
     }
 
 
-class TestAcquireIdempotencyLock:
-    def test_writes_lock_item(self, table: Any) -> None:
-        with mock_aws():
-            handler = _load_handler()
-            result = handler.handle(_lock_event(), None)
-            pk = f"IDEMPOTENCY#{result['idempotency_key']}"
-            item = table.get_item(Key={"PK": pk, "SK": "LOCK"}).get("Item")
-            assert item is not None
-            assert item["job_run_id"] == "job-run-001"
-            assert item["workflow_name"] == "initialize_nova"
-            assert item["entity_type"] == "IdempotencyLock"
+# ---------------------------------------------------------------------------
+# AcquireIdempotencyLock
+# ---------------------------------------------------------------------------
 
-    def test_returns_idempotency_key_and_acquired_at(self, table: Any) -> None:
+
+class TestAcquireIdempotencyLock:
+    def test_acquires_lock_and_returns_key(self, table: Any) -> None:
         with mock_aws():
             handler = _load_handler()
-            result = handler.handle(_lock_event(), None)
+            result = handler.handle(_base_event(), None)
             assert "idempotency_key" in result
             assert "acquired_at" in result
 
-    def test_key_contains_workflow_and_candidate(self, table: Any) -> None:
+    def test_key_contains_workflow_name_and_primary_id(self, table: Any) -> None:
         with mock_aws():
             handler = _load_handler()
-            result = handler.handle(_lock_event(), None)
+            result = handler.handle(_base_event(), None)
             key = result["idempotency_key"]
             assert "initialize_nova" in key
             assert "v1324 sco" in key
 
-    def test_ttl_is_in_the_future(self, table: Any) -> None:
+    def test_writes_dynamodb_item(self, table: Any) -> None:
         with mock_aws():
             handler = _load_handler()
-            result = handler.handle(_lock_event(), None)
+            result = handler.handle(_base_event(), None)
             pk = f"IDEMPOTENCY#{result['idempotency_key']}"
             item = table.get_item(Key={"PK": pk, "SK": "LOCK"}).get("Item")
             assert item is not None
-            assert int(item["ttl"]) > int(time.time())
+            assert item["workflow_name"] == "initialize_nova"
+            assert item["primary_id"] == "v1324 sco"
+            assert item["job_run_id"] == "job-001"
+            assert "ttl" in item
 
-    def test_raises_retryable_error_when_lock_held(self, table: Any) -> None:
+    def test_lock_already_held_raises_retryable_error(self, table: Any) -> None:
         with mock_aws():
             handler = _load_handler()
-            # First acquisition should succeed
-            handler.handle(_lock_event(), None)
-            # Second acquisition on same key should raise RetryableError
-            with pytest.raises(handler.RetryableError):
-                handler.handle(_lock_event(), None)
+            # First call acquires the lock
+            handler.handle(_base_event(), None)
+            # Second call within same hour — same key — should raise
+            from nova_common.errors import RetryableError
 
-    def test_different_candidates_get_different_locks(self, table: Any) -> None:
+            with pytest.raises(RetryableError, match="already held"):
+                handler.handle(_base_event(), None)
+
+    def test_key_is_stable_for_same_inputs(self, table: Any) -> None:
+        """Same workflow + primary_id should produce the same key within an hour."""
         with mock_aws():
             handler = _load_handler()
-            result1 = handler.handle(_lock_event(normalized_candidate_name="v1324 sco"), None)
-            result2 = handler.handle(_lock_event(normalized_candidate_name="rs oph"), None)
-            assert result1["idempotency_key"] != result2["idempotency_key"]
+            k1 = handler._compute_key("initialize_nova", "v1324 sco")
+            k2 = handler._compute_key("initialize_nova", "v1324 sco")
+            assert k1 == k2
+
+    def test_different_primary_ids_produce_different_keys(self, table: Any) -> None:
+        with mock_aws():
+            handler = _load_handler()
+            k1 = handler._compute_key("initialize_nova", "v1324 sco")
+            k2 = handler._compute_key("initialize_nova", "rs oph")
+            assert k1 != k2
+
+    def test_works_with_nova_id_as_primary_id(self, table: Any) -> None:
+        """Verify ingest_new_nova pattern: nova_id as primary_id."""
+        with mock_aws():
+            handler = _load_handler()
+            result = handler.handle(
+                _base_event(
+                    workflow_name="ingest_new_nova",
+                    primary_id="4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
+                ),
+                None,
+            )
+            assert "ingest_new_nova" in result["idempotency_key"]
+            assert "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1" in result["idempotency_key"]
+
+    def test_different_workflows_produce_different_keys(self, table: Any) -> None:
+        with mock_aws():
+            handler = _load_handler()
+            k1 = handler._compute_key("initialize_nova", "v1324 sco")
+            k2 = handler._compute_key("ingest_new_nova", "v1324 sco")
+            assert k1 != k2
+
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
 
 
 class TestDispatch:

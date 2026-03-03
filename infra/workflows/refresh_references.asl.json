@@ -1,0 +1,11 @@
+{
+  "Comment": "refresh_references workflow — placeholder stub pending Epic 12+.",
+  "StartAt": "NotImplemented",
+  "States": {
+    "NotImplemented": {
+      "Type": "Fail",
+      "Error": "NotImplemented",
+      "Cause": "refresh_references workflow not yet implemented"
+    }
+  }
+}
