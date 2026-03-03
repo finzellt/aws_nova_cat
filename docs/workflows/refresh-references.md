@@ -38,16 +38,19 @@ by ADS bibcode, link them to the nova via `NovaReference` items, and compute
 
 ## ADS Query Strategy
 
-`FetchReferenceCandidates` executes two ADS queries in parallel and merges results:
+`FetchReferenceCandidates` executes a single name-based query against the ADS
+search API. All known nova name aliases are drawn from the nova’s `NameMapping`
+partition, plus any `ads_name_hints` supplied in the input event. Names are
+individually quoted and joined with `OR`:
 
-1. **Name-based query** — searches ADS for all known nova name aliases (drawn from
-   the nova's `NameMapping` partition, plus any `ads_name_hints` from the input event).
-2. **Coordinate cone search** — 10 arcsec radius around the nova's `ra_deg`/`dec_deg`.
+    "V1324 Sco" OR "Nova Sco 2013" OR "PNV J17291350-3846120"
 
-Results from both queries are merged and deduplicated by bibcode before the
-`ReconcileReferences` Map step. Neither query alone is complete: name-based queries
-miss papers that use coordinates only; coordinate searches miss papers that use
-non-standard name forms.
+Results are deduplicated by bibcode before the `ReconcileReferences` Map step.
+
+**Note:** A coordinate cone search was considered but abandoned — the ADS
+positional search feature (`pos(circle, ...)`) is not reliably documented and
+could not be validated. Adding a coordinate search as a supplementary query is a
+natural `rule_version` increment if ADS publishes stable documentation in future.
 
 **Rate limits and auth:** ADS API requests require a token passed via `Authorization:
 Bearer <token>`. The token is read from AWS Secrets Manager at handler startup.
@@ -80,8 +83,10 @@ treat HTTP 429 responses as retryable.
 `NormalizeReference` applies the following transformations before `UpsertReferenceEntity`:
 
 - `bibcode` — taken directly from ADS response; no transformation.
-- `publication_date` — taken directly from ADS `pubdate` field (already `YYYY-MM-00`
-  format); no transformation required. Day `00` signals month-only precision.
+- `publication_date` — derived from the ADS `date` field. ADS returns dates as
+  `YYYY-MM-01T00:00:00Z` (day is always `01` when only month precision is available).
+  `NormalizeReference` extracts year and month and stores as `YYYY-MM-00`, discarding
+  the day entirely since it cannot be trusted. Day `00` signals month-only precision.
 - `arxiv_id` — strip `arXiv:` prefix if present; store bare ID only.
 - `authors` — store as-is from ADS `author` list; no normalization in MVP.
 - `title` — store as-is; no normalization in MVP.
