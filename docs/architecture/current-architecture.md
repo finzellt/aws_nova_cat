@@ -45,7 +45,7 @@ All persistent entities use UUIDs:
 
 - `nova_id`
 - `data_product_id`
-- `reference_id`
+- `bibcode`
 
 Names are never used as identifiers downstream of `initialize_nova`.
 
@@ -165,9 +165,29 @@ DynamoDB stores:
 
 ## 3.4 Reference
 
-Global bibliographic entity.
+Reference is a global entity - one item per unique ADS-sourced bibliographic work,
+shared across all novas that cite it. It is not scoped to a nova partition.
 
-Linked to nova via `NOVAREF` items.
+The ADS bibcode is both the stable canonical identifier and the DDB partition key
+(REFERENCE#<bibcode>). No internal UUID is assigned to Reference items.
+Lookup is a direct GetItem. No secondary index required.
+
+Fields: bibcode (required; partition key), reference_type, title, year, authors,
+doi (optional), arxiv_id (optional, bare ID), provenance.
+
+reference_type values: journal_article, conference_abstract, poster, catalog,
+software, atel, cbat_circular, arxiv_preprint, other.
+
+The nova-to-reference relationship is recorded in NovaReference items
+(many-to-many; no duplication of the Reference item). NovaReference carries:
+- role (DISCOVERY | SPECTRA_SOURCE | PHOTOMETRY_SOURCE | OTHER)
+- added_by_workflow, notes, and link-level provenance
+
+The link is fully identified by (nova_id, bibcode). No UUID on the link item itself.
+
+See dynamodb-item-model.md sections 6 and 7 for full item shapes.
+See ADR-005 for the global entity decision and ADS integration strategy.
+
 
 ---
 
@@ -278,7 +298,6 @@ Item types:
 - NOVA
 - PRODUCT#...
 - FILE#...
-- REF#...
 - NOVAREF#...
 - JOBRUN#...
 - ATTEMPT#...
@@ -286,6 +305,7 @@ Item types:
 ## Global identity partitions
 - NAME#<normalized_name>
 - LOCATOR#<provider>#<locator_identity>
+- REFERENCE#<bibcode>
 
 S3 layout:
 - raw/
@@ -357,6 +377,10 @@ The following must remain true:
 - Continuation payload event model
 - Minimal Step Functions branching
 - Profile-driven validation
+- ADS calls are never routed through archive_resolver. archive_resolver is
+  scoped to nova identity resolution (SIMBAD + TNS) only.
+- References use ADS bibcodes as their stable global key. No internal UUID is
+  assigned to Reference or NovaReference items.
 
 ---
 

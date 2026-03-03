@@ -23,7 +23,7 @@ The expected dataset size is modest (<250 GB), and the platform is intentionally
 
 Nova Cat is built around a few core invariants:
 
-- **UUID-first identity** — All downstream operations use stable UUIDs (`nova_id`, `data_product_id`, `reference_id`).
+- **UUID-first identity** — Downstream operations use stable UUIDs (`nova_id`, `data_product_id`).
 - **Atomic data products** — Spectra are modeled as independent `DataProduct` units with deterministic identity.
 - **Profile-driven validation** — Spectral data are normalized into an internal, IVOA-aligned canonical model using FITS profiles.
 - **Single-table persistence** — DynamoDB is used with a namespaced single-table design.

@@ -1,7 +1,10 @@
 # ADR-003: Workflow Orchestration and Execution Model
 
-> Superseded in part by ADR-0XX (Architecture Baseline and Alignment Policy).
+> Superseded in part by ADR-004 (Architecture Baseline and Alignment Policy).
 > References to Dataset/dataset_id are obsolete.
+> Superseded in part by ADR-005 (Reference Model and ADS Integration).
+> References to reference_ids are obsolete. Now bibcodes
+
 
 ## Status
 Proposed

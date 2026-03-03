@@ -4,6 +4,9 @@
 
 Accepted
 
+> Superseded in part by ADR-005 (Reference Model and ADS Integration).
+> References to reference_ids are obsolete. Now bibcodes
+
 ## Context
 
 During Epics 2 and 3, architectural drift occurred between:

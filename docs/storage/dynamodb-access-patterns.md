@@ -19,12 +19,12 @@ Two primary partition types exist:
 2) Global identity partitions
 - `PK = "NAME#<normalized_name>"`
 - `PK = "LOCATOR#<provider>#<locator_identity>"`
+- `PK = "REFERENCE#<bibcode>"`
 
 Within per-nova partitions, item types are distinguished by `SK` prefixes such as:
 - `NOVA`
 - `PRODUCT#...`
 - `FILE#...`
-- `REF#...`
 - `NOVAREF#...`
 - `JOBRUN#...`
 - `ATTEMPT#...`
@@ -124,18 +124,15 @@ Purpose: Coordinate per-nova ingestion steps for an existing `nova_id`.
 Purpose: Upsert references and link them to the nova; optionally derive `discovery_date`.
 
 ### Reads (optional; for reconciliation/dedupe)
-- Query references:
-  `PK = "<nova_id>"`, `SK begins_with "REF#"`
-
-- Query links:
+- Query existing nova-reference links:
   `PK = "<nova_id>"`, `SK begins_with "NOVAREF#"`
 
 ### Writes
-- Upsert `Reference` items:
-  `PK = "<nova_id>"`, `SK = "REF#<reference_id>"`
+- Upsert global `Reference` items (one per bibcode; shared across all novas):
+  `PK = "REFERENCE#<bibcode>"`, `SK = "METADATA"`
 
-- Upsert `NovaReference` items:
-  `PK = "<nova_id>"`, `SK = "NOVAREF#<reference_id>"`
+- Upsert `NovaReference` link items (nova-scoped):
+  `PK = "<nova_id>"`, `SK = "NOVAREF#<bibcode>"`
 
 - Update `Nova.discovery_date` when derivable
 
@@ -285,6 +282,10 @@ Insert `FileObject` entries for:
 ### List Attempts for a specific JobRun
 - `PK = "<nova_id>"`, `SK begins_with "ATTEMPT#<job_run_id>#"`
 
-### List references and reference links
-- `PK = "<nova_id>"`, `SK begins_with "REF#"`
+### List reference links for a nova
 - `PK = "<nova_id>"`, `SK begins_with "NOVAREF#"`
+- SK suffix is the ADS bibcode (e.g. `NOVAREF#2013ATel.5297....1W`)
+
+### Look up a specific reference by bibcode
+- `PK = "REFERENCE#<bibcode>"`, `SK = "METADATA"`
+- Direct `GetItem` — no scan or query required
