@@ -159,6 +159,16 @@ class Nova(PersistentBase):
         ),
     )
 
+    aliases: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Raw alias strings from SIMBAD ids field, e.g. 'NOVA Sco 2012', "
+            "'Gaia DR3 4043499439062100096'. Denormalized on the Nova item so "
+            "refresh_references can retrieve all known names in a single get_item "
+            "call. Empty list if no SIMBAD aliases were returned at ingestion time."
+        ),
+    )
+
     # Optional quarantine context (only meaningful when status == QUARANTINED)
     quarantine_reason_code: NovaQuarantineReasonCode | None = None
     manual_review_status: str | None = Field(default=None, max_length=64)

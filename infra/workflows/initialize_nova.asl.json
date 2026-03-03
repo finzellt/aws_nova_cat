@@ -637,6 +637,7 @@
                 "resolved_dec.$": "$.resolution.resolved_dec",
                 "resolved_epoch.$": "$.resolution.resolved_epoch",
                 "resolver_source.$": "$.resolution.resolver_source",
+                "aliases.$": "$.resolution.aliases",
                 "correlation_id.$": "$.job_run.correlation_id",
                 "job_run_id.$": "$.job_run.job_run_id"
             },
