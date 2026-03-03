@@ -21,7 +21,7 @@
 - primary identifiers (one or more):
   - nova_id
   - data_product_id
-  - reference_id
+  - bibcode
 - error_classification (RETRYABLE | TERMINAL | QUARANTINE)
 - error_fingerprint (stable hash of normalized error cause)
 - duration_ms (for task completion logs)

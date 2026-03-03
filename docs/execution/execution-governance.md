@@ -92,7 +92,7 @@ Examples:
 
 Examples:
 - schema_version unsupported
-- missing/invalid UUIDs (nova_id/data_product_id/reference_id)
+- missing/invalid UUIDs (nova_id/data_product_id/bibcode)
 - invalid required fields (e.g., missing locator/provenance)
 - logical impossibility (e.g., resolved object explicitly not a classical nova)
 

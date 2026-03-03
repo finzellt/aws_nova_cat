@@ -572,39 +572,68 @@ guaranteed uniqueness and direct-fetch capability.
 
 ---
 
-### 6) Reference (per-nova scoped)
+### 6) Reference (global entity)
 
 #### Key
 
-- `PK = "<nova_id>"`
-- `SK = "REF#<reference_id>"`
+- PK = REFERENCE#<bibcode>
+- SK = METADATA
+
+One item per unique ADS bibcode, shared across all novas that cite it.
+The per-nova relationship is recorded separately in NovaReference (section 7).
+Lookup is a direct GetItem on the bibcode. No secondary index or lookup table required.
 
 ---
 
 #### Fields
 
-- `schema_version` (internal item evolution)
-- `entity_type = "Reference"`
-- `reference_id` (UUID)
-- `source`
-- `source_identifier`
-- `published_at` (ISO-8601)
-- Small metadata (e.g., `title`, `authors`) — optional
+- schema_version (internal item evolution; current default 1.0.0)
+- entity_type = Reference
+- bibcode (string; ADS bibcode; also encoded in PK; max 19 chars)
+- reference_type (journal_article | conference_abstract | poster | catalog | software | atel | cbat_circular | arxiv_preprint | other)
+- title (string; optional; max 2000 chars)
+- year (integer; optional; e.g. 2013)
+- publication_date (string; optional; YYYY-MM-DD format; day 00 when only month precision available; sourced directly from ADS pubdate)
+- authors (list of strings; e.g. [Last, First, ...]; may be empty)
+- doi (string; optional; e.g. 10.1088/2041-8205/770/1/L32)
+- arxiv_id (string; optional; bare ID, no arXiv: prefix; e.g. 1306.1213)
+- provenance (Provenance object; optional; records ADS fetch time and query strategy)
+- created_at, updated_at (ISO-8601 UTC)
+
+No ttl - Reference items are permanent.
+
+The ADS URL is always derivable as https://ui.adsabs.harvard.edu/abs/<bibcode>
+and is not stored.
+
+#### Upsert behaviour
+
+UpsertReferenceEntity performs a direct GetItem on REFERENCE#<bibcode>.
+
+- Not found: write new Reference item. No other writes required.
+- Found: update mutable fields (title, authors, year, publication_date, doi, arxiv_id,
+  provenance, updated_at); leave bibcode, created_at, entity_type unchanged.
 
 #### Example:
 ```json
 {
-  "PK": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
-  "SK": "REF#7d5e1f5c-2a7c-4e0c-b8b9-3d5a4f4c0b2a",
+  "PK": "REFERENCE#2013ATel.5297....1W",
+  "SK": "METADATA",
   "entity_type": "Reference",
-  "schema_version": "1",
-  "reference_id": "7d5e1f5c-2a7c-4e0c-b8b9-3d5a4f4c0b2a",
-  "source": "ADS",
-  "source_identifier": "2012ATel.XXXX....1A",
-  "title": "Discovery of Nova Sco 2012",
-  "published_at": "2012-06-01T00:00:00Z",
-  "created_at": "2026-02-23T18:30:00Z",
-  "updated_at": "2026-02-23T18:30:00Z"
+  "schema_version": "1.0.0",
+  "bibcode": "2013ATel.5297....1W",
+  "reference_type": "atel",
+  "title": "Nova Sco 2013 = PNV J17291350-3846120",
+  "year": 2013,
+  "publication_date": "2013-06-00",
+  "authors": ["Wagner, R. M.", "Dong, S.", "Prieto, J. L."],
+  "provenance": {
+    "source": "ADS",
+    "retrieved_at": "2026-03-03T14:22:00Z",
+    "method": "scraped",
+    "notes": "query_strategy=name+coordinates"
+  },
+  "created_at": "2026-03-03T14:22:01Z",
+  "updated_at": "2026-03-03T14:22:01Z"
 }
 ```
 
@@ -614,34 +643,55 @@ guaranteed uniqueness and direct-fetch capability.
 
 #### Key
 
-- `PK = "<nova_id>"`
-- `SK = "NOVAREF#<reference_id>"`
+- PK = <nova_id>
+- SK = NOVAREF#<bibcode>
+
+Nova-scoped link connecting a Nova to a global Reference. Multiple novas may link
+to the same Reference; each has its own NovaReference item. The link is fully
+identified by (nova_id, bibcode). No UUID required on the link item itself.
 
 ---
 
 #### Fields
 
-- `schema_version` (internal item evolution)
-- `entity_type = "NovaReference"`
-- `reference_id`
-- `role`
-  (`DISCOVERY` | `SPECTRA_SOURCE` | `PHOTOMETRY_SOURCE` | `OTHER`)
-- `added_by_workflow`
+- schema_version (internal item evolution; current default 1.0.0)
+- entity_type = NovaReference
+- nova_id (UUID)
+- bibcode (string; ADS bibcode; FK to REFERENCE#<bibcode> / METADATA)
+- role (DISCOVERY | SPECTRA_SOURCE | PHOTOMETRY_SOURCE | OTHER)
+- added_by_workflow (string; optional; e.g. refresh_references)
+- notes (string; optional; max 4000 chars)
+- provenance (Provenance object; optional; link-level context e.g. ADS query terms)
+- created_at, updated_at (ISO-8601 UTC)
 
+refresh_references assigns role=OTHER by default. Role promotion (e.g. to
+DISCOVERY) is reserved for a future workflow or manual curation step.
 
+#### Upsert behaviour
+
+LinkNovaReference is idempotent - if the NOVAREF item already exists for this
+(nova_id, bibcode) pair, the call is a no-op. Enforced via
+condition_expression=attribute_not_exists(PK).
 
 #### Example:
 ```json
 {
   "PK": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
-  "SK": "NOVAREF#7d5e1f5c-2a7c-4e0c-b8b9-3d5a4f4c0b2a",
+  "SK": "NOVAREF#2013ATel.5297....1W",
   "entity_type": "NovaReference",
-  "schema_version": "1",
-  "reference_id": "7d5e1f5c-2a7c-4e0c-b8b9-3d5a4f4c0b2a",
-  "role": "DISCOVERY",
+  "schema_version": "1.0.0",
+  "nova_id": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
+  "bibcode": "2013ATel.5297....1W",
+  "role": "OTHER",
   "added_by_workflow": "refresh_references",
-  "created_at": "2026-02-23T18:30:05Z",
-  "updated_at": "2026-02-23T18:30:05Z"
+  "provenance": {
+    "source": "ADS",
+    "retrieved_at": "2026-03-03T14:22:00Z",
+    "method": "scraped",
+    "notes": "query_strategy=name+coordinates"
+  },
+  "created_at": "2026-03-03T14:22:05Z",
+  "updated_at": "2026-03-03T14:22:05Z"
 }
 ```
 

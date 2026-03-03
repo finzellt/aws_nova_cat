@@ -1,6 +1,7 @@
 # contracts/models/entities.py
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
@@ -12,6 +13,12 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, mod
 def utcnow() -> datetime:
     return datetime.now(UTC)
 
+
+# Shared format validator for discovery_date (Nova) and publication_date (Reference).
+# YYYY-MM-DD where month is 01-12 and day is 00-31.
+# Day 00 signals month-only precision (mirrors ADS pubdate convention).
+# Never use 01 as a proxy for unknown day -- that is a data integrity error.
+_DISCOVERY_DATE_RE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[0-9]|[12][0-9]|3[01])$")
 
 # ----------------------------
 # Shared / foundational models
@@ -142,7 +149,15 @@ class Nova(PersistentBase):
     # Coordinates are modeled as a sub-object contractually; persistence may flatten them.
     position: Position | None = None
 
-    discovery_date: datetime | None = None
+    discovery_date: str | None = Field(
+        default=None,
+        description=(
+            "Discovery date in YYYY-MM-DD format. "
+            "Day may be 00 when only month precision is available "
+            "(e.g. '2013-06-00'). Sourced from ADS publication dates via "
+            "ComputeDiscoveryDate. Never use 01 as a proxy for unknown day."
+        ),
+    )
 
     # Optional quarantine context (only meaningful when status == QUARANTINED)
     quarantine_reason_code: NovaQuarantineReasonCode | None = None
@@ -166,11 +181,14 @@ class Nova(PersistentBase):
 
     @field_validator("discovery_date")
     @classmethod
-    def ensure_discovery_tz_aware_if_present(cls, v: datetime | None) -> datetime | None:
+    def validate_discovery_date_format(cls, v: str | None) -> str | None:
         if v is None:
             return None
-        if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
-            raise ValueError("discovery_date must be timezone-aware (UTC).")
+        if not _DISCOVERY_DATE_RE.match(v):
+            raise ValueError(
+                "discovery_date must be YYYY-MM-DD format. "
+                "Use 00 for day when day is unknown (e.g. '2013-06-00')."
+            )
         return v
 
 
@@ -488,81 +506,92 @@ class ReferenceType(str, Enum):
     poster = "poster"
     catalog = "catalog"
     software = "software"
+    atel = "atel"
+    cbat_circular = "cbat_circular"
+    arxiv_preprint = "arxiv_preprint"
     other = "other"
-
-
-class IdentifierType(str, Enum):
-    ads_bibcode = "ads_bibcode"
-    doi = "doi"
-    arxiv = "arxiv"
-    vizier = "vizier"
-    url = "url"
-    other = "other"
-
-
-class Identifier(BaseModel):
-    """
-    A typed identifier for a Reference (supports ADS bibcodes, DOIs, arXiv IDs, VizieR IDs, URLs, etc.).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    id_type: IdentifierType
-    value: str = Field(..., min_length=1, max_length=256)
-
-    @field_validator("value")
-    @classmethod
-    def reject_blank(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("Identifier value cannot be blank.")
-        return v
 
 
 class Reference(PersistentBase):
     """
-    Global bibliographic/work record (paper, poster, catalog entry, etc.).
-    Deduplicated by stable external identifiers when available.
+    Global bibliographic record for an ADS-sourced work.
+
+    Identity: bibcode is the stable, globally unique ADS identifier and serves
+    as the DDB partition key (REFERENCE#<bibcode>). No internal UUID is assigned.
+
+    Dedup: UpsertReferenceEntity performs a direct GetItem on REFERENCE#<bibcode>.
+    No secondary lookup table (REFINDEX) is required.
+
+    Scope: ADS-only. Donated data provenance belongs on DataProduct.provenance,
+    not in the reference system.
     """
 
     schema_version: str = Field(default="1.0.0")
 
-    reference_id: UUID = Field(default_factory=uuid4)
-    reference_type: ReferenceType = Field(default=ReferenceType.journal_article)
-
-    identifiers: list[Identifier] = Field(
-        default_factory=list,
-        description="Typed external identifiers for this reference (e.g., ADS bibcode, DOI, arXiv, VizieR, URL).",
+    bibcode: str = Field(
+        ...,
+        min_length=1,
+        max_length=19,
+        description="ADS bibcode. Globally unique and stable. Used as the DDB partition key.",
     )
+    reference_type: ReferenceType = Field(default=ReferenceType.journal_article)
 
     title: str | None = Field(default=None, max_length=2000)
     year: int | None = Field(default=None, ge=1800, le=2500)
-    authors: list[str] = Field(default_factory=list)
-    url: HttpUrl | None = Field(
+    publication_date: str | None = Field(
         default=None,
-        description="Canonical URL if available (often derived from identifiers, but included for convenience).",
+        description=(
+            "Publication date in YYYY-MM-DD format. "
+            "Day may be 00 when only month precision is available "
+            "(e.g. '2013-06-00'). Sourced directly from ADS pubdate field, "
+            "which already uses YYYY-MM-00 format -- no transformation required. "
+            "Never use 01 as a proxy for unknown day."
+        ),
+    )
+    authors: list[str] = Field(default_factory=list)
+
+    doi: str | None = Field(
+        default=None,
+        max_length=512,
+        description="DOI string if available (e.g. 10.1088/2041-8205/770/1/L32).",
+    )
+    arxiv_id: str | None = Field(
+        default=None,
+        max_length=32,
+        description="Bare arXiv ID if available (e.g. 1306.1213). No arXiv: prefix.",
     )
 
     provenance: Provenance | None = None
 
-    @model_validator(mode="after")
-    def validate_identifiers(self) -> Reference:
-        # Require at least one stable identifier for global dedupe, OR allow url/title as a fallback.
-        if not self.identifiers and not self.url and not self.title:
-            raise ValueError(
-                "Reference must include at least one identifier, or a url/title fallback."
-            )
+    @field_validator("bibcode")
+    @classmethod
+    def reject_blank_bibcode(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("bibcode cannot be blank.")
+        return v
 
-        # Deduplicate identifiers by (type, value) exact match.
-        seen: set[tuple[str, str]] = set()
-        deduped: list[Identifier] = []
-        for ident in self.identifiers:
-            key = (ident.id_type.value, ident.value)
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped.append(ident)
-        self.identifiers = deduped
-        return self
+    @field_validator("publication_date")
+    @classmethod
+    def validate_publication_date_format(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not _DISCOVERY_DATE_RE.match(v):
+            raise ValueError(
+                "publication_date must be YYYY-MM-DD format. "
+                "Use 00 for day when day is unknown (e.g. '2013-06-00')."
+            )
+        return v
+
+    @field_validator("arxiv_id")
+    @classmethod
+    def strip_arxiv_prefix(cls, v: str | None) -> str | None:
+        """Normalise to bare ID regardless of how the caller passes it in."""
+        if v is None:
+            return None
+        v = v.strip()
+        if v.lower().startswith("arxiv:"):
+            v = v[6:]
+        return v or None
 
 
 class NovaReferenceRole(str, Enum):
@@ -575,29 +604,37 @@ class NovaReferenceRole(str, Enum):
 class NovaReference(PersistentBase):
     """
     Per-nova link connecting a Nova to a global Reference.
-    This is the unit used to build a nova's bibliography page.
+    This is the unit used to build a nova bibliography page.
+
+    Identity: the link is fully identified by (nova_id, bibcode).
+    DDB key: PK=<nova_id>, SK=NOVAREF#<bibcode>.
+    No internal UUID is assigned to the link itself.
     """
 
     schema_version: str = Field(default="1.0.0")
 
-    nova_reference_id: UUID = Field(default_factory=uuid4)
-
     nova_id: UUID
-    reference_id: UUID
+    bibcode: str = Field(
+        ...,
+        min_length=1,
+        max_length=19,
+        description="ADS bibcode. FK to REFERENCE#<bibcode> / METADATA.",
+    )
 
     role: NovaReferenceRole = Field(
         default=NovaReferenceRole.other,
-        description="The role this reference plays for this nova (e.g., discovery paper, spectra source).",
+        description="The role this reference plays for this nova.",
     )
     added_by_workflow: str | None = Field(
         default=None,
         max_length=128,
-        description="Name of the workflow that created this link (e.g., 'refresh_references').",
+        description="Name of the workflow that created this link.",
     )
 
     notes: str | None = Field(default=None, max_length=4000)
 
-    # Link-level provenance: how/why this Reference was associated with this nova (e.g., ADS query terms).
+    # Link-level provenance: how/why this Reference was associated with this nova
+    # (e.g., which ADS query strategy surfaced it).
     provenance: Provenance | None = None
 
 
