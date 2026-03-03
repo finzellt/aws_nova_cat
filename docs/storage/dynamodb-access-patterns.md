@@ -96,6 +96,9 @@ Purpose: Resolve a candidate name to a stable `nova_id`, or create a new `Nova`.
 - Insert primary `NameMapping`:
   `PK = "NAME#<normalized_primary_name>"`, `SK = "NOVA#<nova_id>"`
 
+- Update `Nova.aliases` with the raw alias list from archive resolution:
+  `PK = "<nova_id>"`, `SK = "NOVA"` (same item, SET aliases = :aliases)
+
 **Side effects**
 - Publish `ingest_new_nova`
 - Finalize (`CREATED_AND_LAUNCHED`)

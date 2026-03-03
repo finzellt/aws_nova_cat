@@ -67,6 +67,7 @@ Canonical nova record.
 - `coord_frame` (string; e.g., `"ICRS"`; optional but recommended for explicitness)
 - `coord_epoch` (string; e.g., `"J2000"`; optional but recommended for explicitness)
 - `discovery_date` (optional, derived from references)
+- `aliases` (string list; raw alias strings
 - `status` (ACTIVE | MERGED | DEPRECATED)
 - `created_at`, `updated_at` (ISO-8601 UTC)
 
@@ -81,6 +82,12 @@ Canonical nova record.
   "primary_name": "V1324 Sco",
   "primary_name_normalized": "v1324 sco",
   "status": "ACTIVE",
+  "ra_deg": 271.0822,
+  "dec_deg": -32.4617,
+  "coord_frame": "ICRS",
+  "coord_epoch": "J2000",
+  "resolver_source": "SIMBAD",
+  "aliases": ["NOVA Sco 2012", "Gaia DR3 4043499439062100096", "MOA 2012-BLG-320"],
   "discovery_date": "2012-06-01",
   "created_at": "2026-02-21T20:00:00Z",
   "updated_at": "2026-02-23T18:10:00Z"

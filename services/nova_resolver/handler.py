@@ -9,7 +9,7 @@ Task dispatch table:
   CheckExistingNovaByName         — query NameMapping for normalized name
   CheckExistingNovaByCoordinates  — compute angular separation against all novae
   CreateNovaId                    — generate stable nova_id, write Nova stub
-  UpsertMinimalNovaMetadata       — persist coordinates and NameMapping
+  UpsertMinimalNovaMetadata       — persist coordinates, aliases, and NameMapping
   UpsertAliasForExistingNova      — add candidate name as alias to existing nova
 
 Angular separation:
@@ -175,7 +175,6 @@ def _check_existing_nova_by_coordinates(event: dict[str, Any], context: object) 
             matched_nova_id = cast(str, item["nova_id"])
 
     if min_sep == float("inf"):
-        # No novae with coordinates in DB yet
         logger.info("No novae with coordinates in database — no coordinate match")
         return {
             "match_outcome": "NONE",
@@ -248,11 +247,24 @@ def _create_nova_id(event: dict[str, Any], context: object) -> dict[str, Any]:
 @tracer.capture_method
 def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dict[str, Any]:
     """
-    Persist resolved coordinates and NameMapping for a newly created nova.
+    Persist resolved coordinates, aliases, and NameMapping for a newly created nova.
 
     Writes:
-      1. Updates the Nova item with coordinates and ACTIVE status
+      1. Updates the Nova item with coordinates, ACTIVE status, and aliases list
       2. Writes a PRIMARY NameMapping item
+      3. Writes an ALIAS NameMapping item for each SIMBAD alias, if provided
+
+    The `aliases` field on the Nova item is a denormalized list of raw alias
+    strings (e.g. ["NOVA Sco 2012", "Gaia DR3 4043499439062100096"]).
+    It exists so that refresh_references can retrieve all known names for a
+    nova in a single get_item call without querying NameMapping partitions.
+
+    SIMBAD aliases are supplied via the optional `aliases` field in the event
+    (list of raw strings from archive_resolver). Each alias is:
+      - Stored raw in the Nova.aliases list and in name_raw on NameMapping
+      - Normalized (lowercase, collapse whitespace) for the NameMapping PK
+        so that CheckExistingNovaByName can find it
+      - Skipped if its normalized form matches normalized_candidate_name
 
     Returns:
         nova_id — echoed from input
@@ -264,15 +276,16 @@ def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dic
     resolved_dec: float = float(event["resolved_dec"])
     resolved_epoch: str = event.get("resolved_epoch") or "J2000"
     resolver_source: str = event.get("resolver_source") or "UNKNOWN"
+    aliases: list[str] = event.get("aliases") or []
     now = _now()
 
-    # Update Nova item with coordinates and promote to ACTIVE
+    # Update Nova item with coordinates, ACTIVE status, and aliases list
     _table.update_item(
         Key={"PK": nova_id, "SK": "NOVA"},
         UpdateExpression=(
             "SET ra_deg = :ra, dec_deg = :dec, coord_epoch = :epoch, "
             "coord_frame = :frame, resolver_source = :source, "
-            "#status = :status, updated_at = :now"
+            "#status = :status, aliases = :aliases, updated_at = :now"
         ),
         ExpressionAttributeNames={"#status": "status"},
         ExpressionAttributeValues={
@@ -282,6 +295,7 @@ def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dic
             ":frame": "ICRS",
             ":source": resolver_source,
             ":status": "ACTIVE",
+            ":aliases": aliases,
             ":now": now,
         },
     )
@@ -303,7 +317,35 @@ def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dic
         }
     )
 
-    logger.info("Minimal nova metadata upserted", extra={"nova_id": nova_id})
+    # Write ALIAS NameMapping items for each SIMBAD alias
+    alias_count = 0
+    for alias_raw in aliases:
+        normalized_alias = re.sub(r"\s+", " ", alias_raw.strip().lower())
+        if not normalized_alias:
+            continue
+        if normalized_alias == normalized_candidate_name:
+            continue
+        _table.put_item(
+            Item={
+                "PK": f"NAME#{normalized_alias}",
+                "SK": f"NOVA#{nova_id}",
+                "entity_type": "NameMapping",
+                "schema_version": _SCHEMA_VERSION,
+                "name_raw": alias_raw,
+                "name_normalized": normalized_alias,
+                "name_kind": "ALIAS",
+                "nova_id": nova_id,
+                "source": "SIMBAD",
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        alias_count += 1
+
+    logger.info(
+        "Minimal nova metadata upserted",
+        extra={"nova_id": nova_id, "alias_count": alias_count},
+    )
     return {"nova_id": nova_id}
 
 

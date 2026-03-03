@@ -37,6 +37,12 @@ Other workflows may be triggered directly when `nova_id` already exists.
 - On outcome `NOT_FOUND`:
   - No downstream workflow event published (terminal success outcome)
 
+### Internal data flow note
+- `ResolveCandidateAgainstPublicArchives` returns an `aliases` list
+  (empty list when resolver_source is TNS or NONE).
+- The ASL threads `aliases.$: $.resolution.aliases` into the
+  `UpsertMinimalNovaMetadata` Parameters block.
+
 ---
 
 ## State Machine (Explicit State List)
@@ -77,6 +83,19 @@ Other workflows may be triggered directly when `nova_id` already exists.
 
 13. **CreateNovaId** (Task)
 14. **UpsertMinimalNovaMetadata** (Task)
+    - In addition to coordinates and PRIMARY NameMapping, writes an ALIAS
+      NameMapping item for each entry in `aliases` returned by
+      ResolveCandidateAgainstPublicArchives.
+    - Aliases are sourced from the SIMBAD `ids` field (pipe-delimited catalogue
+      identifiers, e.g. "NOVA Sco 2012", "Gaia DR3 4043499439062100096").
+    - Each alias is normalized (lowercase, collapse whitespace) for the DDB PK
+      so that CheckExistingNovaByName can find it; the raw string is preserved
+      in `name_raw` for display and ADS bibliography lookups.
+    - The `V* ` prefix is stripped before storage (SIMBAD variable star
+      annotation — not a searchable identifier).
+    - Aliases whose normalized form matches `normalized_candidate_name` are
+      skipped to avoid duplicating the PRIMARY mapping.
+    - `name_kind = ALIAS`, `source = SIMBAD`.
 15. **PublishIngestNewNova** (Task)
 16. **FinalizeJobRunSuccess** (Task) (outcome = `CREATED_AND_LAUNCHED`)
 17. **UpsertAliasForExistingNova** (Task)

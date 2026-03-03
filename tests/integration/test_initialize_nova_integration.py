@@ -31,6 +31,7 @@ from unittest.mock import patch
 
 import boto3
 import pytest
+from boto3.dynamodb.conditions import Key
 from moto import mock_aws
 
 # ---------------------------------------------------------------------------
@@ -271,6 +272,7 @@ class TestCreatedAndLaunched:
                 "resolved_dec": -30.5,
                 "resolved_epoch": "J2000",
                 "resolver_source": "SIMBAD",
+                "aliases": ["NOVA Test 2026", "Gaia DR3 1234567890"],
             }
 
             with (
@@ -358,6 +360,7 @@ class TestCreatedAndLaunched:
                         "resolved_dec": resolution["resolved_dec"],
                         "resolved_epoch": resolution["resolved_epoch"],
                         "resolver_source": resolution["resolver_source"],
+                        "aliases": resolution.get("aliases", []),
                         "correlation_id": state["job_run"]["correlation_id"],
                         "job_run_id": state["job_run"]["job_run_id"],
                     },
@@ -388,13 +391,31 @@ class TestCreatedAndLaunched:
             nova_item = table.get_item(Key={"PK": nova_id, "SK": "NOVA"}).get("Item")
             assert nova_item is not None
             assert nova_item["status"] == "ACTIVE"
+            assert nova_item["aliases"] == ["NOVA Test 2026", "Gaia DR3 1234567890"]
 
-            # NameMapping exists
+            # NameMapping — primary
             normalized = state["normalization"]["normalized_candidate_name"]
             name_item = table.get_item(
                 Key={"PK": f"NAME#{normalized}", "SK": f"NOVA#{nova_id}"}
             ).get("Item")
             assert name_item is not None
+            assert name_item["name_kind"] == "PRIMARY"
+
+            # NameMapping — SIMBAD aliases written for CREATED_AND_LAUNCHED path
+            alias1 = table.query(KeyConditionExpression=Key("PK").eq("NAME#nova test 2026"))[
+                "Items"
+            ]
+            assert len(alias1) == 1
+            assert alias1[0]["name_kind"] == "ALIAS"
+            assert alias1[0]["name_raw"] == "NOVA Test 2026"
+            assert alias1[0]["source"] == "SIMBAD"
+
+            alias2 = table.query(KeyConditionExpression=Key("PK").eq("NAME#gaia dr3 1234567890"))[
+                "Items"
+            ]
+            assert len(alias2) == 1
+            assert alias2[0]["name_kind"] == "ALIAS"
+            assert alias2[0]["name_raw"] == "Gaia DR3 1234567890"
 
 
 # ---------------------------------------------------------------------------
@@ -505,6 +526,7 @@ class TestExistsAndLaunchedByCoordinates:
                 "resolved_dec": _DUPLICATE_DEC,
                 "resolved_epoch": "J2000",
                 "resolver_source": "SIMBAD",
+                "aliases": [],
             }
 
             with (
@@ -617,6 +639,7 @@ class TestNotFound:
                 "is_nova": False,
                 "is_classical_nova": "false",
                 "resolver_source": "SIMBAD",
+                "aliases": [],
             }
 
             with (
@@ -678,6 +701,7 @@ class TestNotAClassicalNova:
                 "resolved_dec": -30.5,
                 "resolved_epoch": "J2000",
                 "resolver_source": "SIMBAD",
+                "aliases": [],
             }
 
             with (
@@ -770,6 +794,7 @@ class TestQuarantineCoordinateAmbiguity:
                 "resolved_dec": _AMBIGUOUS_DEC,
                 "resolved_epoch": "J2000",
                 "resolver_source": "SIMBAD",
+                "aliases": [],
             }
 
             with (
@@ -866,6 +891,7 @@ class TestQuarantineClassificationAmbiguity:
                 "resolved_dec": -30.5,
                 "resolved_epoch": "J2000",
                 "resolver_source": "SIMBAD",
+                "aliases": [],
             }
 
             with (

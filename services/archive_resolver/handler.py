@@ -10,26 +10,41 @@ dependencies. See infra/nova_constructs/compute.py for container config.
 Task dispatch table:
   ResolveCandidateAgainstPublicArchives — query SIMBAD (and TNS if needed);
                                           return coordinates + nova classification
+                                          + SIMBAD aliases
 
 Resolution strategy:
   1. Query SIMBAD via astroquery — authoritative for named objects
   2. If SIMBAD returns no result, query TNS REST API (plain HTTP)
   3. Merge results; raise QuarantineError if sources conflict
 
-Output contract (consumed by CheckExistingNovaByCoordinates and
-CandidateIsNova?/CandidateIsClassicalNova? choice states):
+Output contract (consumed by CheckExistingNovaByCoordinates,
+CandidateIsNova?/CandidateIsClassicalNova? choice states, and
+UpsertMinimalNovaMetadata for alias persistence):
   is_nova           — bool
   is_classical_nova — "true" | "false"
   resolved_ra       — ICRS RA in degrees (present when is_nova=True)
   resolved_dec      — ICRS Dec in degrees (present when is_nova=True)
   resolved_epoch    — always "J2000" for SIMBAD
   resolver_source   — "SIMBAD" | "TNS" | "SIMBAD+TNS" | "NONE"
+  aliases           — list of raw alias strings from SIMBAD ids field
+                      (present when resolver_source includes "SIMBAD";
+                      empty list otherwise). Used by UpsertMinimalNovaMetadata
+                      to persist NameMapping items for each alias, and by
+                      refresh_references for ADS bibliography lookups.
 
 SIMBAD otypes.otype_txt → nova classification:
   No*, No?, NL*  → is_nova=True, is_classical_nova="true"
   RNe, RN*       → is_nova=True, is_classical_nova="false" (recurrent)
   Anything else  → is_nova=False
   Conflicting    → QuarantineError
+
+SIMBAD alias extraction:
+  The ids field is a pipe-delimited string of catalogue identifiers,
+  e.g. "V* V1324 Sco|NOVA Sco 2012|Gaia DR3 4043499439062100096".
+  Each token is trimmed of whitespace. The "V* " prefix is stripped
+  (SIMBAD variable star annotation — not part of the searchable name).
+  All other prefixes (Gaia DR3, 2MASS J, NOVA, MOA, etc.) are kept
+  verbatim as they are genuine searchable catalogue identifiers.
 
 astropy/astroquery cache:
   Redirected to /tmp at module load — Lambda filesystem is read-only
@@ -135,6 +150,7 @@ def _resolve_candidate_against_public_archives(
             "is_nova": False,
             "is_classical_nova": "false",
             "resolver_source": "NONE",
+            "aliases": [],
         }
 
     if simbad_result is not None and tns_result is not None:
@@ -146,6 +162,7 @@ def _resolve_candidate_against_public_archives(
     else:
         result = cast(dict[str, Any], tns_result)
         result["resolver_source"] = "TNS"
+        result.setdefault("aliases", [])
 
     logger.info(
         "Archive resolution complete",
@@ -153,6 +170,7 @@ def _resolve_candidate_against_public_archives(
             "is_nova": result.get("is_nova"),
             "is_classical_nova": result.get("is_classical_nova"),
             "resolver_source": result.get("resolver_source"),
+            "alias_count": len(result.get("aliases", [])),
         },
     )
 
@@ -170,7 +188,7 @@ def _query_simbad(candidate_name: str) -> dict[str, Any] | None:
     Query SIMBAD via astroquery.
 
     SIMBAD returns one row per object type. We collect all otype_txt values
-    across rows and take coordinates from the first row.
+    across rows and take coordinates and ids from the first row.
 
     Returns None if no object found. Raises RetryableError on transient
     network failures.
@@ -202,6 +220,7 @@ def _query_simbad(candidate_name: str) -> dict[str, Any] | None:
 
     ra = _raw("ra")
     dec = _raw("dec")
+    ids_raw = _raw("ids")
 
     is_nova, is_classical_nova = _classify_otypes(all_otypes)
 
@@ -209,6 +228,7 @@ def _query_simbad(candidate_name: str) -> dict[str, Any] | None:
         "is_nova": is_nova,
         "is_classical_nova": is_classical_nova,
         "resolved_epoch": "J2000",
+        "aliases": _parse_simbad_ids(ids_raw),
     }
 
     if is_nova and ra is not None and dec is not None:
@@ -279,7 +299,7 @@ def _query_tns(candidate_name: str) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Classification helpers
+# Classification and alias helpers
 # ---------------------------------------------------------------------------
 
 
@@ -304,13 +324,45 @@ def _classify_otypes(otypes: set[str]) -> tuple[bool, str]:
     return True, "true"
 
 
+def _parse_simbad_ids(ids_raw: str | None) -> list[str]:
+    """
+    Parse the SIMBAD ids pipe-delimited string into a clean alias list.
+
+    Rules:
+      - Split on "|"
+      - Strip leading/trailing whitespace from each token
+      - Strip leading "V* " prefix (SIMBAD variable star annotation —
+        not part of the searchable name)
+      - Drop empty strings
+
+    All other catalogue prefixes (Gaia DR3, 2MASS J, NOVA, MOA, etc.)
+    are kept verbatim — they are genuine searchable identifiers.
+
+    Example input:  "V* V1324 Sco|NOVA Sco 2012|Gaia DR3 4043499439062100096"
+    Example output: ["V1324 Sco", "NOVA Sco 2012", "Gaia DR3 4043499439062100096"]
+    """
+    if not ids_raw:
+        return []
+
+    aliases = []
+    for token in ids_raw.split("|"):
+        token = token.strip()
+        if token.startswith("V* "):
+            token = token[3:]
+        token = token.strip()
+        if token:
+            aliases.append(token)
+
+    return aliases
+
+
 def _merge_results(
     simbad: dict[str, Any],
     tns: dict[str, Any],
 ) -> dict[str, Any]:
     """
     Merge SIMBAD and TNS results, raising QuarantineError on conflict.
-    When both agree, prefer SIMBAD coordinates.
+    When both agree, prefer SIMBAD coordinates and aliases.
     """
     if simbad["is_nova"] != tns["is_nova"]:
         raise QuarantineError(
