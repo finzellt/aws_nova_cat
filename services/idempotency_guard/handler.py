@@ -17,12 +17,19 @@ DynamoDB item model:
     idempotency_key          — the full computed key (internal only)
     job_run_id               — the execution that holds the lock
     workflow_name            — for human debugging
+    primary_id               — the workflow's primary identifier
+                               (e.g. normalized_candidate_name for initialize_nova,
+                               nova_id for ingest_new_nova and all downstream workflows)
     acquired_at              — ISO-8601 UTC
     ttl                      — Unix epoch; DynamoDB TTL for automatic cleanup
 
-Idempotency key format (initialize_nova):
-  InitializeNova:{normalized_candidate_name}:{schema_version}:{time_bucket}
+Idempotency key format:
+  {workflow_name}:{primary_id}:{schema_version}:{time_bucket}
   where time_bucket = YYYY-MM-DDTHH (1-hour granularity)
+
+  Examples:
+    initialize_nova:v1324 sco:1:2026-03-01T14
+    ingest_new_nova:4e9b0e88-...:1:2026-03-01T14
 
 Lock semantics:
   - Conditional put with attribute_not_exists(PK) — first writer wins
@@ -90,15 +97,21 @@ def _acquire_idempotency_lock(event: dict[str, Any], context: object) -> dict[st
     Raises RetryableError if the lock is already held by a concurrent
     execution. Step Functions will retry with backoff per the ASL policy.
 
+    The caller supplies `primary_id` — the workflow's natural primary
+    identifier for the idempotency key:
+      - initialize_nova        → normalized_candidate_name
+      - ingest_new_nova        → nova_id
+      - all downstream workflows → nova_id (or data_product_id where applicable)
+
     Returns:
         idempotency_key — the computed key (internal; for logging only)
         acquired_at     — ISO-8601 UTC timestamp
     """
     workflow_name: str = event["workflow_name"]
-    normalized_candidate_name: str = event["normalized_candidate_name"]
+    primary_id: str = event["primary_id"]
     job_run_id: str = event["job_run_id"]
 
-    idempotency_key = _compute_key(workflow_name, normalized_candidate_name)
+    idempotency_key = _compute_key(workflow_name, primary_id)
     acquired_at = _now()
     ttl = _ttl_epoch()
 
@@ -114,7 +127,7 @@ def _acquire_idempotency_lock(event: dict[str, Any], context: object) -> dict[st
                 "idempotency_key": idempotency_key,
                 "job_run_id": job_run_id,
                 "workflow_name": workflow_name,
-                "normalized_candidate_name": normalized_candidate_name,
+                "primary_id": primary_id,
                 "acquired_at": acquired_at,
                 "ttl": ttl,
             },
@@ -145,11 +158,11 @@ def _acquire_idempotency_lock(event: dict[str, Any], context: object) -> dict[st
 # ---------------------------------------------------------------------------
 
 
-def _compute_key(workflow_name: str, normalized_candidate_name: str) -> str:
+def _compute_key(workflow_name: str, primary_id: str) -> str:
     """
     Compute the workflow-level idempotency key.
 
-    Format: {workflow_name}:{normalized_candidate_name}:{schema_version}:{time_bucket}
+    Format: {workflow_name}:{primary_id}:{schema_version}:{time_bucket}
     Time bucket granularity: 1 hour (YYYY-MM-DDTHH)
 
     The time bucket ensures that re-runs on different hours are treated as
@@ -158,7 +171,7 @@ def _compute_key(workflow_name: str, normalized_candidate_name: str) -> str:
     item from DynamoDB (see module docstring for CLI command).
     """
     time_bucket = datetime.now(UTC).strftime(_TIME_BUCKET_FORMAT)
-    return f"{workflow_name}:{normalized_candidate_name}:{_SCHEMA_VERSION}:{time_bucket}"
+    return f"{workflow_name}:{primary_id}:{_SCHEMA_VERSION}:{time_bucket}"
 
 
 def _now() -> str:
