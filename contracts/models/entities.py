@@ -338,11 +338,27 @@ class DataProduct(PersistentBase):
     - SPECTRA (many per nova; one item per atomic spectra product)
 
     This contract is intentionally permissive: fields are type-dependent.
+
+    data_product_id identity (SPECTRA only):
+        Minted during discover_spectra_products via deterministic derivation:
+            UUID(hash(provider + provider_product_key))        [preferred]
+            UUID(hash(provider + normalized_canonical_locator)) [fallback when no native ID]
+        Immutable once assigned; never reused across distinct products.
+        See ADR-003 for the full specification.
     """
 
     schema_version: str = Field(default="1.0.0")
 
-    data_product_id: UUID = Field(default_factory=uuid4)
+    data_product_id: UUID = Field(
+        default_factory=uuid4,
+        description=(
+            "Stable, immutable UUID for this data product. "
+            "For SPECTRA: minted during discover_spectra_products via deterministic derivation — "
+            "UUID(hash(provider + provider_product_key)), falling back to "
+            "UUID(hash(provider + normalized_canonical_locator)) when no provider-native ID exists. "
+            "See ADR-003 for full specification."
+        ),
+    )
     nova_id: UUID
     product_type: ProductType
 
@@ -441,9 +457,13 @@ class DataProduct(PersistentBase):
 
 class LocatorAlias(PersistentBase):
     """
-    Global identity mapping: (provider + locator_identity) -> data_product_id
+    Global identity mapping: (provider + locator_identity) -> data_product_id.
 
     NOTE: This is a global-partition item in the single table (PK = LOCATOR#...).
+
+    data_product_id here is the stable UUID previously minted during discover_spectra_products
+    via: UUID(hash(provider + provider_product_key)) or, as a fallback,
+    UUID(hash(provider + normalized_canonical_locator)). See ADR-003 for full specification.
     """
 
     schema_version: str = Field(default="1.0.0")
@@ -483,7 +503,14 @@ class FileObject(PersistentBase):
 
     file_id: UUID = Field(default_factory=uuid4)
     nova_id: UUID | None = None  # None before nova exists (e.g. initialize_nova quarantine)
-    data_product_id: UUID | None = None  # None when not product-scoped
+    data_product_id: UUID | None = Field(
+        default=None,
+        description=(
+            "UUID of the associated data product, if product-scoped. None when not product-scoped. "
+            "For SPECTRA products, this is the stable UUID minted during discover_spectra_products — "
+            "see DataProduct.data_product_id and ADR-003 for derivation details."
+        ),
+    )
     role: FileRole
     bucket: str = Field(..., min_length=1, max_length=256)
     key: str = Field(..., min_length=1, max_length=2048)
@@ -750,7 +777,14 @@ class JobRun(PersistentBase):
 
     # Optional linkage for convenience/traceability
     nova_id: UUID | None = None
-    data_product_id: UUID | None = None
+    data_product_id: UUID | None = Field(
+        default=None,
+        description=(
+            "UUID of the data product associated with this run, if applicable. "
+            "For SPECTRA workflows, this is the stable UUID minted during discover_spectra_products. "
+            "See DataProduct.data_product_id and ADR-003 for derivation details."
+        ),
+    )
 
     initiated_by: str | None = Field(
         default=None, description="Actor or service initiating the run."

@@ -16,6 +16,17 @@ Does NOT download/acquire bytes.
 
 Provider-specific access patterns (API shape, pagination, auth, rate limits, etc.) are implemented inside provider adapters, not in Step Functions branching.
 
+**`data_product_id` is minted in this workflow.**
+
+For each newly discovered spectra product, a stable UUID is derived deterministically:
+- **Preferred:** `UUID(hash(provider + provider_product_key))` — when a provider-native product ID is available (`NATIVE_ID` strategy).
+- **Fallback:** `UUID(hash(provider + normalized_canonical_locator))` — when no native ID exists (`METADATA_KEY` strategy).
+
+If neither can be constructed deterministically, identity is considered `WEAK` and
+definitive deduplication is deferred to `acquire_and_validate_spectra` (byte-level fingerprint).
+Once assigned, `data_product_id` is immutable and never reused. See ADR-003 for full specification.
+
+
 ---
 
 ## Triggers
@@ -59,11 +70,10 @@ Published event(s) MUST contain:
    - **NormalizeProviderProducts** (Task)
    - **DeduplicateAndAssignDataProductIds** (Task)
    - **PersistDataProductMetadata** (Task)
-   - **PublishAcquireAndValidateSpectraRequests** (Task)
-6. **SummarizeDiscovery** (Task)
-7. **FinalizeJobRunSuccess** (Task)
-8. **TerminalFailHandler** (Task)
-9. **FinalizeJobRunFailed** (Task)
+   - **PublishAcquireAndValidateSpectraRequests** (Task) → dispatched to `workflow_launcher`
+6. **FinalizeJobRunSuccess** (Task)
+7. **TerminalFailHandler** (Task)
+8. **FinalizeJobRunFailed** (Task)
 
 ---
 

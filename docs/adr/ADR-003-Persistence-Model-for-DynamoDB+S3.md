@@ -8,7 +8,20 @@ Supersedes earlier draft persistence model assumptions.
 
 > Superseded in part by ADR-004 (Architecture Baseline and Alignment Policy).
 > References to Dataset/dataset_id are obsolete.
+>
 > Superseded in part by ADR-005 (Reference Model and ADS Integration).
+> Specifically:
+> - Section 1: The `REF#...` SK prefix listed under per-nova sort keys is retired.
+>   References now live in a global partition (`REFERENCE#<bibcode> / METADATA`),
+>   not under nova partitions. See ADR-005 and `dynamodb-item-model.md` sections 6–7.
+>
+> Superseded in part by current architecture (post-Epic 12):
+> - Section 1: The `WORKFLOW#<correlation_id>` global partition is not listed here.
+>   It holds pre-nova `FileObject` records written before a `nova_id` exists
+>   (e.g., during `initialize_nova` quarantine). See `current-architecture.md` Section 6.
+> - Section 4: `first_observed_at` was not implemented. It is superseded by
+>   `discovery_date` (str, YYYY-MM-DD), computed from ADS reference publication
+>   dates by `ComputeDiscoveryDate`. See ADR-005 Amendment (Discovery Date Precision).
 
 
 ---

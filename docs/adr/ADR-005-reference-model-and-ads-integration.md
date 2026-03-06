@@ -5,6 +5,12 @@
 **Epic:** 12 (prerequisites pass)
 **Deciders:** Nova Cat core team
 
+> **Superseded in part by ADR-007.**
+> Decision 2 (ADS Query Strategy) described a parallel name + coordinate query approach
+> that was subsequently abandoned. The coordinate cone search was found to be unreliably
+> documented in ADS and could not be validated. The implemented strategy is name-only
+> (all known aliases OR-joined). See ADR-007 for the authoritative record.
+
 ---
 
 ## Context

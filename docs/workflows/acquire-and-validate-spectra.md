@@ -4,10 +4,16 @@
 
 Atomic acquisition and validation of a **single spectra data product**.
 
-This workflow is source-agnostic: “acquire” may mean downloading from a provider, reading from an internal mirror, or (future) using donated data.
+This workflow is source-agnostic: "acquire" may mean downloading from a provider, reading from an internal mirror, or (future) using donated data.
 Validation is profile-driven and aligned with IVOA Spectrum Data Model conventions where possible (see `docs/specs/spectra-fits-profiles.md`).
 
 MVP: Mode 1 only (one `data_product_id` per execution), while persisting metadata that keeps the system friendly to future batching (Mode 2).
+
+**`data_product_id`** is the stable, immutable UUID identifying the target spectra data product.
+It was minted during `discover_spectra_products` via deterministic derivation:
+`UUID(hash(provider + provider_product_key))` (preferred) or
+`UUID(hash(provider + normalized_canonical_locator))` (fallback when no native ID exists).
+
 
 Terminology:
 - Exists (metadata only)
@@ -90,7 +96,7 @@ Rich attempt details belong in JobRun/Attempt records and logs.
 
 ## Acquisition
 
-**AcquireArtifact** retrieves bytes according to the data product’s acquisition descriptors.
+**AcquireArtifact** retrieves bytes according to the data product's acquisition descriptors.
 
 MVP assumptions:
 - Most products are FITS; some may be ZIP bundles.
@@ -134,7 +140,7 @@ After acquisition (and once bytes are available), the workflow MUST:
 2. Check whether an existing **VALIDATED** data product already has the same fingerprint.
 3. If a match exists:
    - Mark the current data product as a duplicate of the canonical product (e.g., `duplicate_of_data_product_id = <canonical>`).
-   - Optionally append this product’s locator(s) as aliases to the canonical product.
+   - Optionally append this product's locator(s) as aliases to the canonical product.
    - Finalize the JobRun successfully with outcome `DUPLICATE_OF_EXISTING`.
    - The current data product MUST NOT be marked `VALIDATED`.
 4. If no match exists:
@@ -213,7 +219,7 @@ Step dedupe keys (internal):
 
 Invariants:
 - Exactly one `data_product_id` per execution (MVP Mode 1)
-- “AlreadyValidated?” is a defensive guardrail (replays happen)
+- "AlreadyValidated?" is a defensive guardrail (replays happen)
 - Cooldown prevents hammering providers across repeated executions
 - Profile logic must not alter UUID identity
 - `idempotency_key` remains internal-only (never part of event payload)

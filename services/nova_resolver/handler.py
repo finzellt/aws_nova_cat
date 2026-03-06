@@ -16,7 +16,7 @@ Angular separation:
   Computed via the haversine formula on ICRS RA/Dec — no astropy dependency.
   Thresholds per initialize-nova.md:
     < 2"   → DUPLICATE  (same nova)
-    2"–10" → AMBIGUOUS  (human review required)
+    2"-10" → AMBIGUOUS  (human review required)
     > 10"  → NONE       (distinct object)
 """
 
@@ -32,7 +32,7 @@ from decimal import Decimal
 from typing import Any, cast
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 from nova_common.errors import TerminalError
 from nova_common.logging import configure_logging, logger
 from nova_common.tracing import tracer
@@ -154,9 +154,7 @@ def _check_existing_nova_by_coordinates(event: dict[str, Any], context: object) 
     # At MVP scale (<1000 novae) a full scan is acceptable.
     # A future GSI on coord fields would be needed at larger scale.
     response = _table.scan(
-        FilterExpression=(
-            Key("SK").eq("NOVA")  # type: ignore[arg-type]
-        ),
+        FilterExpression=Attr("SK").eq("NOVA"),
         ProjectionExpression="nova_id, ra_deg, dec_deg",
     )
 
@@ -233,7 +231,7 @@ def _create_nova_id(event: dict[str, Any], context: object) -> dict[str, Any]:
             "nova_id": nova_id,
             "primary_name": candidate_name,
             "primary_name_normalized": normalized_candidate_name,
-            "status": "PENDING",
+            "status": "ACTIVE",
             "created_by_job_run_id": job_run_id,
             "created_at": now,
             "updated_at": now,

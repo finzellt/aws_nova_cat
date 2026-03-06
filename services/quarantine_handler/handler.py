@@ -23,6 +23,12 @@ Fields written to JobRun:
   extra_context            — optional dict of additional diagnostic fields from event
                              (e.g. min_sep_arcsec for COORDINATE_AMBIGUITY)
 
+Primary identifier resolution:
+  The handler accepts whichever identifier is present in the event, in priority
+  order: nova_id → data_product_id → candidate_name. This allows the handler
+  to serve all workflows regardless of which identifiers are available at the
+  point of quarantine.
+
 SNS notification:
   Published to NOVA_CAT_QUARANTINE_TOPIC_ARN. Errors are caught and logged —
   SNS failure MUST NOT cause the workflow to fail. The JobRun update is
@@ -30,7 +36,8 @@ SNS notification:
 
 SNS payload fields:
   workflow_name            — from event
-  primary_id               — nova_id if present, else candidate_name
+  primary_id               — nova_id, data_product_id, or candidate_name
+                             (resolved in that priority order)
   correlation_id           — from event
   error_fingerprint        — computed here
   classification_reason    — derived from quarantine_reason_code
@@ -62,14 +69,30 @@ _sns = boto3.client("sns")
 # Human-readable descriptions keyed by quarantine_reason_code.
 # Extend as new reason codes are introduced across workflows.
 _CLASSIFICATION_REASONS: dict[str, str] = {
+    # initialize_nova codes (NovaQuarantineReasonCode)
     "COORDINATE_AMBIGUITY": (
         'Candidate coordinates fall in the ambiguous 2"-10" separation band '
         "relative to an existing nova. Manual review required to confirm identity."
     ),
-    "OTHER": (
-        "Nova classification is ambiguous — conflicting or inconclusive resolver "
-        "results. Manual review required."
+    # spectra codes (SpectraQuarantineReasonCode)
+    "UNKNOWN_PROFILE": (
+        "No FITS profile matched this spectra product. Manual review required "
+        "to identify the correct profile or add a new one."
     ),
+    "MISSING_CRITICAL_METADATA": (
+        "Spectra product is missing one or more critical FITS header fields "
+        "required for canonical normalization. Manual review required."
+    ),
+    "CHECKSUM_MISMATCH": (
+        "Acquired bytes do not match the expected checksum. The product may "
+        "have been corrupted in transit. Manual review required."
+    ),
+    "COORDINATE_PROXIMITY": (
+        "Spectra product coordinates do not match the expected nova position "
+        "within the allowed tolerance. Manual review required."
+    ),
+    # shared fallback
+    "OTHER": ("Quarantine triggered — ambiguous or inconclusive results. Manual review required."),
 }
 
 _CLASSIFICATION_REASON_FALLBACK = "Quarantine triggered — see error_fingerprint for details."
@@ -115,14 +138,21 @@ def _quarantine_handler(event: dict[str, Any], context: object) -> dict[str, Any
     """
     workflow_name: str = event["workflow_name"]
     quarantine_reason_code: str = event["quarantine_reason_code"]
-    candidate_name: str = event["candidate_name"]
     correlation_id: str = event["correlation_id"]
     job_run: dict[str, Any] = event["job_run"]
+
+    # Resolve primary_id from whichever identifier is present — workflows
+    # supply different identifiers depending on context:
+    #   initialize_nova         → candidate_name (no nova_id yet)
+    #   spectra/photometry      → nova_id and/or data_product_id
     nova_id: str | None = event.get("nova_id")
+    data_product_id: str | None = event.get("data_product_id")
+    candidate_name: str | None = event.get("candidate_name")
+    primary_id: str = nova_id or data_product_id or candidate_name or "unknown"
 
     quarantined_at = _now()
     error_fingerprint = _compute_error_fingerprint(
-        quarantine_reason_code, workflow_name, candidate_name
+        quarantine_reason_code, workflow_name, primary_id
     )
     classification_reason = _CLASSIFICATION_REASONS.get(
         quarantine_reason_code, _CLASSIFICATION_REASON_FALLBACK
@@ -170,14 +200,13 @@ def _quarantine_handler(event: dict[str, Any], context: object) -> dict[str, Any
         extra={
             "quarantine_reason_code": quarantine_reason_code,
             "error_fingerprint": error_fingerprint,
-            "candidate_name": candidate_name,
+            "primary_id": primary_id,
         },
     )
 
     # ------------------------------------------------------------------
     # Best-effort SNS notification — MUST NOT fail the workflow
     # ------------------------------------------------------------------
-    primary_id = nova_id or candidate_name
     _publish_quarantine_notification(
         workflow_name=workflow_name,
         primary_id=primary_id,
@@ -202,16 +231,17 @@ def _quarantine_handler(event: dict[str, Any], context: object) -> dict[str, Any
 def _compute_error_fingerprint(
     quarantine_reason_code: str,
     workflow_name: str,
-    candidate_name: str,
+    primary_id: str,
 ) -> str:
     """
     Compute a short, stable hex digest for cross-referencing logs and SNS.
 
     The fingerprint is derived from the quarantine reason, workflow, and
-    candidate name — stable across retries for the same logical event.
+    primary_id (nova_id, data_product_id, or candidate_name depending on
+    workflow context) — stable across retries for the same logical event.
     Truncated to 12 hex chars (48 bits) for readability.
     """
-    raw = f"{quarantine_reason_code}:{workflow_name}:{candidate_name}"
+    raw = f"{quarantine_reason_code}:{workflow_name}:{primary_id}"
     return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
 

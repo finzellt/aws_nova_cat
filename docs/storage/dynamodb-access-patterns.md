@@ -29,6 +29,16 @@ Within per-nova partitions, item types are distinguished by `SK` prefixes such a
 - `JOBRUN#...`
 - `ATTEMPT#...`
 
+> **`data_product_id` — stable, deterministic UUID (SPECTRA products)**
+>
+> Minted during `discover_spectra_products`. Derived as follows:
+> - **Preferred:** `UUID(hash(provider + provider_product_key))` — when a provider-native product ID is available.
+> - **Fallback:** `UUID(hash(provider + normalized_canonical_locator))` — when no native ID exists.
+>
+> Immutable once assigned; never reused across distinct products.
+> Appears in spectra `SK` patterns as `PRODUCT#SPECTRA#<provider>#<data_product_id>`.
+> See ADR-003 for full specification.
+
 ---
 
 ## initialize_nova
@@ -144,6 +154,10 @@ Purpose: Upsert references and link them to the nova; optionally derive `discove
 ## discover_spectra_products
 
 Purpose: Discover spectra products across providers, assign stable `data_product_id`s, persist stubs, and publish acquisition requests.
+
+`data_product_id` is minted here via deterministic derivation:
+`UUID(hash(provider + provider_product_key))` (preferred) or
+`UUID(hash(provider + normalized_canonical_locator))` (fallback). See ADR-003.
 
 ### Reads (per discovered product)
 - Query locator alias mapping:

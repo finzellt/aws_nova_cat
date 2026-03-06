@@ -3,8 +3,15 @@
 This document defines the DynamoDB item types, keys, fields, and examples for Nova Cat persistence **after the spectra refactor**:
 - **Spectra** are atomic **data products** identified by `data_product_id` (one per spectra file/product).
 - **Photometry** has exactly **one** main `PHOTOMETRY_TABLE` data product per nova (one DynamoDB item), updated in place over time.
-- “Dataset” is not a persisted concept for MVP.
+- "Dataset" is not a persisted concept for MVP.
 - Ordering requirement: within a nova, items should be sortable by **product type first**, then provider (for spectra).
+
+**`data_product_id` — stable, deterministic UUID (SPECTRA products)**
+
+Minted during `discover_spectra_products`. Derived as follows:
+- **Preferred:** `UUID(hash(provider + provider_product_key))` — when a provider-native product ID is available.
+- **Fallback:** `UUID(hash(provider + normalized_canonical_locator))` — when no native ID exists.
+
 
 ### Design goals:
 - Minimal, cost-conscious, access-pattern driven
@@ -33,14 +40,14 @@ This document defines the DynamoDB item types, keys, fields, and examples for No
 ---
 
 ### Minimal GSIs:
-- **GSI1 (EligibilityIndex)** for *per-nova* “eligible spectra products” queries
+- **GSI1 (EligibilityIndex)** for *per-nova* "eligible spectra products" queries
   - `GSI1PK = "<nova_id>"`
   - `GSI1SK = "ELIG#<eligibility>#<product_type>#<provider>#<data_product_id>"`
 
 ---
 
 ### Notes:
-- We intentionally **do not** add a dedicated “human name” GSI. Humans search by name through `NameMapping` items (primary name and aliases).
+- We intentionally **do not** add a dedicated "human name" GSI. Humans search by name through `NameMapping` items (primary name and aliases).
 
 ---
 
@@ -67,7 +74,7 @@ Canonical nova record.
 - `coord_frame` (string; e.g., `"ICRS"`; optional but recommended for explicitness)
 - `coord_epoch` (string; e.g., `"J2000"`; optional but recommended for explicitness)
 - `discovery_date` (optional, derived from references)
-- `aliases` (string list; raw alias strings
+- `aliases` (string list; raw alias strings)
 - `status` (ACTIVE | QUARANTINED | MERGED | DEPRECATED)
 - `created_at`, `updated_at` (ISO-8601 UTC)
 
@@ -185,7 +192,7 @@ There are two product types:
 - `last_ingestion_source` (small descriptor or pointer)
 - `ingestion_count` (optional)
 
-###### Optional “pseudo-versioning”
+###### Optional "pseudo-versioning"
 
 - `last_ingested_file_id`
   **or**
@@ -218,6 +225,11 @@ There are two product types:
 
 - `PK = "<nova_id>"`
 - `SK = "PRODUCT#SPECTRA#<provider>#<data_product_id>"`
+
+`data_product_id` here is a stable, immutable UUID minted during `discover_spectra_products`:
+- **Preferred:** `UUID(hash(provider + provider_product_key))` when a provider-native ID is available.
+- **Fallback:** `UUID(hash(provider + normalized_canonical_locator))` when no native ID exists.
+See ADR-003 for full specification.
 
 ---
 
@@ -435,8 +447,12 @@ Example locator object:
 
 Used during `discover_spectra_products` to:
 
-- Detect “we already know this spectra product”
+- Detect "we already know this spectra product"
 - Enforce stable identity even if multiple equivalent locators exist
+
+`data_product_id` stored here is the stable UUID previously minted via deterministic derivation
+(`UUID(hash(provider + provider_product_key))` or fallback). This item is the deduplication
+authority: discovery always checks here before assigning a new `data_product_id`. See ADR-003.
 
 ---
 
@@ -459,7 +475,7 @@ Locator identity normalization rules:
 - Preferred: `provider_product_id:<id>`
 - Else: `url:<normalized_url>`
 
-- `data_product_id`
+- `data_product_id` (stable UUID; see ADR-003 for derivation)
 - `nova_id` (stored as an attribute for traceability)
 - `created_at`
 - `updated_at`
@@ -509,6 +525,9 @@ guaranteed uniqueness and direct-fetch capability.
 > For `WORKFLOW_QUARANTINE_CONTEXT`, the PK is `WORKFLOW#<correlation_id>` because
 > no `nova_id` exists yet at the point of writing (e.g. quarantine during `initialize_nova`).
 > This is consistent with how pre-nova `JobRun` records are keyed.
+>
+> `<data_product_id>` appearing in spectra-role SKs is the stable UUID minted during
+> `discover_spectra_products`. See ADR-003 for derivation details.
 
 ---
 
@@ -518,7 +537,8 @@ guaranteed uniqueness and direct-fetch capability.
 - `entity_type = "FileObject"`
 - `file_id` — UUID; stable forever
 - `nova_id` — UUID | None (None before nova exists)
-- `data_product_id` — UUID | None (None when not product-scoped)
+- `data_product_id` — UUID | None (None when not product-scoped; for SPECTRA roles,
+  this is the stable UUID minted during `discover_spectra_products` — see ADR-003)
 - `role` — see role table above
 - `bucket`
 - `key`

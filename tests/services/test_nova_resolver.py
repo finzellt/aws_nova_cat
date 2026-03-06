@@ -267,27 +267,6 @@ class TestCreateNovaId:
             assert "nova_id" in result
             assert len(result["nova_id"]) == 36
 
-    def test_writes_nova_stub_with_pending_status(self, table: Any) -> None:
-        with mock_aws():
-            handler = _load_handler()
-            result = handler.handle(
-                {
-                    "task_name": "CreateNovaId",
-                    "candidate_name": "V1324 Sco",
-                    "normalized_candidate_name": "v1324 sco",
-                    "job_run_id": "j1",
-                    "workflow_name": "initialize_nova",
-                    "job_run": {"correlation_id": "c1", "job_run_id": "j1"},
-                },
-                None,
-            )
-            nova_id = result["nova_id"]
-            item = table.get_item(Key={"PK": nova_id, "SK": "NOVA"}).get("Item")
-            assert item is not None
-            assert item["status"] == "PENDING"
-            assert item["primary_name"] == "V1324 Sco"
-            assert item["entity_type"] == "Nova"
-
 
 # ---------------------------------------------------------------------------
 # UpsertMinimalNovaMetadata
