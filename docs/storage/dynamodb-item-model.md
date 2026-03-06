@@ -68,7 +68,7 @@ Canonical nova record.
 - `coord_epoch` (string; e.g., `"J2000"`; optional but recommended for explicitness)
 - `discovery_date` (optional, derived from references)
 - `aliases` (string list; raw alias strings
-- `status` (ACTIVE | MERGED | DEPRECATED)
+- `status` (ACTIVE | QUARANTINED | MERGED | DEPRECATED)
 - `created_at`, `updated_at` (ISO-8601 UTC)
 
 #### Example:
@@ -129,7 +129,7 @@ Used for:
 ```json
 {
   "PK": "NAME#nova sco 2012 #2",
-  "SK": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
+  "SK": "NOVA#4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
   "entity_type": "NameMapping",
   "schema_version": "1",
   "name_raw": "V1324 Sco",
@@ -265,7 +265,14 @@ Example locator object:
 - `attempt_count` (int)
 - `last_attempt_at` (ISO-8601 UTC)
 - `next_eligible_attempt_at` (ISO-8601 UTC)
+- `last_attempt_outcome`
+  (`SUCCESS` | `RETRYABLE_FAILURE` | `TERMINAL_FAILURE` | `QUARANTINE`)
+  → Operational outcome of the most recent attempt. Kept separate from
+  `validation_status` per the scientific/operational state separation invariant.
 - `last_error_fingerprint` (low-cardinality identifier)
+- `duplicate_of_data_product_id` (UUID | null)
+  → Set when this product was found to be a byte-level duplicate of an existing
+  validated product. Holds the canonical `data_product_id` of the original.
 
 ---
 
@@ -718,12 +725,14 @@ condition_expression=attribute_not_exists(PK).
 - `schema_version` (internal item evolution)
 - `entity_type = "JobRun"`
 - `job_run_id` (UUID)
+- `job_type` (e.g. `InitializeNova`, `RefreshReferences`, etc.)
 - `workflow_name`
 - `execution_arn`
 - `status`
-  (`RUNNING` | `SUCCEEDED` | `FAILED`)
+  (`QUEUED` | `RUNNING` | `SUCCEEDED` | `FAILED` | `QUARANTINED` | `CANCELLED`)
 - `started_at`
 - `ended_at`
+- `initiated_by` (optional; actor or service that initiated the run)
 
 #### Example:
 ```json
@@ -750,7 +759,7 @@ condition_expression=attribute_not_exists(PK).
 #### Key
 
 - `PK = "<nova_id>"`
-- `SK = "ATTEMPT#<job_run_id>#<task_name>#<attempt_no>#<timestamp>"`
+- `SK = "ATTEMPT#<job_run_id>#<task_name>#<attempt_number>#<timestamp>"`
 
 ---
 
@@ -760,8 +769,8 @@ condition_expression=attribute_not_exists(PK).
 - `entity_type = "Attempt"`
 - `job_run_id`
 - `task_name` (Step Functions state name)
-- `attempt_no`
-- `status` (`STARTED` | `SUCCEEDED` | `FAILED`)
+- `attempt_number`
+- `status` (`STARTED` | `SUCCEEDED` | `FAILED` | `TIMED_OUT` | `CANCELLED`)
 - `error_type`
 - `error_message` (short)
 - `duration_ms`
@@ -775,7 +784,7 @@ condition_expression=attribute_not_exists(PK).
   "schema_version": "1",
   "job_run_id": "5a4fce02-3b02-4b5c-8d06-541d9f2d4f60",
   "task_name": "download_bytes",
-  "attempt_no": 1,
+  "attempt_number": 1,
   "status": "SUCCEEDED",
   "duration_ms": 8423,
   "created_at": "2026-02-23T18:10:10Z",

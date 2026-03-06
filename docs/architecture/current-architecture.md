@@ -95,14 +95,14 @@ data_product_id = UUID(identity_key)
 
 Fields include:
 
-Fields include:
-
 - nova_id
 - primary_name
 - primary_name_normalized
 - status
 - position (ra_deg, dec_deg, frame, epoch)
-- discovery_date
+- discovery_date — YYYY-MM-DD string; day `00` when only month precision is available
+  (e.g. `"2013-06-00"`); never use `01` as a proxy for unknown day.
+  See ADR-005 Amendment (Discovery Date Precision).
 
 Derived astronomical metadata (e.g., constellation) is not persisted.
 
@@ -306,6 +306,8 @@ Item types:
 - NAME#<normalized_name>
 - LOCATOR#<provider>#<locator_identity>
 - REFERENCE#<bibcode>
+- WORKFLOW#<correlation_id> — pre-nova workflow artifacts (e.g. FileObjects written
+  during `initialize_nova` quarantine before a `nova_id` exists)
 
 S3 layout:
 - raw/

@@ -1,7 +1,11 @@
 # ADR-0001: Contract Definition and Schema Governance
 
-> Superseded in part by ADR-0XX (Architecture Baseline and Alignment Policy).
-> References to Dataset/dataset_id are obsolete.
+> **Historical note:** This ADR is preserved as a record of original design intent and must not be rewritten.
+> Superseded in part by ADR-004 (Architecture Baseline and Alignment Policy).
+> The `Dataset` abstraction referenced in this ADR was removed during Epic 4; `dataset_id` no longer exists
+> in the system. Any reference to `Dataset` below reflects the pre-Epic-4 model and should be read
+> in that historical context. The current authoritative entity list is: Nova, DataProduct, NameMapping,
+> LocatorAlias, Reference, NovaReference, FileObject, JobRun, Attempt.
 
 ## Status
 Accepted

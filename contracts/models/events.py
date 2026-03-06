@@ -22,7 +22,7 @@ class EventBase(BaseModel):
     - Boundary events MUST NOT include workflow idempotency keys or step dedupe keys.
     - correlation_id SHOULD be provided by callers; if absent, the workflow (via this model)
       generates one and propagates it downstream.
-    - initiated_at represents when the caller originated the request. It is distinct from
+    - started_at represents when the caller originated the request. It is distinct from
       workflow execution start time and is useful for latency analysis and event age checks.
     """
 
@@ -32,13 +32,13 @@ class EventBase(BaseModel):
         default="1.0.0", description="Semantic version for this event contract."
     )
     correlation_id: UUID = Field(default_factory=uuid4)
-    initiated_at: datetime = Field(default_factory=utcnow)
+    started_at: datetime = Field(default_factory=utcnow)
 
-    @field_validator("initiated_at")
+    @field_validator("started_at")
     @classmethod
     def ensure_tz_aware(cls, v: datetime) -> datetime:
         if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
-            raise ValueError("initiated_at must be timezone-aware (UTC).")
+            raise ValueError("started_at must be timezone-aware (UTC).")
         return v
 
 

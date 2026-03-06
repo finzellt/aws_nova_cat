@@ -675,10 +675,17 @@ class Attempt(PersistentBase):
     status: AttemptStatus = Field(default=AttemptStatus.started)
 
     started_at: datetime = Field(default_factory=utcnow)
-    finished_at: datetime | None = None
+    ended_at: datetime | None = None
 
-    error_code: str | None = Field(default=None, max_length=128)
+    error_type: str | None = Field(default=None, max_length=128)
     error_message: str | None = Field(default=None, max_length=4000)
+
+    task_name: str | None = Field(
+        default=None,
+        max_length=256,
+        description="Step Functions state name for this attempt.",
+    )
+    duration_ms: int | None = Field(default=None, ge=0)
 
     request_id: str | None = Field(default=None, description="AWS Lambda request id, if relevant.")
     execution_arn: str | None = Field(
@@ -687,8 +694,8 @@ class Attempt(PersistentBase):
 
     @model_validator(mode="after")
     def validate_finished_at(self) -> Attempt:
-        if self.finished_at is not None and self.finished_at < self.started_at:
-            raise ValueError("finished_at cannot be earlier than started_at.")
+        if self.ended_at is not None and self.ended_at < self.started_at:
+            raise ValueError("ended_at cannot be earlier than started_at.")
         return self
 
 
@@ -738,8 +745,8 @@ class JobRun(PersistentBase):
     correlation_id: UUID = Field(..., description="Correlates this run across events/services.")
     idempotency_key: str = Field(..., min_length=8, max_length=256)
 
-    initiated_at: datetime = Field(default_factory=utcnow)
-    finished_at: datetime | None = None
+    started_at: datetime = Field(default_factory=utcnow)
+    ended_at: datetime | None = None
 
     # Optional linkage for convenience/traceability
     nova_id: UUID | None = None
@@ -752,6 +759,6 @@ class JobRun(PersistentBase):
 
     @model_validator(mode="after")
     def validate_finished(self) -> JobRun:
-        if self.finished_at is not None and self.finished_at < self.initiated_at:
-            raise ValueError("finished_at cannot be earlier than initiated_at.")
+        if self.ended_at is not None and self.ended_at < self.started_at:
+            raise ValueError("ended_at cannot be earlier than started_at.")
         return self
