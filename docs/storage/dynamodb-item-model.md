@@ -750,9 +750,18 @@ condition_expression=attribute_not_exists(PK).
 - `execution_arn`
 - `status`
   (`QUEUED` | `RUNNING` | `SUCCEEDED` | `FAILED` | `QUARANTINED` | `CANCELLED`)
+- `correlation_id` (UUID; required; propagated across all workflow chains and
+  downstream events; see execution-governance.md Correlation ID Rules)
 - `started_at`
 - `ended_at`
 - `initiated_by` (optional; actor or service that initiated the run)
+- `error_classification` (optional; `RETRYABLE` | `TERMINAL` — written by `TerminalFailHandler`
+  before `FinalizeJobRunFailed`; absent on SUCCEEDED/QUARANTINED runs)
+- `error_fingerprint` (optional; 12-char hex SHA-256 digest of
+  `error_type + job_run_id + cause[:100]`; stable across retries of the same logical
+  failure; cross-referenceable with CloudWatch logs; written alongside
+  `error_classification`; distinct from `last_error_fingerprint` on `DataProduct`,
+  which drives cooldown/backoff logic)
 
 #### Example:
 ```json
@@ -762,13 +771,16 @@ condition_expression=attribute_not_exists(PK).
   "entity_type": "JobRun",
   "schema_version": "1",
   "job_run_id": "5a4fce02-3b02-4b5c-8d06-541d9f2d4f60",
+  "correlation_id": "a1b2c3d4-9e8f-7a6b-5c4d-3e2f1a0b9c8d",
   "workflow_name": "acquire_and_validate_spectra",
   "execution_arn": "arn:aws:states:us-east-1:123456789012:execution:AcquireAndValidateSpectra:...",
   "status": "SUCCEEDED",
   "started_at": "2026-02-23T18:10:00Z",
   "ended_at": "2026-02-23T18:12:00Z",
   "created_at": "2026-02-23T18:10:00Z",
-  "updated_at": "2026-02-23T18:12:00Z"
+  "updated_at": "2026-02-23T18:12:00Z",
+  "error_classification": null,
+  "error_fingerprint": null
 }
 ```
 

@@ -20,7 +20,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -55,7 +55,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -94,7 +94,7 @@
                                     ],
                                     "IntervalSeconds": 2,
                                     "MaxAttempts": 3,
-                                    "BackoffRate": 1,
+                                    "BackoffRate": 4,
                                     "JitterStrategy": "FULL"
                                 }
                             ],
@@ -122,7 +122,7 @@
                                     ],
                                     "IntervalSeconds": 2,
                                     "MaxAttempts": 3,
-                                    "BackoffRate": 1,
+                                    "BackoffRate": 4,
                                     "JitterStrategy": "FULL"
                                 }
                             ],
@@ -164,7 +164,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -180,6 +180,42 @@
             "End": true
         },
         "TerminalFailHandler": {
+            "Type": "Task",
+            "Comment": "Classifies the error and persists error_classification + error_fingerprint onto the JobRun before the final FAILED status is written. Implemented as a task in job_run_manager (task_name: TerminalFailHandler).",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "TerminalFailHandler",
+                "workflow_name": "ingest_new_nova",
+                "error.$": "$.error",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.terminal_fail",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "FinalizeJobRunFailed",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunFailed"
+        },
+        "FinalizeJobRunFailed": {
             "Type": "Task",
             "Resource": "${FinalizeJobRunFailedFunctionArn}",
             "Parameters": {

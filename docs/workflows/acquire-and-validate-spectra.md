@@ -63,32 +63,34 @@ Terminology:
 9. **AcquireArtifact** (Task)
 10. **ValidateBytes (Profile-Driven)** (Task)
 11. **DuplicateByFingerprint?** (Choice)
-   - Yes -> **RecordDuplicateLinkage** -> **FinalizeJobRunSuccess** (outcome = `DUPLICATE_OF_EXISTING`)
-   - No  -> continue
-12. **RecordDuplicateLinkage** (Task)
-13. **RecordValidationResult** (Task)
-14. **FinalizeJobRunSuccess** (Task) (outcome = `VALIDATED`)
-15. **QuarantineHandler** (Task)
-16. **FinalizeJobRunQuarantined** (Task)
-17. **TerminalFailHandler** (Task)
-18. **FinalizeJobRunFailed** (Task)
+    - Yes -> **RecordDuplicateLinkage** -> **FinalizeJobRunSuccess** (outcome = `DUPLICATE_OF_EXISTING`)
+    - No  -> continue
+12. **RecordValidationResult** (Task)
+13. **FinalizeJobRunSuccess** (Task) (outcome = `VALIDATED`)
+14. **QuarantineHandler** (Task)
+15. **FinalizeJobRunQuarantined** (Task)
+16. **TerminalFailHandler** (Task)
+17. **FinalizeJobRunFailed** (Task)
 
 ---
 
 ## Persisted Operational Fields (Data Product)
 
-To control retry frequency and prevent hammering providers, the data product (or its operational sub-record) SHOULD persist:
+To control retry frequency and prevent hammering providers, the data product SHOULD persist:
 
 Minimum viable fields:
-- `validation_status` (e.g., `DISCOVERED | VALIDATED | QUARANTINED | FAILED`)
-- `attempt_count_total`
+- `eligibility` (`ACQUIRE | NONE`) — controls EligibilityIndex (GSI1) visibility;
+  set to `ACQUIRE` on stub creation by `discover_spectra_products`; cleared to
+  `NONE` (with GSI1 attributes removed) on any terminal outcome
+- `validation_status` (`UNVALIDATED | VALID | QUARANTINED | TERMINAL_INVALID`)
+- `acquisition_status` (`STUB | ACQUIRED | FAILED_RETRYABLE | SKIPPED_DUPLICATE | SKIPPED_BACKOFF`)
+- `attempt_count`
 - `last_attempt_at`
 - `last_attempt_outcome` (`SUCCESS | RETRYABLE_FAILURE | TERMINAL_FAILURE | QUARANTINE`)
 - `last_error_fingerprint`
 - `next_eligible_attempt_at`  ← primary anti-ping control
-- `last_successful_fingerprint` (when validated)
-- `content_fingerprint` (when acquired)
-- `duplicate_of_data_product_id` (when duplicate detected)
+- `sha256` (when acquired; stable content fingerprint)
+- `duplicate_of_data_product_id` (when a byte-level duplicate of an existing VALID product is detected)
 
 Rich attempt details belong in JobRun/Attempt records and logs.
 
@@ -136,15 +138,15 @@ Discovery attempts metadata-level dedupe, but definitive dedupe may require acqu
 
 After acquisition (and once bytes are available), the workflow MUST:
 
-1. Compute a stable `content_fingerprint` (e.g., SHA-256 of canonical bytes or a deterministic normalization).
-2. Check whether an existing **VALIDATED** data product already has the same fingerprint.
+1. Compute a stable content fingerprint (`sha256` of canonical bytes or a deterministic normalization).
+2. Check whether an existing **VALID** data product already has the same fingerprint.
 3. If a match exists:
-   - Mark the current data product as a duplicate of the canonical product (e.g., `duplicate_of_data_product_id = <canonical>`).
+   - Mark the current data product as a duplicate of the canonical product (`duplicate_of_data_product_id = <canonical>`).
    - Optionally append this product's locator(s) as aliases to the canonical product.
    - Finalize the JobRun successfully with outcome `DUPLICATE_OF_EXISTING`.
-   - The current data product MUST NOT be marked `VALIDATED`.
+   - The current data product MUST NOT be marked `VALID`.
 4. If no match exists:
-   - Continue normal validation result recording and mark `VALIDATED`.
+   - Continue normal validation result recording and mark `VALID`.
 
 This preserves stable UUIDs while avoiding duplicate scientific products downstream.
 
@@ -215,7 +217,7 @@ Workflow idempotency key:
 
 Step dedupe keys (internal):
 - Acquire: `Acquire:{data_product_id}:{expected_identity_or_locator}`
-- Validate: `Validate:{data_product_id}:{content_fingerprint}`
+- Validate: `Validate:{data_product_id}:{sha256}`
 
 Invariants:
 - Exactly one `data_product_id` per execution (MVP Mode 1)

@@ -60,5 +60,5 @@ class QuarantineError(Exception):
     Raise when the data is not clearly wrong but cannot be safely processed:
       - Ambiguous archive resolver results
       - Conflicting authoritative sources
-      - Coordinate match in the ambiguous 2"–10" band
+      - Coordinate match in the ambiguous 2"-10" band
     """

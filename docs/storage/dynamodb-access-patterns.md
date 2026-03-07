@@ -11,7 +11,7 @@ Field definitions and item structure are defined in `dynamodb-item-model.md`.
 
 The table is heterogeneous and uses namespaced `PK` values.
 
-Two primary partition types exist:
+Three primary partition types exist:
 
 1) Per-nova partitions
 - `PK = "<nova_id>"`
@@ -20,6 +20,8 @@ Two primary partition types exist:
 - `PK = "NAME#<normalized_name>"`
 - `PK = "LOCATOR#<provider>#<locator_identity>"`
 - `PK = "REFERENCE#<bibcode>"`
+- `PK = "WORKFLOW#<correlation_id>"` — pre-nova workflow artifacts written before a
+  `nova_id` exists (e.g. `FileObject` records during `initialize_nova` quarantine)
 
 Within per-nova partitions, item types are distinguished by `SK` prefixes such as:
 - `NOVA`
@@ -28,6 +30,22 @@ Within per-nova partitions, item types are distinguished by `SK` prefixes such a
 - `NOVAREF#...`
 - `JOBRUN#...`
 - `ATTEMPT#...`
+
+### Global Secondary Index: EligibilityIndex (GSI1)
+
+The table has one GSI used to identify spectra products that are ready to acquire:
+
+- **GSI1PK** = `<nova_id>` — scopes the query to a single nova
+- **GSI1SK** = `ELIG#<eligibility>#SPECTRA#<provider>#<data_product_id>`
+
+Key values:
+- `eligibility = ACQUIRE` → GSI1 attributes are **present** on the item; product appears in the index
+- `eligibility = NONE` → GSI1 attributes are **absent** (removed); product drops off the index
+
+This is the core signal that controls whether a spectra product is eligible for
+`acquire_and_validate_spectra`. It is set by `discover_spectra_products` on stub creation
+and cleared by `acquire_and_validate_spectra` on any terminal outcome (VALID, QUARANTINED,
+TERMINAL_INVALID, or SKIPPED_*). See dynamodb-item-model.md §3.2 for the full field spec.
 
 > **`data_product_id` — stable, deterministic UUID (SPECTRA products)**
 >
@@ -90,6 +108,12 @@ Purpose: Resolve a candidate name to a stable `nova_id`, or create a new `Nova`.
     - status = QUARANTINED
     - quarantine_reason_code = COORDINATE_AMBIGUITY
     - `PK = "<new_nova_id>"`, `SK = "NOVA"`
+
+- Write `FileObject` quarantine context record (before `nova_id` is confirmed):
+  `PK = "WORKFLOW#<correlation_id>"`
+  `SK = "FILE#WORKFLOW_QUARANTINE_CONTEXT#ID#<file_id>"`
+  *(Uses `correlation_id` as partition key because no stable `nova_id` exists at write time.
+  See dynamodb-item-model.md §5 for the full FileObject key table.)*
 
 **Side effects**
 - Finalize (`QUARANTINED`)
@@ -177,12 +201,18 @@ Purpose: Discover spectra products across providers, assign stable `data_product
   Stub state includes:
   - `acquisition_status = STUB`
   - `validation_status = UNVALIDATED`
-  - `eligibility = ACQUIRE`
-  - cooldown fields initialized (attempt_count = 0, etc.)
-  - eligibility index attributes present (so it can appear in the eligibility index)
+  - `eligibility = ACQUIRE` ← marks this product as ready to acquire
+  - cooldown fields initialized (`attempt_count = 0`, `next_eligible_attempt_at = null`, etc.)
+  - GSI1 attributes written so the product appears in the EligibilityIndex:
+    - `GSI1PK = "<nova_id>"`
+    - `GSI1SK = "ELIG#ACQUIRE#SPECTRA#<provider>#<data_product_id>"`
+
+  A product that resolves to an existing `data_product_id` that is already
+  `VALID` must **not** have a new acquisition request published for it, and its
+  `eligibility` must remain `NONE` (GSI1 attributes absent).
 
 ### Side effects
-- Publish one `acquire_and_validate_spectra` request per `data_product_id`
+- Publish one `acquire_and_validate_spectra` event per newly eligible `data_product_id`
 
 ---
 
@@ -214,14 +244,26 @@ Purpose: Acquire bytes for a single spectra product, validate via profile select
   - Persist fingerprints/checksums and profile selection outputs as applicable
   - Update lifecycle state (`validation_status`, `acquisition_status`, etc.)
   - Set `eligibility = NONE`
-  - Remove eligibility index attributes so the product no longer appears in the eligibility index
+  - **Remove GSI1 attributes** (`GSI1PK`, `GSI1SK`) so the product drops off the
+    EligibilityIndex and cannot be re-acquired by a future sweep
 
-### Optional query pattern (admin/repair)
-- List eligible spectra products for a nova via eligibility index:
-  - Query `GSI1PK = "<nova_id>"`
-  - `GSI1SK begins_with "ELIG#ACQUIRE#SPECTRA#"`
+### EligibilityIndex query (core acquisition trigger pattern)
 
-Note: In MVP, executions are normally launched from discovery output; this query supports repair/sweeps.
+In MVP, `acquire_and_validate_spectra` executions are launched directly from
+`discover_spectra_products` output events — the GSI is not used for normal dispatch.
+
+The GSI exists to support:
+- **Repair / retry sweeps**: re-queue all eligible products for a nova after an outage
+- **Operator-triggered re-ingestion**: list what still needs acquiring without scanning all products
+
+```
+Query GSI1PK = "<nova_id>"
+      GSI1SK begins_with "ELIG#ACQUIRE#SPECTRA#"
+```
+
+Returns all spectra products for the nova with `eligibility = ACQUIRE`, ordered by
+`<provider>#<data_product_id>`. An empty result means all products are either
+validated, quarantined, or terminal — nothing left to acquire.
 
 ---
 
@@ -246,11 +288,14 @@ SK = "PRODUCT#PHOTOMETRY_TABLE"
 
 Update photometry table `DataProduct` in place:
 
-- `current_s3_key`
-- `photometry_schema_version`
+- `s3_bucket`
+- `s3_key`
 - `last_ingestion_at`
 - `last_ingestion_source`
 - `ingestion_count`
+
+Note: `photometry_schema_version` is not a persisted field on `DataProduct`. If schema
+versioning is ever required, a typed field must be added to the contract first.
 
 ### Canonical Overwrite Behavior
 
@@ -279,6 +324,32 @@ Insert `FileObject` entries for:
 - Raw uploaded file
 - Split per-nova file (if applicable)
 - Derived artifacts
+
+---
+
+## name_check_and_reconcile
+
+Purpose: Validate and reconcile the canonical name and aliases for an existing nova.
+
+### Reads
+- Read nova metadata:
+  `PK = "<nova_id>"`, `SK = "NOVA"`
+
+- Query existing `NameMapping` entries for this nova:
+  *(via GSI or scan of known aliases on the Nova item)*
+
+### Writes
+- Upsert `NameMapping` items for any new or corrected aliases:
+  `PK = "NAME#<normalized_alias>"`, `SK = "NOVA#<nova_id>"`
+
+- Update `Nova.primary_name` / `Nova.primary_name_normalized` if a canonical name
+  change is approved
+
+### Notes
+- `proposed_public_name` and `proposed_aliases` are passed via `attributes` on the
+  boundary event, not as typed fields. See `NameCheckAndReconcileEvent` in `events.py`.
+- This workflow operates entirely downstream of `initialize_nova`; it does not perform
+  coordinate-based identity resolution.
 
 ---
 

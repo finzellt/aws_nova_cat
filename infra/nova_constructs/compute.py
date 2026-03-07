@@ -71,7 +71,8 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
         service_dir="job_run_manager",
         description=(
             "Writes JobRun and Attempt operational records. "
-            "Handles BeginJobRun, FinalizeJobRunSuccess, FinalizeJobRunFailed, "
+            "Handles BeginJobRun, TerminalFailHandler (error classification + fingerprint), "
+            "FinalizeJobRunSuccess, FinalizeJobRunFailed, "
             "FinalizeJobRunQuarantined. Used by: all workflows (shared)."
         ),
     ),

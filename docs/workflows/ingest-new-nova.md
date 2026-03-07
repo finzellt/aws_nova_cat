@@ -23,18 +23,26 @@ It assumes the nova exists (created earlier by initialize_nova or other establis
 - It MAY publish an internal “launched” event for auditing, but downstream consumers are optional.
   - If present: `schemas/events/ingest_new_nova_launched/latest.json` (optional, if such a schema exists)
 
+## Input Validation
+
+`ValidateInput` and `EnsureCorrelationId` Pass/Choice states are **not present** in
+this workflow's ASL. Input is published by `initialize_nova` (and any other internal
+publisher) whose outbound Pydantic event model enforces the contract at the publishing
+boundary. Workflow-entry validation would be redundant and is omitted by design.
+See `initialize_nova_asl.json` for the pattern used at the API-facing boundary.
+
+---
+
 ## State Machine (Explicit State List)
-1. **ValidateInput** (Pass)
-2. **EnsureCorrelationId** (Choice + Pass)
-3. **BeginJobRun** (Task)
-4. **AcquireIdempotencyLock** (Task)
-5. **LaunchDownstream** (Parallel)
+1. **BeginJobRun** (Task)
+2. **AcquireIdempotencyLock** (Task)
+3. **LaunchDownstream** (Parallel)
    - **LaunchRefreshReferences** (Task) -> publishes `schemas/events/refresh_references/latest.json`
    - **LaunchDiscoverSpectraProducts** (Task) -> publishes `schemas/events/discover_spectra_products/latest.json`
    - (Optional future) launch other workflows
-6. **FinalizeJobRunSuccess** (Task)
-7. **TerminalFailHandler** (Task)
-8. **FinalizeJobRunFailed** (Task)
+4. **FinalizeJobRunSuccess** (Task)
+5. **TerminalFailHandler** (Task)
+6. **FinalizeJobRunFailed** (Task)
 
 ## Retry / Timeout Policy (per state)
 - BeginJobRun:

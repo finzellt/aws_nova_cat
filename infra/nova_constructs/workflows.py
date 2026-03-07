@@ -47,7 +47,7 @@ class NovaCatWorkflows(Construct):
     Exposes:
       initialize_nova          — the initialize_nova state machine
       ingest_new_nova          — the ingest_new_nova state machine
-      refresh_references       — the refresh_references state machine (placeholder stub)
+      refresh_references       — the refresh_references state machine
       discover_spectra_products — the discover_spectra_products state machine (placeholder stub)
     """
 
@@ -63,18 +63,34 @@ class NovaCatWorkflows(Construct):
         self._workflows_dir = os.path.join(os.path.dirname(__file__), "../workflows")
 
         # ------------------------------------------------------------------
-        # Downstream placeholder state machines
+        # discover_spectra_products state machine (placeholder stub)
         #
-        # Provisioned before ingest_new_nova and initialize_nova so their ARNs
-        # can be injected into workflow_launcher as environment variables.
-        # Placeholder ASLs contain a single Fail state — they will be replaced
-        # in their respective epics.
+        # Placeholder ASL contains a single Fail state — will be replaced
+        # in its respective epic.
+        # ------------------------------------------------------------------
+        # ------------------------------------------------------------------
+        # refresh_references state machine
         # ------------------------------------------------------------------
         self.refresh_references = self._create_state_machine(
             name="refresh-references",
             asl_file="refresh_references.asl.json",
-            substitutions={},
-            invokable_functions=[],
+            substitutions={
+                "BeginJobRunFunctionArn": compute.job_run_manager.function_arn,
+                "FinalizeJobRunSuccessFunctionArn": compute.job_run_manager.function_arn,
+                "FinalizeJobRunFailedFunctionArn": compute.job_run_manager.function_arn,
+                # TerminalFailHandler state also routes through job_run_manager
+                # (task_name: TerminalFailHandler — classifies error before FinalizeJobRunFailed)
+                "JobRunManagerFunctionArn": compute.job_run_manager.function_arn,
+                "AcquireIdempotencyLockFunctionArn": compute.idempotency_guard.function_arn,
+                "QuarantineHandlerFunctionArn": compute.quarantine_handler.function_arn,
+                "ReferenceManagerFunctionArn": compute.reference_manager.function_arn,
+            },
+            invokable_functions=[
+                compute.job_run_manager,
+                compute.idempotency_guard,
+                compute.quarantine_handler,
+                compute.reference_manager,
+            ],
         )
         self.discover_spectra_products = self._create_state_machine(
             name="discover-spectra-products",
@@ -93,6 +109,9 @@ class NovaCatWorkflows(Construct):
                 "BeginJobRunFunctionArn": compute.job_run_manager.function_arn,
                 "FinalizeJobRunSuccessFunctionArn": compute.job_run_manager.function_arn,
                 "FinalizeJobRunFailedFunctionArn": compute.job_run_manager.function_arn,
+                # TerminalFailHandler state also routes through job_run_manager
+                # (task_name: TerminalFailHandler — classifies error before FinalizeJobRunFailed)
+                "JobRunManagerFunctionArn": compute.job_run_manager.function_arn,
                 "AcquireIdempotencyLockFunctionArn": compute.idempotency_guard.function_arn,
                 "LaunchRefreshReferencesFunctionArn": compute.workflow_launcher.function_arn,
                 "LaunchDiscoverSpectraProductsFunctionArn": compute.workflow_launcher.function_arn,
@@ -151,6 +170,9 @@ class NovaCatWorkflows(Construct):
                 "FinalizeJobRunSuccessFunctionArn": compute.job_run_manager.function_arn,
                 "FinalizeJobRunFailedFunctionArn": compute.job_run_manager.function_arn,
                 "FinalizeJobRunQuarantinedFunctionArn": compute.job_run_manager.function_arn,
+                # TerminalFailHandler state also routes through job_run_manager
+                # (task_name: TerminalFailHandler — classifies error before FinalizeJobRunFailed)
+                "JobRunManagerFunctionArn": compute.job_run_manager.function_arn,
                 "AcquireIdempotencyLockFunctionArn": compute.idempotency_guard.function_arn,
                 "NormalizeCandidateNameFunctionArn": compute.nova_resolver.function_arn,
                 "CheckExistingNovaByNameFunctionArn": compute.nova_resolver.function_arn,
@@ -161,7 +183,6 @@ class NovaCatWorkflows(Construct):
                 "ResolveCandidateAgainstPublicArchivesFunctionArn": compute.archive_resolver.function_arn,
                 "PublishIngestNewNovaFunctionArn": compute.workflow_launcher.function_arn,
                 "QuarantineHandlerFunctionArn": compute.quarantine_handler.function_arn,
-                "TerminalFailHandlerFunctionArn": compute.quarantine_handler.function_arn,
             },
             invokable_functions=[
                 compute.job_run_manager,
