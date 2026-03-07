@@ -3,8 +3,15 @@
 This document defines the DynamoDB item types, keys, fields, and examples for Nova Cat persistence **after the spectra refactor**:
 - **Spectra** are atomic **data products** identified by `data_product_id` (one per spectra file/product).
 - **Photometry** has exactly **one** main `PHOTOMETRY_TABLE` data product per nova (one DynamoDB item), updated in place over time.
-- “Dataset” is not a persisted concept for MVP.
+- "Dataset" is not a persisted concept for MVP.
 - Ordering requirement: within a nova, items should be sortable by **product type first**, then provider (for spectra).
+
+**`data_product_id` — stable, deterministic UUID (SPECTRA products)**
+
+Minted during `discover_spectra_products`. Derived as follows:
+- **Preferred:** `UUID(hash(provider + provider_product_key))` — when a provider-native product ID is available.
+- **Fallback:** `UUID(hash(provider + normalized_canonical_locator))` — when no native ID exists.
+
 
 ### Design goals:
 - Minimal, cost-conscious, access-pattern driven
@@ -33,14 +40,14 @@ This document defines the DynamoDB item types, keys, fields, and examples for No
 ---
 
 ### Minimal GSIs:
-- **GSI1 (EligibilityIndex)** for *per-nova* “eligible spectra products” queries
+- **GSI1 (EligibilityIndex)** for *per-nova* "eligible spectra products" queries
   - `GSI1PK = "<nova_id>"`
   - `GSI1SK = "ELIG#<eligibility>#<product_type>#<provider>#<data_product_id>"`
 
 ---
 
 ### Notes:
-- We intentionally **do not** add a dedicated “human name” GSI. Humans search by name through `NameMapping` items (primary name and aliases).
+- We intentionally **do not** add a dedicated "human name" GSI. Humans search by name through `NameMapping` items (primary name and aliases).
 
 ---
 
@@ -67,8 +74,8 @@ Canonical nova record.
 - `coord_frame` (string; e.g., `"ICRS"`; optional but recommended for explicitness)
 - `coord_epoch` (string; e.g., `"J2000"`; optional but recommended for explicitness)
 - `discovery_date` (optional, derived from references)
-- `aliases` (string list; raw alias strings
-- `status` (ACTIVE | MERGED | DEPRECATED)
+- `aliases` (string list; raw alias strings)
+- `status` (ACTIVE | QUARANTINED | MERGED | DEPRECATED)
 - `created_at`, `updated_at` (ISO-8601 UTC)
 
 #### Example:
@@ -129,7 +136,7 @@ Used for:
 ```json
 {
   "PK": "NAME#nova sco 2012 #2",
-  "SK": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
+  "SK": "NOVA#4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
   "entity_type": "NameMapping",
   "schema_version": "1",
   "name_raw": "V1324 Sco",
@@ -185,7 +192,7 @@ There are two product types:
 - `last_ingestion_source` (small descriptor or pointer)
 - `ingestion_count` (optional)
 
-###### Optional “pseudo-versioning”
+###### Optional "pseudo-versioning"
 
 - `last_ingested_file_id`
   **or**
@@ -218,6 +225,11 @@ There are two product types:
 
 - `PK = "<nova_id>"`
 - `SK = "PRODUCT#SPECTRA#<provider>#<data_product_id>"`
+
+`data_product_id` here is a stable, immutable UUID minted during `discover_spectra_products`:
+- **Preferred:** `UUID(hash(provider + provider_product_key))` when a provider-native ID is available.
+- **Fallback:** `UUID(hash(provider + normalized_canonical_locator))` when no native ID exists.
+See ADR-003 for full specification.
 
 ---
 
@@ -265,7 +277,14 @@ Example locator object:
 - `attempt_count` (int)
 - `last_attempt_at` (ISO-8601 UTC)
 - `next_eligible_attempt_at` (ISO-8601 UTC)
+- `last_attempt_outcome`
+  (`SUCCESS` | `RETRYABLE_FAILURE` | `TERMINAL_FAILURE` | `QUARANTINE`)
+  → Operational outcome of the most recent attempt. Kept separate from
+  `validation_status` per the scientific/operational state separation invariant.
 - `last_error_fingerprint` (low-cardinality identifier)
+- `duplicate_of_data_product_id` (UUID | null)
+  → Set when this product was found to be a byte-level duplicate of an existing
+  validated product. Holds the canonical `data_product_id` of the original.
 
 ---
 
@@ -428,8 +447,12 @@ Example locator object:
 
 Used during `discover_spectra_products` to:
 
-- Detect “we already know this spectra product”
+- Detect "we already know this spectra product"
 - Enforce stable identity even if multiple equivalent locators exist
+
+`data_product_id` stored here is the stable UUID previously minted via deterministic derivation
+(`UUID(hash(provider + provider_product_key))` or fallback). This item is the deduplication
+authority: discovery always checks here before assigning a new `data_product_id`. See ADR-003.
 
 ---
 
@@ -452,7 +475,7 @@ Locator identity normalization rules:
 - Preferred: `provider_product_id:<id>`
 - Else: `url:<normalized_url>`
 
-- `data_product_id`
+- `data_product_id` (stable UUID; see ADR-003 for derivation)
 - `nova_id` (stored as an attribute for traceability)
 - `created_at`
 - `updated_at`
@@ -502,6 +525,9 @@ guaranteed uniqueness and direct-fetch capability.
 > For `WORKFLOW_QUARANTINE_CONTEXT`, the PK is `WORKFLOW#<correlation_id>` because
 > no `nova_id` exists yet at the point of writing (e.g. quarantine during `initialize_nova`).
 > This is consistent with how pre-nova `JobRun` records are keyed.
+>
+> `<data_product_id>` appearing in spectra-role SKs is the stable UUID minted during
+> `discover_spectra_products`. See ADR-003 for derivation details.
 
 ---
 
@@ -511,7 +537,8 @@ guaranteed uniqueness and direct-fetch capability.
 - `entity_type = "FileObject"`
 - `file_id` — UUID; stable forever
 - `nova_id` — UUID | None (None before nova exists)
-- `data_product_id` — UUID | None (None when not product-scoped)
+- `data_product_id` — UUID | None (None when not product-scoped; for SPECTRA roles,
+  this is the stable UUID minted during `discover_spectra_products` — see ADR-003)
 - `role` — see role table above
 - `bucket`
 - `key`
@@ -718,12 +745,14 @@ condition_expression=attribute_not_exists(PK).
 - `schema_version` (internal item evolution)
 - `entity_type = "JobRun"`
 - `job_run_id` (UUID)
+- `job_type` (e.g. `InitializeNova`, `RefreshReferences`, etc.)
 - `workflow_name`
 - `execution_arn`
 - `status`
-  (`RUNNING` | `SUCCEEDED` | `FAILED`)
+  (`QUEUED` | `RUNNING` | `SUCCEEDED` | `FAILED` | `QUARANTINED` | `CANCELLED`)
 - `started_at`
 - `ended_at`
+- `initiated_by` (optional; actor or service that initiated the run)
 
 #### Example:
 ```json
@@ -750,7 +779,7 @@ condition_expression=attribute_not_exists(PK).
 #### Key
 
 - `PK = "<nova_id>"`
-- `SK = "ATTEMPT#<job_run_id>#<task_name>#<attempt_no>#<timestamp>"`
+- `SK = "ATTEMPT#<job_run_id>#<task_name>#<attempt_number>#<timestamp>"`
 
 ---
 
@@ -760,8 +789,8 @@ condition_expression=attribute_not_exists(PK).
 - `entity_type = "Attempt"`
 - `job_run_id`
 - `task_name` (Step Functions state name)
-- `attempt_no`
-- `status` (`STARTED` | `SUCCEEDED` | `FAILED`)
+- `attempt_number`
+- `status` (`STARTED` | `SUCCEEDED` | `FAILED` | `TIMED_OUT` | `CANCELLED`)
 - `error_type`
 - `error_message` (short)
 - `duration_ms`
@@ -775,7 +804,7 @@ condition_expression=attribute_not_exists(PK).
   "schema_version": "1",
   "job_run_id": "5a4fce02-3b02-4b5c-8d06-541d9f2d4f60",
   "task_name": "download_bytes",
-  "attempt_no": 1,
+  "attempt_number": 1,
   "status": "SUCCEEDED",
   "duration_ms": 8423,
   "created_at": "2026-02-23T18:10:10Z",

@@ -35,19 +35,18 @@ Each spectra data product SHOULD persist:
 Scientific state:
 
 - `acquisition_status`
-  - `STUB | ACQUIRED | FAILED`
+  - `STUB | ACQUIRED | FAILED_RETRYABLE | SKIPPED_DUPLICATE | SKIPPED_BACKOFF`
 - `validation_status`
-  - `UNVALIDATED | VALID | QUARANTINED`
+  - `UNVALIDATED | VALID | QUARANTINED | TERMINAL_INVALID`
 
 Operational metadata:
 
-- `attempt_count_total`
+- `attempt_count`
 - `last_attempt_at`
 - `last_attempt_outcome`
   - `SUCCESS | RETRYABLE_FAILURE | TERMINAL_FAILURE | QUARANTINE`
 - `last_error_fingerprint`
 - `next_eligible_attempt_at`  ← primary anti-ping control
-- `last_successful_fingerprint` (when validated)
 
 ---
 
@@ -67,9 +66,9 @@ Before acquisition:
 
 On RETRYABLE acquisition failure:
 
-- Increment `attempt_count_total`
+- Increment `attempt_count`
 - Compute new cooldown:
-- next_eligible_attempt_at = now + backoff(attempt_count_total)
+- next_eligible_attempt_at = now + backoff(attempt_count)
 - Persist updated fields
 
 Backoff SHOULD be capped exponential.

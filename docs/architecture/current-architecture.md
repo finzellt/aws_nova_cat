@@ -1,6 +1,6 @@
 # Nova Cat — Current Architecture Snapshot
 
-_Last Updated: 2026-02-26_
+_Last Updated: 2026-03-06_
 
 This document captures the **authoritative architectural baseline** of Nova Cat at this point in time.
 
@@ -75,7 +75,15 @@ Identity quarantine persists as:
 
 ---
 
-## 2.3 Locator Identity
+## 2.3 Locator Identity and data_product_id
+
+**`data_product_id` — stable, deterministic UUID (SPECTRA products)**
+
+Minted during `discover_spectra_products`. Derived as follows:
+- **Preferred:** `UUID(hash(provider + provider_product_key))` — when a provider-native product ID is available.
+- **Fallback:** `UUID(hash(provider + normalized_canonical_locator))` — when no native ID exists.
+
+Immutable once assigned; never reused across distinct products. See ADR-003 for full specification.
 
 Each spectra product identity is deterministic:
 
@@ -83,7 +91,6 @@ Each spectra product identity is deterministic:
 identity_key = hash(provider + provider_product_key + canonical_locator)
 data_product_id = UUID(identity_key)
 ```
-
 
 `LOCATOR#<provider>#<locator_identity>` ensures stable deduplication.
 
@@ -95,14 +102,14 @@ data_product_id = UUID(identity_key)
 
 Fields include:
 
-Fields include:
-
 - nova_id
 - primary_name
 - primary_name_normalized
 - status
 - position (ra_deg, dec_deg, frame, epoch)
-- discovery_date
+- discovery_date — YYYY-MM-DD string; day `00` when only month precision is available
+  (e.g. `"2013-06-00"`); never use `01` as a proxy for unknown day.
+  See ADR-005 Amendment (Discovery Date Precision).
 
 Derived astronomical metadata (e.g., constellation) is not persisted.
 
@@ -123,6 +130,11 @@ Each product has independent:
 - quarantine_reason_code (if applicable)
 
 No dataset abstraction exists.
+
+`data_product_id` is a stable UUID minted during `discover_spectra_products` via deterministic
+derivation — `UUID(hash(provider + provider_product_key))`, falling back to
+`UUID(hash(provider + normalized_canonical_locator))` when no provider-native ID exists.
+Immutable once assigned. See ADR-003 for full specification.
 
 ---
 
@@ -231,7 +243,8 @@ Coordinator:
 ## 4.3 discover_spectra_products
 - Map across providers
 - Adapter-based discovery
-- Assign data_product_id
+- Assign `data_product_id` (stable UUID derived as `UUID(hash(provider + provider_product_key))`
+  or `UUID(hash(provider + normalized_canonical_locator))`; see ADR-003)
 - Publish AcquireAndValidateSpectra continuation event
 
 ---
@@ -306,6 +319,8 @@ Item types:
 - NAME#<normalized_name>
 - LOCATOR#<provider>#<locator_identity>
 - REFERENCE#<bibcode>
+- WORKFLOW#<correlation_id> — pre-nova workflow artifacts (e.g. FileObjects written
+  during `initialize_nova` quarantine before a `nova_id` exists)
 
 S3 layout:
 - raw/

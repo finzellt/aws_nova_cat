@@ -22,7 +22,7 @@ class EventBase(BaseModel):
     - Boundary events MUST NOT include workflow idempotency keys or step dedupe keys.
     - correlation_id SHOULD be provided by callers; if absent, the workflow (via this model)
       generates one and propagates it downstream.
-    - initiated_at represents when the caller originated the request. It is distinct from
+    - started_at represents when the caller originated the request. It is distinct from
       workflow execution start time and is useful for latency analysis and event age checks.
     """
 
@@ -32,13 +32,13 @@ class EventBase(BaseModel):
         default="1.0.0", description="Semantic version for this event contract."
     )
     correlation_id: UUID = Field(default_factory=uuid4)
-    initiated_at: datetime = Field(default_factory=utcnow)
+    started_at: datetime = Field(default_factory=utcnow)
 
-    @field_validator("initiated_at")
+    @field_validator("started_at")
     @classmethod
     def ensure_tz_aware(cls, v: datetime) -> datetime:
         if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
-            raise ValueError("initiated_at must be timezone-aware (UTC).")
+            raise ValueError("started_at must be timezone-aware (UTC).")
         return v
 
 
@@ -102,6 +102,12 @@ class DiscoverSpectraProductsEvent(EventBase):
     Note: Discovery source constraints (e.g., preferred providers) are passed via attributes
     rather than typed fields, consistent with the workflow spec which requires only nova_id.
     Callers may include {"sources": ["ESO", "MAST"]} in attributes.
+
+    This workflow is responsible for minting data_product_id values for newly discovered
+    spectra products. Each data_product_id is a stable, deterministically derived UUID:
+        UUID(hash(provider + provider_product_key))           [preferred]
+        UUID(hash(provider + normalized_canonical_locator))   [fallback]
+    See ADR-003 for the full data_product_id specification.
     """
 
     event_version: Literal["1.0.0"] = "1.0.0"
@@ -116,8 +122,13 @@ class AcquireAndValidateSpectraEvent(EventBase):
     """
     One data_product_id per execution (Mode 1).
 
-    The workflow reads locator/provenance/acquisition metadata from the persisted DataProduct record.
-    Boundary event identifies the target data product only.
+    The workflow reads locator/provenance/acquisition metadata from the persisted DataProduct
+    record. The boundary event identifies the target data product only.
+
+    data_product_id is the stable UUID previously minted during discover_spectra_products via
+    deterministic derivation: UUID(hash(provider + provider_product_key)), falling back to
+    UUID(hash(provider + normalized_canonical_locator)) when no provider-native ID exists.
+    See ADR-003 for the full specification.
 
     Note: provider is included in the boundary event because the DynamoDB item key is
     PRODUCT#SPECTRA#<provider>#<data_product_id> — the Lambda needs provider to construct
@@ -129,7 +140,16 @@ class AcquireAndValidateSpectraEvent(EventBase):
 
     nova_id: UUID
     provider: str = Field(..., min_length=1, max_length=128)
-    data_product_id: UUID
+    data_product_id: UUID = Field(
+        ...,
+        description=(
+            "Stable UUID identifying the spectra data product to acquire. "
+            "Minted during discover_spectra_products via deterministic derivation — "
+            "UUID(hash(provider + provider_product_key)) or "
+            "UUID(hash(provider + normalized_canonical_locator)). "
+            "See ADR-003 for full specification."
+        ),
+    )
 
     attributes: dict[str, Any] = Field(default_factory=dict)
 

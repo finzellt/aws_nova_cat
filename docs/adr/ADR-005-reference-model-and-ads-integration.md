@@ -5,6 +5,12 @@
 **Epic:** 12 (prerequisites pass)
 **Deciders:** Nova Cat core team
 
+> **Superseded in part by ADR-007.**
+> Decision 2 (ADS Query Strategy) described a parallel name + coordinate query approach
+> that was subsequently abandoned. The coordinate cone search was found to be unreliably
+> documented in ADS and could not be validated. The implemented strategy is name-only
+> (all known aliases OR-joined). See ADR-007 for the authoritative record.
+
 ---
 
 ## Context
@@ -53,7 +59,7 @@ sequential fallback. Bibcode is globally unique in ADS and is the only dedup key
 
 ### 3. `Reference` Is a Global Entity with Its Own Top-Level DDB Partition
 
-A `Reference` item lives at `PK=REFERENCE#<reference_id>` / `SK=METADATA`, not under
+A `Reference` item lives at `PK=REFERENCE#<bibcode>` / `SK=METADATA`, not under
 a `nova_id` partition. The Nova↔Reference link (`NOVAREF`) remains nova-scoped.
 
 **Rationale:** A paper describing multiple novas must not be duplicated. The
@@ -62,9 +68,12 @@ the correct many-to-many model. The prior placeholder layout (`PK=<nova_id>` /
 `SK=REF#<reference_id>`) was written before the global/scoped decision was made and
 is incorrect.
 
-**Dedup key:** `source` + `source_key` (for ADS: `source="ADS"`,
-`source_key=<bibcode>`). `UpsertReferenceEntity` uses this pair to detect existing
-items and update mutable metadata fields without changing the stable `reference_id`.
+**Dedup key:** ADS bibcode. `UpsertReferenceEntity` performs a direct `GetItem` on
+`REFERENCE#<bibcode>` to detect existing items and update mutable metadata fields
+(title, authors, year, publication_date, doi, arxiv_id, provenance, updated_at)
+without affecting the stable partition key. No internal UUID is assigned to
+`Reference` or `NovaReference` items; bibcode is both the stable identifier and the
+DDB partition key component.
 
 ---
 
@@ -109,25 +118,25 @@ begins. This ADR is not complete until these changes are made.
 
 ### Open Item - Discovery Date Precision
 
-Requires a decision before ComputeDiscoveryDate is implemented.
+> **RESOLVED** — See ADR-005 Amendment (Discovery Date Precision), accepted 2026-03-03.
+> The decision below is preserved for historical context only.
 
-Nova.discovery_date in entities.py is already typed datetime or None (full
-timezone-aware datetime). No model change needed on Nova.
+~~Requires a decision before ComputeDiscoveryDate is implemented.~~
 
-However, Reference stores only year as an integer. The best precision
+~~Nova.discovery_date in entities.py is already typed datetime or None (full
+timezone-aware datetime). No model change needed on Nova.~~
+
+~~However, Reference stores only year as an integer. The best precision
 available from ADS pubdate is YYYY-MM. The question is whether to
-preserve that month-level precision on the Reference item itself.
+preserve that month-level precision on the Reference item itself.~~
 
-Options:
-1. Keep year only. ComputeDiscoveryDate writes datetime(year, 1, 1, tzinfo=UTC)
-   as a year-precision proxy. No model change.
-2. Add publication_date as an optional string field to Reference (format YYYY-MM,
-   sourced from ADS pubdate). ComputeDiscoveryDate writes
-   datetime(year, month, 1, tzinfo=UTC). Requires entities.py change and schema
-   regen before Epic 12.
-
-Note: ATels and CBAT circulars frequently have precise month-level dates and are
-often the earliest records, making month-level precision meaningful in practice.
+**Resolution:** Both `Nova.discovery_date` and `Reference.publication_date` are
+stored as `str | None` in `YYYY-MM-DD` format. When only month-level precision is
+available, day is `00` (e.g. `"2013-06-00"`). Python's `date` type rejects day `0`,
+making string storage necessary. The `_DISCOVERY_DATE_RE` regex validator (month
+`01–12`, day `00–31`) is shared by both fields. The `00` day convention is an
+unambiguous signal that day-level precision is unavailable — `01` must never be used
+as a proxy for unknown day. See ADR-005 Amendment for full rationale.
 
 ---
 

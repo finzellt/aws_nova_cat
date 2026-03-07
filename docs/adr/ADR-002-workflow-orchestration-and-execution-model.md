@@ -1,4 +1,4 @@
-# ADR-003: Workflow Orchestration and Execution Model
+# ADR-002: Workflow Orchestration and Execution Model
 
 > Superseded in part by ADR-004 (Architecture Baseline and Alignment Policy).
 > References to Dataset/dataset_id are obsolete.
@@ -7,7 +7,7 @@
 
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Nova Cat uses a contract-first architecture:

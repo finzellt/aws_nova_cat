@@ -19,7 +19,7 @@ Design notes:
     machine — we use "<nova_id>-<job_run_id[:8]>" (36 + 1 + 8 = 45 chars).
   - ExecutionAlreadyExists is treated as success — if a retry of a launch task
     hits this, the execution is already running and the goal is achieved.
-  - PublishAcquireAndValidateSpectraRequests is stubbed pending Epic 12+.
+  - PublishAcquireAndValidateSpectraRequests is stubbed pending spectra acquisition implementation.
 
 Environment variables (injected by CDK):
   NOVA_CAT_TABLE_NAME                        — DynamoDB table name (standard env)

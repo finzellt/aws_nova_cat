@@ -139,9 +139,15 @@ def _finalize_job_run_success(event: dict[str, Any], context: object) -> dict[st
     """
     Emit JobRun SUCCEEDED with the terminal outcome.
 
-    Expected outcomes:
-        CREATED_AND_LAUNCHED | EXISTS_AND_LAUNCHED |
-        NOT_FOUND | NOT_A_CLASSICAL_NOVA | LAUNCHED
+    Known outcomes by workflow:
+        initialize_nova:        CREATED_AND_LAUNCHED | EXISTS_AND_LAUNCHED |
+                                NOT_FOUND | NOT_A_CLASSICAL_NOVA
+        ingest_new_nova:        LAUNCHED
+        refresh_references:     (no named outcome; success implies completion)
+        discover_spectra_products: (no named outcome; success implies completion)
+        acquire_and_validate_spectra: (no named outcome; success implies completion)
+        ingest_photometry:      INGESTED | SKIPPED_DUPLICATE
+        name_check_and_reconcile: UPDATED | NO_CHANGE
     """
     job_run: dict[str, Any] = event["job_run"]
     outcome: str = event["outcome"]

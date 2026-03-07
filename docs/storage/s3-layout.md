@@ -11,6 +11,13 @@ Goals:
 - Align object keys with `nova_id` and `data_product_id`
 - Reflect atomic spectra product model (no dataset abstraction)
 
+**`data_product_id` in S3 keys — stable, deterministic UUID (SPECTRA products)**
+
+All spectra S3 prefixes are scoped by `data_product_id`, which is minted during
+`discover_spectra_products` via deterministic derivation:
+- **Preferred:** `UUID(hash(provider + provider_product_key))` — when a provider-native ID is available.
+- **Fallback:** `UUID(hash(provider + normalized_canonical_locator))` — when no native ID exists.
+
 ---
 
 # Buckets
@@ -205,7 +212,7 @@ bundles/<nova_id>/manifest.json
 
 - bundle_build_id
 - created_at
-- included `data_product_id`s (spectra)
+- included `data_product_id`s (spectra; stable UUIDs minted during `discover_spectra_products` — see ADR-003)
 - photometry table key
 - checksums of included files
 
