@@ -310,7 +310,10 @@ class NovaCatCompute(Construct):
 
         # spectra_discoverer: reads LocatorAlias, writes DataProduct stubs + LocatorAlias
         table.grant_read_write_data(self._functions["spectra_discoverer"])
-        # Publishes AcquireAndValidateSpectra events (via SNS or SFN start-execution)
+        # Fan-out to acquire_and_validate_spectra goes through workflow_launcher
+        # via sfn:StartExecution — not SNS. This grant covers any future
+        # quarantine notifications if spectra_discoverer ever routes failures
+        # through quarantine_handler directly.
         quarantine_topic.grant_publish(self._functions["spectra_discoverer"])
 
         # spectra_acquirer: reads DataProduct metadata, writes raw bytes to S3,

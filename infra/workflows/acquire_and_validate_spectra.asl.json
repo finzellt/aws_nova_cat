@@ -1,0 +1,11 @@
+{
+    "Comment": "acquire_and_validate_spectra workflow — placeholder stub pending implementation.",
+    "StartAt": "NotImplemented",
+    "States": {
+        "NotImplemented": {
+            "Type": "Fail",
+            "Error": "NotImplemented",
+            "Cause": "acquire_and_validate_spectra workflow not yet implemented"
+        }
+    }
+}

@@ -45,10 +45,11 @@ class NovaCatWorkflows(Construct):
     the Lambda functions from NovaCatCompute.
 
     Exposes:
-      initialize_nova          — the initialize_nova state machine
-      ingest_new_nova          — the ingest_new_nova state machine
-      refresh_references       — the refresh_references state machine
-      discover_spectra_products — the discover_spectra_products state machine (placeholder stub)
+      initialize_nova            — the initialize_nova state machine
+      ingest_new_nova            — the ingest_new_nova state machine
+      refresh_references         — the refresh_references state machine
+      discover_spectra_products  — the discover_spectra_products state machine
+      acquire_and_validate_spectra — the acquire_and_validate_spectra state machine (placeholder stub)
     """
 
     def __init__(
@@ -63,11 +64,40 @@ class NovaCatWorkflows(Construct):
         self._workflows_dir = os.path.join(os.path.dirname(__file__), "../workflows")
 
         # ------------------------------------------------------------------
-        # discover_spectra_products state machine (placeholder stub)
+        # acquire_and_validate_spectra state machine (placeholder stub)
         #
         # Placeholder ASL contains a single Fail state — will be replaced
-        # in its respective epic.
+        # in its respective epic. Provisioned here so that workflow_launcher
+        # can reference its ARN via ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN
+        # before the full implementation lands.
         # ------------------------------------------------------------------
+        self.acquire_and_validate_spectra = self._create_state_machine(
+            name="acquire-and-validate-spectra",
+            asl_file="acquire_and_validate_spectra.asl.json",
+            substitutions={},
+            invokable_functions=[],
+        )
+
+        # ------------------------------------------------------------------
+        # discover_spectra_products state machine
+        # ------------------------------------------------------------------
+        self.discover_spectra_products = self._create_state_machine(
+            name="discover-spectra-products",
+            asl_file="discover_spectra_products.asl.json",
+            substitutions={
+                "JobRunManagerFunctionArn": compute.job_run_manager.function_arn,
+                "AcquireIdempotencyLockFunctionArn": compute.idempotency_guard.function_arn,
+                "SpectraDiscovererFunctionArn": compute.spectra_discoverer.function_arn,
+                "WorkflowLauncherFunctionArn": compute.workflow_launcher.function_arn,
+            },
+            invokable_functions=[
+                compute.job_run_manager,
+                compute.idempotency_guard,
+                compute.spectra_discoverer,
+                compute.workflow_launcher,
+            ],
+        )
+
         # ------------------------------------------------------------------
         # refresh_references state machine
         # ------------------------------------------------------------------
@@ -92,13 +122,6 @@ class NovaCatWorkflows(Construct):
                 compute.reference_manager,
             ],
         )
-        self.discover_spectra_products = self._create_state_machine(
-            name="discover-spectra-products",
-            asl_file="discover_spectra_products.asl.json",
-            substitutions={},
-            invokable_functions=[],
-        )
-
         # ------------------------------------------------------------------
         # ingest_new_nova state machine
         # ------------------------------------------------------------------
@@ -153,6 +176,10 @@ class NovaCatWorkflows(Construct):
         compute.workflow_launcher.add_environment(
             "DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN",
             _sfn_arn("discover-spectra-products"),
+        )
+        compute.workflow_launcher.add_environment(
+            "ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN",
+            _sfn_arn("acquire-and-validate-spectra"),
         )
 
         # ------------------------------------------------------------------
@@ -224,6 +251,13 @@ class NovaCatWorkflows(Construct):
             value=self.discover_spectra_products.attr_arn,
             description="discover_spectra_products Step Functions state machine ARN",
             export_name="NovaCat-DiscoverSpectraProductsStateMachineArn",
+        )
+        cdk.CfnOutput(
+            self,
+            "AcquireAndValidateSpectraStateMachineArn",
+            value=self.acquire_and_validate_spectra.attr_arn,
+            description="acquire_and_validate_spectra Step Functions state machine ARN (placeholder stub)",
+            export_name="NovaCat-AcquireAndValidateSpectraStateMachineArn",
         )
 
     def _create_state_machine(
