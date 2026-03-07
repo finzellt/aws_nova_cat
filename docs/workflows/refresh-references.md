@@ -94,23 +94,37 @@ treat HTTP 429 responses as retryable.
 
 ---
 
+## Input Validation
+
+`ValidateInput` and `EnsureCorrelationId` Pass/Choice states are **not present** in
+this workflow's ASL. In MVP, `refresh_references` is only triggered internally — by
+`ingest_new_nova` and by the scheduled refresh — whose outbound Pydantic event models
+enforce the contract at the publishing boundary. Workflow-entry validation is therefore
+redundant and omitted by design.
+
+**Post-MVP:** When a standalone API entrypoint for `refresh_references` is introduced
+(e.g. operator-triggered re-run or ad-hoc refresh), `ValidateInput` and
+`EnsureCorrelationId` should be added as the first two states, consistent with the
+pattern in `initialize_nova_asl.json`. This will be a non-breaking ASL change as long
+as the input event schema is a strict superset of the internally-published schema.
+
+---
+
 ## State Machine (Explicit State List)
 
-1. **ValidateInput** (Pass)
-2. **EnsureCorrelationId** (Choice + Pass)
-3. **BeginJobRun** (Task)
-4. **AcquireIdempotencyLock** (Task)
-5. **FetchReferenceCandidates** (Task)
-6. **ReconcileReferences** (Map)
+1. **BeginJobRun** (Task)
+2. **AcquireIdempotencyLock** (Task)
+3. **FetchReferenceCandidates** (Task)
+4. **ReconcileReferences** (Map)
    - NormalizeReference (Task)
    - UpsertReferenceEntity (Task) → yields `bibcode`
    - LinkNovaReference (Task)
    - ItemFailureHandler (Catch → QuarantineItem + Continue)
-7. **ComputeDiscoveryDate** (Task)
-8. **UpsertDiscoveryDateMetadata** (Task) (no-op if unchanged)
-9. **FinalizeJobRunSuccess** (Task)
-10. **TerminalFailHandler** (Task)
-11. **FinalizeJobRunFailed** (Task)
+5. **ComputeDiscoveryDate** (Task)
+6. **UpsertDiscoveryDateMetadata** (Task) (no-op if unchanged)
+7. **FinalizeJobRunSuccess** (Task)
+8. **TerminalFailHandler** (Task)
+9. **FinalizeJobRunFailed** (Task)
 
 ---
 

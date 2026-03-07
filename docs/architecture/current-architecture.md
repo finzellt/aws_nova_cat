@@ -1,6 +1,6 @@
 # Nova Cat — Current Architecture Snapshot
 
-_Last Updated: 2026-03-06_
+_Last Updated: 2026-03-07_
 
 This document captures the **authoritative architectural baseline** of Nova Cat at this point in time.
 
@@ -85,13 +85,6 @@ Minted during `discover_spectra_products`. Derived as follows:
 
 Immutable once assigned; never reused across distinct products. See ADR-003 for full specification.
 
-Each spectra product identity is deterministic:
-
-```
-identity_key = hash(provider + provider_product_key + canonical_locator)
-data_product_id = UUID(identity_key)
-```
-
 `LOCATOR#<provider>#<locator_identity>` ensures stable deduplication.
 
 ---
@@ -121,12 +114,12 @@ Atomic unit of ingestion and validation.
 
 Each product has independent:
 
-- acquisition_state
-- validation_state
+- acquisition_status
+- validation_status
 - cooldown metadata
 - fingerprint (sha256)
 - header signature hash
-- selected_profile
+- fits_profile_id
 - quarantine_reason_code (if applicable)
 
 No dataset abstraction exists.
@@ -278,6 +271,17 @@ Eligibility index removed immediately after validation.
 - If schema version changes (future capability), snapshots prior table before overwrite
 
 No dataset abstraction exists.
+
+---
+
+## 4.7 name_check_and_reconcile
+
+- Accepts `nova_id`
+- Performs name normalization and reconciliation checks against the global `NameMapping` index
+- Proposed naming inputs (`proposed_public_name`, `proposed_aliases`) are passed via
+  `attributes` rather than typed fields, consistent with the minimal stable contract pattern
+- Operates entirely within the UUID-first execution model; no name-based downstream
+  operations are performed beyond the resolution boundary
 
 ---
 

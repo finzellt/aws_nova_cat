@@ -28,6 +28,7 @@ Note on candidate_name vs nova_id:
 
 from __future__ import annotations
 
+import hashlib
 import os
 import uuid
 from collections.abc import Callable
@@ -221,6 +222,77 @@ def _finalize_job_run_quarantined(event: dict[str, Any], context: object) -> dic
     return {"status": "QUARANTINED", "ended_at": ended_at}
 
 
+@tracer.capture_method
+def _terminal_fail_handler(event: dict[str, Any], context: object) -> dict[str, Any]:
+    """
+    Classify a terminal error and persist diagnostic metadata onto the JobRun.
+
+    This is a distinct step from FinalizeJobRunFailed. It runs *before* the
+    final status update so that error_classification and error_fingerprint are
+    persisted on the JobRun record for operator diagnosis before the item is
+    marked FAILED.
+
+    Called by initialize_nova (and any workflow that needs richer error context
+    than FinalizeJobRunFailed alone provides). ingest_new_nova and
+    refresh_references collapse straight to FinalizeJobRunFailed because their
+    terminal failure paths are simpler and don't require pre-classification.
+
+    Classification heuristic (extend as the error taxonomy grows):
+      - Error name contains "RetryableError"  → RETRYABLE  (shouldn't reach here
+        normally, but defensive)
+      - Error name contains "TerminalError"   → TERMINAL
+      - Anything else                         → TERMINAL
+
+    The error_fingerprint is a 12-hex-char SHA-256 digest of
+    (error_type + job_run_id + first 100 chars of cause). Stable across retries
+    of the same logical failure; cross-referenceable with CloudWatch logs.
+
+    Returns:
+        error_classification — "RETRYABLE" | "TERMINAL"
+        error_fingerprint    — 12-char hex digest
+    The ASL ResultPath is "$.terminal_fail"; $.job_run and $.error remain
+    accessible for the subsequent FinalizeJobRunFailed state.
+    """
+    job_run: dict[str, Any] = event["job_run"]
+    error: dict[str, Any] = event.get("error") or {}
+
+    error_type: str = error.get("Error") or "UnknownError"
+    error_cause: str = (error.get("Cause") or "")[:500]
+
+    error_classification = "RETRYABLE" if "RetryableError" in error_type else "TERMINAL"
+
+    raw = f"{error_type}:{job_run.get('job_run_id', '')}:{error_cause[:100]}"
+    error_fingerprint = hashlib.sha256(raw.encode()).hexdigest()[:12]
+
+    now = _now()
+
+    _table.update_item(
+        Key={"PK": job_run["pk"], "SK": job_run["sk"]},
+        UpdateExpression=(
+            "SET error_classification = :ec, error_fingerprint = :ef, updated_at = :updated_at"
+        ),
+        ExpressionAttributeValues={
+            ":ec": error_classification,
+            ":ef": error_fingerprint,
+            ":updated_at": now,
+        },
+    )
+
+    logger.error(
+        "Terminal failure classified",
+        extra={
+            "error_type": error_type,
+            "error_classification": error_classification,
+            "error_fingerprint": error_fingerprint,
+        },
+    )
+
+    return {
+        "error_classification": error_classification,
+        "error_fingerprint": error_fingerprint,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -236,6 +308,7 @@ def _now() -> str:
 
 _TASK_HANDLERS: dict[str, Callable[[dict[str, Any], object], dict[str, Any]]] = {
     "BeginJobRun": _begin_job_run,
+    "TerminalFailHandler": _terminal_fail_handler,
     "FinalizeJobRunSuccess": _finalize_job_run_success,
     "FinalizeJobRunFailed": _finalize_job_run_failed,
     "FinalizeJobRunQuarantined": _finalize_job_run_quarantined,

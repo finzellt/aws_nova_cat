@@ -20,7 +20,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -55,7 +55,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -90,7 +90,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -147,7 +147,7 @@
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 2,
-                                "BackoffRate": 1,
+                                "BackoffRate": 4,
                                 "JitterStrategy": "FULL"
                             }
                         ],
@@ -186,7 +186,7 @@
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 2,
-                                "BackoffRate": 1,
+                                "BackoffRate": 4,
                                 "JitterStrategy": "FULL"
                             }
                         ],
@@ -219,7 +219,7 @@
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 2,
-                                "BackoffRate": 1,
+                                "BackoffRate": 4,
                                 "JitterStrategy": "FULL"
                             }
                         ],
@@ -236,7 +236,7 @@
                     },
                     "ItemFailureHandler": {
                         "Type": "Pass",
-                        "Comment": "TODO: wire to quarantine_handler Lambda for item-level quarantine tracking and SNS notification. For now, records the error context and continues the Map so one bad reference does not abort the workflow.",
+                        "Comment": "TODO: wire to ${QuarantineHandlerFunctionArn} for item-level quarantine tracking and SNS notification per execution-governance.md quarantine requirements. Handler should receive: workflow_name, nova_id, bibcode, correlation_id, error_fingerprint. For now, records the error context and continues the Map so one bad reference does not abort the workflow.",
                         "End": true
                     }
                 }
@@ -272,7 +272,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -309,7 +309,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -345,7 +345,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -361,6 +361,42 @@
             "End": true
         },
         "TerminalFailHandler": {
+            "Type": "Task",
+            "Comment": "Classifies the error and persists error_classification + error_fingerprint onto the JobRun before the final FAILED status is written. Implemented as a task in job_run_manager (task_name: TerminalFailHandler).",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "TerminalFailHandler",
+                "workflow_name": "refresh_references",
+                "error.$": "$.error",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.terminal_fail",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "FinalizeJobRunFailed",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunFailed"
+        },
+        "FinalizeJobRunFailed": {
             "Type": "Task",
             "Resource": "${FinalizeJobRunFailedFunctionArn}",
             "Parameters": {

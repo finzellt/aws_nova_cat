@@ -21,7 +21,9 @@
         },
         "GenerateCorrelationId": {
             "Type": "Pass",
-            "Comment": "Placeholder: actual UUID generation happens inside BeginJobRun Lambda, which returns the generated correlation_id in its output and merges it into the execution context.",
+            "Comment": "Inject null placeholder so $.correlation_id is always defined when BeginJobRun Parameters are evaluated. BeginJobRun Lambda replaces null with a fresh UUID via event.get('correlation_id') or str(uuid.uuid4()).",
+            "Result": null,
+            "ResultPath": "$.correlation_id",
             "Next": "BeginJobRun"
         },
         "BeginJobRun": {
@@ -44,7 +46,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -58,41 +60,6 @@
                 }
             ],
             "Next": "NormalizeCandidateName"
-        },
-        "AcquireIdempotencyLock": {
-            "Type": "Task",
-            "Comment": "Acquire workflow-level idempotency lock. Key: InitializeNova:{normalized_candidate_name}:{schema_version}:{time_bucket}. If lock already held by a concurrent execution, raises RetryableError.",
-            "Resource": "${AcquireIdempotencyLockFunctionArn}",
-            "Parameters": {
-                "task_name": "AcquireIdempotencyLock",
-                "workflow_name": "initialize_nova",
-                "primary_id.$": "$.normalization.normalized_candidate_name",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
-            },
-            "ResultPath": "$.idempotency",
-            "TimeoutSeconds": 10,
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "RetryableError"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 3,
-                    "BackoffRate": 1,
-                    "JitterStrategy": "FULL"
-                }
-            ],
-            "Catch": [
-                {
-                    "ErrorEquals": [
-                        "States.ALL"
-                    ],
-                    "Next": "TerminalFailHandler",
-                    "ResultPath": "$.error"
-                }
-            ],
-            "Next": "CheckExistingNovaByName"
         },
         "NormalizeCandidateName": {
             "Type": "Task",
@@ -114,7 +81,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -128,6 +95,41 @@
                 }
             ],
             "Next": "AcquireIdempotencyLock"
+        },
+        "AcquireIdempotencyLock": {
+            "Type": "Task",
+            "Comment": "Acquire workflow-level idempotency lock. Key: InitializeNova:{normalized_candidate_name}:{schema_version}:{time_bucket}. If lock already held by a concurrent execution, raises RetryableError.",
+            "Resource": "${AcquireIdempotencyLockFunctionArn}",
+            "Parameters": {
+                "task_name": "AcquireIdempotencyLock",
+                "workflow_name": "initialize_nova",
+                "primary_id.$": "$.normalization.normalized_candidate_name",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.idempotency",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "CheckExistingNovaByName"
         },
         "CheckExistingNovaByName": {
             "Type": "Task",
@@ -149,7 +151,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -197,7 +199,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -222,7 +224,8 @@
                 "outcome": "EXISTS_AND_LAUNCHED",
                 "nova_id.$": "$.name_check.nova_id",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.finalize",
             "TimeoutSeconds": 10,
@@ -233,7 +236,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -260,7 +263,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -297,7 +300,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -351,7 +354,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -387,7 +390,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -412,7 +415,8 @@
                 "outcome": "EXISTS_AND_LAUNCHED",
                 "nova_id.$": "$.coordinate_check.matched_nova_id",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.finalize",
             "TimeoutSeconds": 10,
@@ -423,7 +427,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -441,7 +445,8 @@
                 "normalized_candidate_name.$": "$.normalization.normalized_candidate_name",
                 "min_sep_arcsec.$": "$.coordinate_check.min_sep_arcsec",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.quarantine",
             "TimeoutSeconds": 10,
@@ -452,7 +457,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -489,7 +494,8 @@
                 "outcome": "NOT_FOUND",
                 "candidate_name.$": "$.candidate_name",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.finalize",
             "TimeoutSeconds": 10,
@@ -500,7 +506,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -533,7 +539,8 @@
                 "outcome": "NOT_A_CLASSICAL_NOVA",
                 "candidate_name.$": "$.candidate_name",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.finalize",
             "TimeoutSeconds": 10,
@@ -544,7 +551,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -561,7 +568,8 @@
                 "candidate_name.$": "$.candidate_name",
                 "normalized_candidate_name.$": "$.normalization.normalized_candidate_name",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.quarantine",
             "TimeoutSeconds": 10,
@@ -572,7 +580,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -608,7 +616,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -650,7 +658,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -686,7 +694,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -711,7 +719,8 @@
                 "outcome": "CREATED_AND_LAUNCHED",
                 "nova_id.$": "$.nova_creation.nova_id",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.finalize",
             "TimeoutSeconds": 10,
@@ -722,7 +731,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -730,15 +739,16 @@
         },
         "TerminalFailHandler": {
             "Type": "Task",
-            "Comment": "Handles unrecoverable terminal failures. Classifies the error, persists diagnostic metadata, and routes to FinalizeJobRunFailed.",
-            "Resource": "${TerminalFailHandlerFunctionArn}",
+            "Comment": "Classifies the error and persists error_classification + error_fingerprint onto the JobRun before the final FAILED status is written. Implemented as a task in job_run_manager (task_name: TerminalFailHandler). ResultPath $.terminal_fail preserves $.job_run and $.error for the subsequent FinalizeJobRunFailed state.",
+            "Resource": "${JobRunManagerFunctionArn}",
             "Parameters": {
-                "task_name": "QuarantineHandler",
+                "task_name": "TerminalFailHandler",
                 "workflow_name": "initialize_nova",
                 "error.$": "$.error",
                 "candidate_name.$": "$.candidate_name",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.terminal_fail",
             "TimeoutSeconds": 10,
@@ -749,7 +759,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -773,7 +783,8 @@
                 "workflow_name": "initialize_nova",
                 "candidate_name.$": "$.candidate_name",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.finalize",
             "TimeoutSeconds": 10,
@@ -784,7 +795,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],
@@ -799,7 +810,8 @@
                 "workflow_name": "initialize_nova",
                 "candidate_name.$": "$.candidate_name",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.finalize",
             "TimeoutSeconds": 10,
@@ -810,7 +822,7 @@
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
-                    "BackoffRate": 1,
+                    "BackoffRate": 4,
                     "JitterStrategy": "FULL"
                 }
             ],

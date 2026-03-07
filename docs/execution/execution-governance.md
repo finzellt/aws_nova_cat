@@ -1,7 +1,7 @@
 # Execution Governance
 
 This document defines Step Functions execution conventions for Nova Cat workflows.
-It is intentionally “code-adjacent” and designed to be translated into definitions later.
+It is intentionally "code-adjacent" and designed to be translated into definitions later.
 
 ---
 
@@ -54,7 +54,7 @@ Operational metadata:
 
 Before acquisition:
 
-1. If `validation_status == VALIDATED`
+1. If `validation_status == VALID`
    → short-circuit success (`SKIPPED_DUPLICATE`)
 2. If `now < next_eligible_attempt_at`
    → short-circuit success (`SKIPPED_BACKOFF`)
