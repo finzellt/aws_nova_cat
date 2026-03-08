@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 import aws_cdk as cdk
+import aws_cdk.aws_secretsmanager as secretsmanager
 from constructs import Construct
 from nova_constructs.compute import NovaCatCompute
 from nova_constructs.storage import NovaCatStorage
@@ -43,6 +44,17 @@ class NovaCatStack(cdk.Stack):
         )
 
         # ------------------------------------------------------------------
+        # ADS API token — pre-created in Secrets Manager, not managed by CDK.
+        # Created once per account:
+        #   aws secretsmanager create-secret \
+        #     --name ADSQueryToken \
+        #     --secret-string '{"token":"<your_ads_token>"}'
+        # ------------------------------------------------------------------
+        ads_secret = secretsmanager.Secret.from_secret_name_v2(
+            self, "AdsApiSecret", "ADSQueryToken"
+        )
+
+        # ------------------------------------------------------------------
         # Compute layer
         # ------------------------------------------------------------------
         self.compute = NovaCatCompute(
@@ -52,6 +64,7 @@ class NovaCatStack(cdk.Stack):
             private_bucket=self.storage.private_bucket,
             public_site_bucket=self.storage.public_site_bucket,
             quarantine_topic=self.storage.quarantine_topic,
+            ads_secret=ads_secret,
         )
 
         # ------------------------------------------------------------------

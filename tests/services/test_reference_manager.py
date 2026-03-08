@@ -969,3 +969,62 @@ class TestDispatch:
             h = _load_handler()
             for name, fn in h._TASK_HANDLERS.items():
                 assert callable(fn), f"Handler for {name!r} is not callable"
+
+    # ---------------------------------------------------------------------------
+    # Additions to tests/services/test_reference_manager.py
+    #
+    # Add these two test methods to the existing TestFetchReferenceCandidates class.
+    # ---------------------------------------------------------------------------
+
+    def test_network_timeout_raises_retryable_error(self, table: Any) -> None:
+        """
+        A requests.exceptions.Timeout during the ADS call should raise
+        RetryableError — it is not a terminal failure.
+        """
+        with mock_aws():
+            _seed_nova(table)
+            _create_ads_secret()
+            h = _load_handler()
+            from nova_common.errors import RetryableError
+
+            with patch.object(h, "requests") as mock_requests:
+                mock_requests.exceptions.Timeout = Exception
+                mock_requests.exceptions.RequestException = Exception
+                mock_requests.get.side_effect = mock_requests.exceptions.Timeout("timed out")
+                with pytest.raises(RetryableError, match="timed out"):
+                    h.handle(_base_event(), None)
+
+    def test_non_list_aliases_in_ddb_are_handled_gracefully(self, table: Any) -> None:
+        """
+        If the Nova item in DDB has a non-list value for `aliases` (e.g. due to
+        a schema migration or manual edit), FetchReferenceCandidates should
+        fall back to an empty alias list and still query ADS using the
+        primary_name alone, rather than raising.
+        """
+        with mock_aws():
+            # Seed nova with aliases as a string instead of a list
+            table.put_item(
+                Item={
+                    "PK": _NOVA_ID,
+                    "SK": "NOVA",
+                    "entity_type": "Nova",
+                    "schema_version": "1.0.0",
+                    "nova_id": _NOVA_ID,
+                    "primary_name": "V1324 Sco",
+                    "primary_name_normalized": "v1324 sco",
+                    "status": "ACTIVE",
+                    "aliases": "not-a-list",  # malformed
+                }
+            )
+            _create_ads_secret()
+            h = _load_handler()
+            with patch.object(h, "requests") as mock_requests:
+                mock_requests.get.return_value = _mock_ads_response([])
+                mock_requests.exceptions.Timeout = Exception
+                mock_requests.exceptions.RequestException = Exception
+                # Should not raise — falls back to primary_name only
+                result = h.handle(_base_event(), None)
+            assert result["candidate_count"] == 0
+            # Confirm the ADS query was still made (using primary_name)
+            url = mock_requests.get.call_args[0][0]
+            assert "V1324" in url
