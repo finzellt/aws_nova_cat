@@ -58,7 +58,7 @@ Required canonical fields:
 - `instrument`
 - `exposure_time` (if available)
 - `provider`
-- `dataset_id`
+- `data_product_id`
 - `nova_id`
 
 Where possible:

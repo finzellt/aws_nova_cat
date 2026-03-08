@@ -36,6 +36,7 @@ import aws_cdk.aws_dynamodb as dynamodb
 import aws_cdk.aws_lambda as lambda_
 import aws_cdk.aws_logs as logs
 import aws_cdk.aws_s3 as s3
+import aws_cdk.aws_secretsmanager as secretsmanager
 import aws_cdk.aws_sns as sns
 from constructs import Construct
 
@@ -197,6 +198,7 @@ class NovaCatCompute(Construct):
         private_bucket: s3.Bucket,
         public_site_bucket: s3.Bucket,
         quarantine_topic: sns.Topic,
+        ads_secret: secretsmanager.ISecret,
         services_root: str = "../../services",
     ) -> None:
         super().__init__(scope, construct_id)
@@ -264,7 +266,9 @@ class NovaCatCompute(Construct):
         # ------------------------------------------------------------------
         # IAM grants — least-privilege, derived from dynamodb-access-patterns.md
         # ------------------------------------------------------------------
-        self._grant_permissions(table, private_bucket, public_site_bucket, quarantine_topic)
+        self._grant_permissions(
+            table, private_bucket, public_site_bucket, quarantine_topic, ads_secret
+        )
 
         # ------------------------------------------------------------------
         # Expose each function as a named attribute for Step Functions wiring
@@ -272,12 +276,18 @@ class NovaCatCompute(Construct):
         for name, fn in self._functions.items():
             setattr(self, name, fn)
 
+        # ADS secret name injected only into reference_manager (the sole consumer)
+        self._functions["reference_manager"].add_environment(
+            "ADS_SECRET_NAME", ads_secret.secret_name
+        )
+
     def _grant_permissions(
         self,
         table: dynamodb.Table,
         private_bucket: s3.Bucket,
         public_site_bucket: s3.Bucket,
         quarantine_topic: sns.Topic,
+        ads_secret: secretsmanager.ISecret,
     ) -> None:
         """
         Grants least-privilege IAM permissions to each Lambda function.
@@ -298,7 +308,6 @@ class NovaCatCompute(Construct):
 
         # archive_resolver: no DynamoDB access — only external HTTP calls
         # (no grants needed beyond execution role basics)
-
         # workflow_launcher: reads Nova status, writes product stubs, publishes SNS/SFN
         # SFN start-execution permissions are added by the Step Functions construct
         # when state machines are defined; grant SNS here.
@@ -307,13 +316,12 @@ class NovaCatCompute(Construct):
 
         # reference_manager: reads + writes REF# and NOVAREF# items, updates Nova.discovery_date
         table.grant_read_write_data(self._functions["reference_manager"])
+        # ADS token read — required for FetchReferenceCandidates
+        ads_secret.grant_read(self._functions["reference_manager"])
 
         # spectra_discoverer: reads LocatorAlias, writes DataProduct stubs + LocatorAlias
         table.grant_read_write_data(self._functions["spectra_discoverer"])
-        # Fan-out to acquire_and_validate_spectra goes through workflow_launcher
-        # via sfn:StartExecution — not SNS. This grant covers any future
-        # quarantine notifications if spectra_discoverer ever routes failures
-        # through quarantine_handler directly.
+        # Publishes AcquireAndValidateSpectra events (via SNS or SFN start-execution)
         quarantine_topic.grant_publish(self._functions["spectra_discoverer"])
 
         # spectra_acquirer: reads DataProduct metadata, writes raw bytes to S3,

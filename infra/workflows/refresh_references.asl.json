@@ -79,7 +79,8 @@
                 "workflow_name": "refresh_references",
                 "nova_id.$": "$.nova_id",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "attributes.$": "$.attributes"
             },
             "ResultPath": "$.fetch",
             "TimeoutSeconds": 60,
@@ -112,6 +113,7 @@
             "ItemSelector": {
                 "nova_id.$": "$$.Execution.Input.nova_id",
                 "correlation_id.$": "$$.Execution.Input.correlation_id",
+                "job_run.$": "$.job_run",
                 "bibcode.$": "$$.Map.Item.Value.bibcode",
                 "doctype.$": "$$.Map.Item.Value.doctype",
                 "title.$": "$$.Map.Item.Value.title",
@@ -235,8 +237,30 @@
                         "End": true
                     },
                     "ItemFailureHandler": {
-                        "Type": "Pass",
-                        "Comment": "TODO: wire to ${QuarantineHandlerFunctionArn} for item-level quarantine tracking and SNS notification per execution-governance.md quarantine requirements. Handler should receive: workflow_name, nova_id, bibcode, correlation_id, error_fingerprint. For now, records the error context and continues the Map so one bad reference does not abort the workflow.",
+                        "Type": "Task",
+                        "Resource": "${QuarantineHandlerFunctionArn}",
+                        "Parameters": {
+                            "task_name": "QuarantineHandler",
+                            "workflow_name": "refresh_references",
+                            "quarantine_reason_code": "OTHER",
+                            "nova_id.$": "$.nova_id",
+                            "bibcode.$": "$.bibcode",
+                            "correlation_id.$": "$.correlation_id",
+                            "job_run.$": "$.job_run"
+                        },
+                        "ResultPath": "$.quarantine",
+                        "TimeoutSeconds": 10,
+                        "Retry": [
+                            {
+                                "ErrorEquals": [
+                                    "RetryableError"
+                                ],
+                                "IntervalSeconds": 2,
+                                "MaxAttempts": 2,
+                                "BackoffRate": 4,
+                                "JitterStrategy": "FULL"
+                            }
+                        ],
                         "End": true
                     }
                 }
