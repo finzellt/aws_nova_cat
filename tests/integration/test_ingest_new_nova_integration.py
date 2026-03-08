@@ -67,6 +67,12 @@ def aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
         "DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN", _SM_ARNS["discover_spectra_products"]
     )
+    monkeypatch.setenv(
+        "ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN",
+        f"arn:aws:states:{_REGION}:{_ACCOUNT}:stateMachine:nova-cat-acquire-and-validate-spectra",
+    )
+    monkeypatch.setenv("NOVA_CAT_PRIVATE_BUCKET", "nova-cat-private-test")
+    monkeypatch.setenv("NOVA_CAT_PUBLIC_SITE_BUCKET", "nova-cat-public-test")
     monkeypatch.setenv("AWS_DEFAULT_REGION", _REGION)
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")

@@ -1,11 +1,362 @@
 {
-  "Comment": "discover_spectra_products workflow — placeholder stub pending Epic 12+.",
-  "StartAt": "NotImplemented",
-  "States": {
-    "NotImplemented": {
-      "Type": "Fail",
-      "Error": "NotImplemented",
-      "Cause": "discover_spectra_products workflow not yet implemented"
+    "Comment": "discover_spectra_products — queries provider archives, assigns stable data_product_ids, persists DataProduct stubs with eligibility=ACQUIRE, and fans out acquire_and_validate_spectra executions. Providers are processed sequentially (MaxConcurrency=1 for MVP); per-provider failures are tolerated and do not abort the workflow.",
+    "StartAt": "EnsureCorrelationId",
+    "States": {
+        "EnsureCorrelationId": {
+            "Type": "Choice",
+            "Comment": "If correlation_id was propagated from ingest_new_nova (or an operator trigger), use it. Otherwise mint a fresh UUID so all downstream records share a single correlation chain.",
+            "Choices": [
+                {
+                    "Variable": "$.correlation_id",
+                    "IsPresent": true,
+                    "Next": "BeginJobRun"
+                }
+            ],
+            "Default": "GenerateCorrelationId"
+        },
+        "GenerateCorrelationId": {
+            "Type": "Pass",
+            "Comment": "correlation_id was absent — mint a fresh UUID via States.UUID() intrinsic.",
+            "Parameters": {
+                "nova_id.$": "$.nova_id",
+                "correlation_id.$": "States.UUID()"
+            },
+            "Next": "BeginJobRun"
+        },
+        "BeginJobRun": {
+            "Type": "Task",
+            "Comment": "Persist a RUNNING JobRun record. Returns job_run_id, correlation_id, pk, sk for use by all subsequent FinalizeJobRun* states.",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "BeginJobRun",
+                "workflow_name": "discover_spectra_products",
+                "nova_id.$": "$.nova_id",
+                "correlation_id.$": "$.correlation_id"
+            },
+            "ResultPath": "$.job_run",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Comment": "If BeginJobRun fails there is no JobRun record to finalize — fail the execution directly.",
+                    "Next": "BeginJobRunFailed",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "AcquireIdempotencyLock"
+        },
+        "BeginJobRunFailed": {
+            "Type": "Fail",
+            "Error": "BeginJobRunFailed",
+            "Cause": "Fatal error before JobRun record was established. No finalization possible."
+        },
+        "AcquireIdempotencyLock": {
+            "Type": "Task",
+            "Comment": "Guard against duplicate executions for the same nova within the same 1-hour bucket. Key: discover_spectra_products:{nova_id}:1:{YYYY-MM-DDTHH}.",
+            "Resource": "${AcquireIdempotencyLockFunctionArn}",
+            "Parameters": {
+                "task_name": "AcquireIdempotencyLock",
+                "workflow_name": "discover_spectra_products",
+                "primary_id.$": "$.nova_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.idempotency",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "PrepareProviderList"
+        },
+        "PrepareProviderList": {
+            "Type": "Pass",
+            "Comment": "Inject the hardcoded provider list into state. To onboard a new provider (e.g. MAST), add an entry here — no other ASL changes required.",
+            "Result": [
+                {
+                    "provider": "ESO"
+                }
+            ],
+            "ResultPath": "$.providers",
+            "Next": "DiscoverAcrossProviders"
+        },
+        "DiscoverAcrossProviders": {
+            "Type": "Map",
+            "Comment": "Process each provider sequentially (MaxConcurrency=1 for MVP). ToleratedFailurePercentage=100 means a single provider failure does not abort the workflow — failed iterations are captured in $.discovery_results for observability and operator review.",
+            "ItemsPath": "$.providers",
+            "ItemSelector": {
+                "provider.$": "$$.Map.Item.Value.provider",
+                "nova_id.$": "$.nova_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run.$": "$.job_run"
+            },
+            "MaxConcurrency": 1,
+            "ToleratedFailurePercentage": 100,
+            "ResultPath": "$.discovery_results",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Comment": "Defensive catch for unexpected Map-level failures (not per-iteration failures, which are already tolerated above).",
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Iterator": {
+                "StartAt": "QueryProviderForProducts",
+                "States": {
+                    "QueryProviderForProducts": {
+                        "Type": "Task",
+                        "Comment": "Dispatch the provider-specific adapter. For ESO: issues an SSAP cone search against archive.eso.org/ssap using the nova's ra_deg/dec_deg. Returns raw provider records.",
+                        "Resource": "${SpectraDiscovererFunctionArn}",
+                        "Parameters": {
+                            "task_name": "QueryProviderForProducts",
+                            "provider.$": "$.provider",
+                            "nova_id.$": "$.nova_id",
+                            "correlation_id.$": "$.correlation_id"
+                        },
+                        "ResultPath": "$.query_result",
+                        "TimeoutSeconds": 60,
+                        "Retry": [
+                            {
+                                "ErrorEquals": [
+                                    "RetryableError"
+                                ],
+                                "IntervalSeconds": 2,
+                                "MaxAttempts": 3,
+                                "BackoffRate": 5,
+                                "MaxDelaySeconds": 30,
+                                "JitterStrategy": "FULL"
+                            }
+                        ],
+                        "Next": "NormalizeProviderProducts"
+                    },
+                    "NormalizeProviderProducts": {
+                        "Type": "Task",
+                        "Comment": "Normalize raw provider records into Nova Cat's internal discovered-product shape. All provider-specific field mapping (ESO SSAP fields -> internal schema) happens here, not in ASL branching.",
+                        "Resource": "${SpectraDiscovererFunctionArn}",
+                        "Parameters": {
+                            "task_name": "NormalizeProviderProducts",
+                            "provider.$": "$.provider",
+                            "nova_id.$": "$.nova_id",
+                            "correlation_id.$": "$.correlation_id",
+                            "raw_products.$": "$.query_result.raw_products"
+                        },
+                        "ResultPath": "$.normalize_result",
+                        "TimeoutSeconds": 30,
+                        "Retry": [
+                            {
+                                "ErrorEquals": [
+                                    "RetryableError"
+                                ],
+                                "IntervalSeconds": 2,
+                                "MaxAttempts": 2,
+                                "BackoffRate": 2,
+                                "JitterStrategy": "FULL"
+                            }
+                        ],
+                        "Next": "DeduplicateAndAssignDataProductIds"
+                    },
+                    "DeduplicateAndAssignDataProductIds": {
+                        "Type": "Task",
+                        "Comment": "Check LocatorAlias for existing data_product_ids; mint deterministic UUIDs for novel products via uuid5 (NATIVE_ID/METADATA_KEY) or uuid4 (WEAK). See ADR-003.",
+                        "Resource": "${SpectraDiscovererFunctionArn}",
+                        "Parameters": {
+                            "task_name": "DeduplicateAndAssignDataProductIds",
+                            "provider.$": "$.provider",
+                            "nova_id.$": "$.nova_id",
+                            "correlation_id.$": "$.correlation_id",
+                            "normalized_products.$": "$.normalize_result.normalized_products"
+                        },
+                        "ResultPath": "$.dedup_result",
+                        "TimeoutSeconds": 30,
+                        "Retry": [
+                            {
+                                "ErrorEquals": [
+                                    "RetryableError"
+                                ],
+                                "IntervalSeconds": 2,
+                                "MaxAttempts": 3,
+                                "BackoffRate": 5,
+                                "MaxDelaySeconds": 30,
+                                "JitterStrategy": "FULL"
+                            }
+                        ],
+                        "Next": "PersistDataProductMetadata"
+                    },
+                    "PersistDataProductMetadata": {
+                        "Type": "Task",
+                        "Comment": "Upsert DataProduct stubs and LocatorAlias records for newly discovered products. Sets acquisition_status=STUB, validation_status=UNVALIDATED, eligibility=ACQUIRE, and writes GSI1 attributes. Products resolving to an existing VALID data_product_id are skipped entirely.",
+                        "Resource": "${SpectraDiscovererFunctionArn}",
+                        "Parameters": {
+                            "task_name": "PersistDataProductMetadata",
+                            "provider.$": "$.provider",
+                            "nova_id.$": "$.nova_id",
+                            "correlation_id.$": "$.correlation_id",
+                            "products_with_ids.$": "$.dedup_result.products_with_ids"
+                        },
+                        "ResultPath": "$.persist_result",
+                        "TimeoutSeconds": 30,
+                        "Retry": [
+                            {
+                                "ErrorEquals": [
+                                    "RetryableError"
+                                ],
+                                "IntervalSeconds": 2,
+                                "MaxAttempts": 3,
+                                "BackoffRate": 5,
+                                "MaxDelaySeconds": 30,
+                                "JitterStrategy": "FULL"
+                            }
+                        ],
+                        "Next": "PublishAcquireAndValidateSpectraRequests"
+                    },
+                    "PublishAcquireAndValidateSpectraRequests": {
+                        "Type": "Task",
+                        "Comment": "Start one acquire_and_validate_spectra SFN execution per newly eligible data_product_id. sfn:StartExecution is non-blocking — all N executions run in parallel as independent Standard Workflow state machines. ExecutionAlreadyExists is treated as idempotent success.",
+                        "Resource": "${WorkflowLauncherFunctionArn}",
+                        "Parameters": {
+                            "task_name": "PublishAcquireAndValidateSpectraRequests",
+                            "nova_id.$": "$.nova_id",
+                            "correlation_id.$": "$.correlation_id",
+                            "job_run.$": "$.job_run",
+                            "persisted_products.$": "$.persist_result.persisted_products"
+                        },
+                        "ResultPath": "$.publish_result",
+                        "TimeoutSeconds": 10,
+                        "Retry": [
+                            {
+                                "ErrorEquals": [
+                                    "RetryableError"
+                                ],
+                                "IntervalSeconds": 2,
+                                "MaxAttempts": 2,
+                                "BackoffRate": 5,
+                                "MaxDelaySeconds": 10,
+                                "JitterStrategy": "FULL"
+                            }
+                        ],
+                        "End": true
+                    }
+                }
+            },
+            "Next": "FinalizeJobRunSuccess"
+        },
+        "FinalizeJobRunSuccess": {
+            "Type": "Task",
+            "Comment": "Mark the JobRun SUCCEEDED. Per-provider summaries are available in $.discovery_results for observability.",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "FinalizeJobRunSuccess",
+                "workflow_name": "discover_spectra_products",
+                "outcome": "COMPLETED",
+                "nova_id.$": "$.nova_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "End": true
+        },
+        "TerminalFailHandler": {
+            "Type": "Task",
+            "Comment": "Classifies the error and persists error_classification + error_fingerprint onto the JobRun before the final FAILED status is written. Implemented as a task in job_run_manager (task_name: TerminalFailHandler).",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "TerminalFailHandler",
+                "workflow_name": "discover_spectra_products",
+                "error.$": "$.error",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.terminal_fail",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "FinalizeJobRunFailed",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunFailed"
+        },
+        "FinalizeJobRunFailed": {
+            "Type": "Task",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "FinalizeJobRunFailed",
+                "workflow_name": "discover_spectra_products",
+                "error.$": "$.error",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 10,
+            "End": true
+        }
     }
-  }
 }

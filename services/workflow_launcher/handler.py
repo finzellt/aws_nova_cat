@@ -7,30 +7,35 @@ Task dispatch table:
   PublishIngestNewNova                     — start ingest_new_nova (initialize_nova)
   LaunchRefreshReferences                  — start refresh_references (ingest_new_nova)
   LaunchDiscoverSpectraProducts            — start discover_spectra_products (ingest_new_nova)
-  PublishAcquireAndValidateSpectraRequests — start acquire_and_validate_spectra (discover_spectra_products)
+  PublishAcquireAndValidateSpectraRequests — start one acquire_and_validate_spectra execution
+                                            per eligible data_product_id (discover_spectra_products)
 
 Design notes:
   - Each task calls sfn:StartExecution on the appropriate state machine, passing
-    a minimal continuation event: nova_id + correlation_id. Downstream workflows
-    fetch any additional data they need from DynamoDB rather than receiving it
-    in the continuation payload.
-  - Execution names are derived from nova_id + job_run_id to be unique, stable,
-    and traceable. SFN execution names must be ≤80 chars and unique per state
-    machine — we use "<nova_id>-<job_run_id[:8]>" (36 + 1 + 8 = 45 chars).
-  - ExecutionAlreadyExists is treated as success — if a retry of a launch task
-    hits this, the execution is already running and the goal is achieved.
-  - PublishAcquireAndValidateSpectraRequests is stubbed pending spectra acquisition implementation.
+    a minimal continuation event. Downstream workflows fetch any additional data
+    they need from DynamoDB rather than receiving it in the continuation payload.
+  - For PublishAcquireAndValidateSpectraRequests, sfn:StartExecution is called
+    once per product in a Python loop. All N executions are non-blocking and run
+    in parallel as independent Standard Workflow state machines — no SNS/SQS fan-out
+    is required.
+  - Execution names:
+      Single-product workflows: "<nova_id>-<job_run_id[:8]>" (45 chars)
+      Per-product launches:     "<data_product_id>-<job_run_id[:8]>" (45 chars)
+    Both are well under the SFN 80-char execution name limit and are unique + traceable.
+  - ExecutionAlreadyExists is treated as idempotent success — if a retry of a
+    launch task hits this, the execution is already running and the goal is met.
 
 Environment variables (injected by CDK):
-  NOVA_CAT_TABLE_NAME                        — DynamoDB table name (standard env)
-  NOVA_CAT_PRIVATE_BUCKET                    — private S3 bucket (standard env)
-  NOVA_CAT_PUBLIC_SITE_BUCKET                — public site S3 bucket (standard env)
-  NOVA_CAT_QUARANTINE_TOPIC_ARN              — quarantine SNS topic ARN (standard env)
-  INGEST_NEW_NOVA_STATE_MACHINE_ARN          — ARN of the ingest_new_nova state machine
-  REFRESH_REFERENCES_STATE_MACHINE_ARN       — ARN of the refresh_references state machine
-  DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN — ARN of the discover_spectra_products state machine
-  LOG_LEVEL                                  — logging level (default INFO)
-  POWERTOOLS_SERVICE_NAME                    — AWS Lambda Powertools service name
+  NOVA_CAT_TABLE_NAME                          — DynamoDB table name (standard env)
+  NOVA_CAT_PRIVATE_BUCKET                      — private S3 bucket (standard env)
+  NOVA_CAT_PUBLIC_SITE_BUCKET                  — public site S3 bucket (standard env)
+  NOVA_CAT_QUARANTINE_TOPIC_ARN                — quarantine SNS topic ARN (standard env)
+  INGEST_NEW_NOVA_STATE_MACHINE_ARN            — ARN of the ingest_new_nova state machine
+  REFRESH_REFERENCES_STATE_MACHINE_ARN         — ARN of the refresh_references state machine
+  DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN  — ARN of the discover_spectra_products state machine
+  ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN — ARN of the acquire_and_validate_spectra state machine
+  LOG_LEVEL                                    — logging level (default INFO)
+  POWERTOOLS_SERVICE_NAME                      — AWS Lambda Powertools service name
 """
 
 from __future__ import annotations
@@ -51,6 +56,9 @@ _INGEST_NEW_NOVA_STATE_MACHINE_ARN = os.environ["INGEST_NEW_NOVA_STATE_MACHINE_A
 _REFRESH_REFERENCES_STATE_MACHINE_ARN = os.environ["REFRESH_REFERENCES_STATE_MACHINE_ARN"]
 _DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN = os.environ[
     "DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN"
+]
+_ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN = os.environ[
+    "ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN"
 ]
 
 _sfn = boto3.client("stepfunctions")
@@ -133,7 +141,81 @@ def _launch_discover_spectra_products(event: dict[str, Any], context: object) ->
 def _publish_acquire_and_validate_spectra_requests(
     event: dict[str, Any], context: object
 ) -> dict[str, Any]:
-    raise NotImplementedError("PublishAcquireAndValidateSpectraRequests not yet implemented")
+    """
+    Start one acquire_and_validate_spectra execution per newly eligible data_product_id.
+
+    sfn:StartExecution is non-blocking — all N executions are dispatched in a
+    Python loop and run in parallel as independent Standard Workflow state machines.
+    No SNS/SQS fan-out is required.
+
+    Each execution receives a minimal continuation event containing the fields
+    required by AcquireAndValidateSpectraEvent:
+        nova_id, provider, data_product_id, correlation_id
+
+    Individual launch failures are logged and collected but do NOT raise —
+    the task returns a summary of launched vs failed so the caller can
+    observe partial failures without aborting the Map iteration.
+
+    Returns:
+        launched — list of successfully started executions
+        failed   — list of products that could not be launched (with error)
+        total    — total products attempted
+    """
+    nova_id: str = event["nova_id"]
+    correlation_id: str = event["correlation_id"]
+    job_run_id: str = event["job_run"]["job_run_id"]
+    persisted_products: list[dict[str, Any]] = event["persisted_products"]
+
+    launched: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
+
+    for product in persisted_products:
+        data_product_id: str = product["data_product_id"]
+        provider: str = product["provider"]
+
+        try:
+            result = _start_execution(
+                state_machine_arn=_ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN,
+                workflow_label="acquire_and_validate_spectra",
+                nova_id=nova_id,
+                correlation_id=correlation_id,
+                job_run_id=job_run_id,
+                data_product_id=data_product_id,
+                provider=provider,
+            )
+            launched.append({"data_product_id": data_product_id, "provider": provider, **result})
+        except Exception as exc:
+            logger.error(
+                "Failed to launch acquire_and_validate_spectra execution",
+                extra={
+                    "data_product_id": data_product_id,
+                    "provider": provider,
+                    "error": str(exc),
+                },
+            )
+            failed.append(
+                {
+                    "data_product_id": data_product_id,
+                    "provider": provider,
+                    "error": str(exc),
+                }
+            )
+
+    logger.info(
+        "PublishAcquireAndValidateSpectraRequests complete",
+        extra={
+            "nova_id": nova_id,
+            "launched": len(launched),
+            "failed": len(failed),
+            "total": len(persisted_products),
+        },
+    )
+
+    return {
+        "launched": launched,
+        "failed": failed,
+        "total": len(persisted_products),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -148,23 +230,37 @@ def _start_execution(
     nova_id: str,
     correlation_id: str,
     job_run_id: str,
+    data_product_id: str | None = None,
+    provider: str | None = None,
 ) -> dict[str, Any]:
     """
     Start a Step Functions execution with a minimal continuation event.
 
-    Execution name format: "<nova_id>-<job_run_id[:8]>"
-    = 36 + 1 + 8 = 45 chars (well under the 80-char SFN limit).
+    Execution name format:
+      - Single-product workflows: "<nova_id>-<job_run_id[:8]>"  (45 chars)
+      - Per-product launches:     "<data_product_id>-<job_run_id[:8]>"  (45 chars)
+    Both are well under the SFN 80-char limit and are unique + traceable.
 
     ExecutionAlreadyExists is treated as idempotent success — if a task
     retry hits this, the execution is already running and the goal is met.
 
     Raises RetryableError on throttling or transient SFN failures.
     """
-    execution_name = f"{nova_id}-{job_run_id[:8]}"
-    execution_input = {
+    if data_product_id:
+        # Per-product launch: execution name scoped to the product so that
+        # N products for the same nova all get distinct execution names.
+        execution_name = f"{data_product_id}-{job_run_id[:8]}"
+    else:
+        execution_name = f"{nova_id}-{job_run_id[:8]}"
+
+    execution_input: dict[str, Any] = {
         "nova_id": nova_id,
         "correlation_id": correlation_id,
     }
+    if data_product_id:
+        execution_input["data_product_id"] = data_product_id
+    if provider:
+        execution_input["provider"] = provider
 
     try:
         response = _sfn.start_execution(
