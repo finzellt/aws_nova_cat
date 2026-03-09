@@ -1,11 +1,440 @@
 {
-    "Comment": "acquire_and_validate_spectra workflow — placeholder stub pending implementation.",
-    "StartAt": "NotImplemented",
+    "Comment": "acquire_and_validate_spectra — downloads a raw FITS artifact from a provider archive, validates and normalises it via a FITS profile adapter, and persists the outcome (VALID, QUARANTINED, SKIPPED_DUPLICATE) onto the DataProduct record. One execution per data_product_id; started non-blocking by discover_spectra_products via workflow_launcher.",
+    "StartAt": "EnsureCorrelationId",
     "States": {
-        "NotImplemented": {
+        "EnsureCorrelationId": {
+            "Type": "Choice",
+            "Comment": "Propagate correlation_id from the parent discover_spectra_products execution if present. Otherwise mint a fresh UUID so all records produced by this execution share a single correlation chain.",
+            "Choices": [
+                {
+                    "Variable": "$.correlation_id",
+                    "IsPresent": true,
+                    "Next": "BeginJobRun"
+                }
+            ],
+            "Default": "GenerateCorrelationId"
+        },
+        "GenerateCorrelationId": {
+            "Type": "Pass",
+            "Comment": "correlation_id was absent — mint a fresh UUID via States.UUID() intrinsic.",
+            "Parameters": {
+                "nova_id.$": "$.nova_id",
+                "provider.$": "$.provider",
+                "data_product_id.$": "$.data_product_id",
+                "correlation_id.$": "States.UUID()"
+            },
+            "Next": "BeginJobRun"
+        },
+        "BeginJobRun": {
+            "Type": "Task",
+            "Comment": "Persist a RUNNING JobRun record. Returns job_run_id and correlation_id for use by all subsequent FinalizeJobRun* states.",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "BeginJobRun",
+                "workflow_name": "acquire_and_validate_spectra",
+                "nova_id.$": "$.nova_id",
+                "correlation_id.$": "$.correlation_id"
+            },
+            "ResultPath": "$.job_run",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Comment": "If BeginJobRun fails there is no JobRun record to finalize — fail the execution directly.",
+                    "Next": "BeginJobRunFailed",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "AcquireIdempotencyLock"
+        },
+        "BeginJobRunFailed": {
             "Type": "Fail",
-            "Error": "NotImplemented",
-            "Cause": "acquire_and_validate_spectra workflow not yet implemented"
+            "Error": "BeginJobRunFailed",
+            "Cause": "Fatal error before JobRun record was established. No finalization possible."
+        },
+        "AcquireIdempotencyLock": {
+            "Type": "Task",
+            "Comment": "Guard against duplicate executions for the same data_product_id within the same 1-hour bucket. Key: acquire_and_validate_spectra:{data_product_id}:1:{YYYY-MM-DDTHH}.",
+            "Resource": "${AcquireIdempotencyLockFunctionArn}",
+            "Parameters": {
+                "task_name": "AcquireIdempotencyLock",
+                "workflow_name": "acquire_and_validate_spectra",
+                "primary_id.$": "$.data_product_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.idempotency",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "CheckOperationalStatus"
+        },
+        "CheckOperationalStatus": {
+            "Type": "Task",
+            "Comment": "Load the DataProduct record and evaluate three decision flags: already_validated (clean skip), is_quarantined (blocked pending operator review), cooldown_active (backoff window still in effect). Also returns the full data_product record for use by downstream tasks.",
+            "Resource": "${SpectraValidatorFunctionArn}",
+            "Parameters": {
+                "task_name": "CheckOperationalStatus",
+                "nova_id.$": "$.nova_id",
+                "provider.$": "$.provider",
+                "data_product_id.$": "$.data_product_id",
+                "correlation_id.$": "$.job_run.correlation_id"
+            },
+            "ResultPath": "$.status",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "CheckOperationalStatusOutcome"
+        },
+        "CheckOperationalStatusOutcome": {
+            "Type": "Choice",
+            "Comment": "Route based on the three decision flags in priority order. already_validated first (cleanest exit — product is done), then is_quarantined (requires operator action before proceeding), then cooldown_active (transient — a future execution will retry once the window expires).",
+            "Choices": [
+                {
+                    "Variable": "$.status.already_validated",
+                    "BooleanEquals": true,
+                    "Next": "AlreadyValidated"
+                },
+                {
+                    "Variable": "$.status.is_quarantined",
+                    "BooleanEquals": true,
+                    "Next": "QuarantineBlocked"
+                },
+                {
+                    "Variable": "$.status.cooldown_active",
+                    "BooleanEquals": true,
+                    "Next": "CooldownActive"
+                }
+            ],
+            "Default": "AcquireArtifact"
+        },
+        "AlreadyValidated": {
+            "Type": "Pass",
+            "Comment": "DataProduct already has validation_status=VALID. Nothing to do.",
+            "Parameters": {
+                "outcome": "SKIPPED_ALREADY_VALIDATED"
+            },
+            "ResultPath": "$.skip_reason",
+            "Next": "FinalizeJobRunSuccess"
+        },
+        "QuarantineBlocked": {
+            "Type": "Pass",
+            "Comment": "DataProduct is QUARANTINED without operator clearance (manual_review_status not in CLEARED_RETRY_APPROVED | CLEARED_TERMINAL). Blocked until an operator updates the record.",
+            "Parameters": {
+                "outcome": "SKIPPED_QUARANTINE_BLOCKED"
+            },
+            "ResultPath": "$.skip_reason",
+            "Next": "FinalizeJobRunSuccess"
+        },
+        "CooldownActive": {
+            "Type": "Pass",
+            "Comment": "Acquisition backoff (next_eligible_attempt_at) is still in effect. Execution exits cleanly; workflow_launcher will re-trigger once the product is next eligible.",
+            "Parameters": {
+                "outcome": "SKIPPED_COOLDOWN_ACTIVE"
+            },
+            "ResultPath": "$.skip_reason",
+            "Next": "FinalizeJobRunSuccess"
+        },
+        "AcquireArtifact": {
+            "Type": "Task",
+            "Comment": "Stream-download the raw FITS artifact from the provider access URL and upload to S3. attempt_count is incremented atomically BEFORE the download so Lambda timeouts count against the backoff schedule. Returns raw_s3_bucket, raw_s3_key, sha256, byte_length.",
+            "Resource": "${SpectraAcquirerFunctionArn}",
+            "Parameters": {
+                "task_name": "AcquireArtifact",
+                "nova_id.$": "$.nova_id",
+                "provider.$": "$.provider",
+                "data_product_id.$": "$.data_product_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "data_product.$": "$.status.data_product"
+            },
+            "ResultPath": "$.acquisition",
+            "TimeoutSeconds": 300,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "Comment": "Lambda-level transients only (throttle, cold start crash). Each SFN retry increments attempt_count again, which is intentional. Provider-level download backoff is enforced by next_eligible_attempt_at checked at workflow re-entry via CheckOperationalStatus.",
+                    "IntervalSeconds": 5,
+                    "MaxAttempts": 2,
+                    "BackoffRate": 4,
+                    "MaxDelaySeconds": 30,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "ValidateBytes"
+        },
+        "ValidateBytes": {
+            "Type": "Task",
+            "Comment": "Read raw FITS bytes from S3, select a profile adapter, run validation and normalisation, and check for byte-level duplicates (sha256 collision against existing VALID products for this nova). Returns validation_outcome (VALID | QUARANTINED | TERMINAL_INVALID), is_duplicate, fits_profile_id, header_signature_hash, normalization_notes.",
+            "Resource": "${SpectraValidatorFunctionArn}",
+            "Parameters": {
+                "task_name": "ValidateBytes",
+                "nova_id.$": "$.nova_id",
+                "provider.$": "$.provider",
+                "data_product_id.$": "$.data_product_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "data_product.$": "$.status.data_product",
+                "acquisition.$": "$.acquisition"
+            },
+            "ResultPath": "$.validation",
+            "TimeoutSeconds": 120,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "Comment": "Covers transient astropy I/O failures (S3 read errors, Lambda memory pressure) that propagate as RetryableError from the profile adapter contract.",
+                    "IntervalSeconds": 5,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "MaxDelaySeconds": 60,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "DuplicateByFingerprint"
+        },
+        "DuplicateByFingerprint": {
+            "Type": "Choice",
+            "Comment": "Route byte-level duplicates (sha256 collision with an existing VALID product for this nova) to RecordDuplicateLinkage. All other outcomes — VALID, QUARANTINED, TERMINAL_INVALID — go to RecordValidationResult.",
+            "Choices": [
+                {
+                    "Variable": "$.validation.is_duplicate",
+                    "BooleanEquals": true,
+                    "Next": "RecordDuplicateLinkage"
+                }
+            ],
+            "Default": "RecordValidationResult"
+        },
+        "RecordValidationResult": {
+            "Type": "Task",
+            "Comment": "Atomically persist validation_status, acquisition_status, and associated metadata (fits_profile_id, header_signature_hash, quarantine_reason_code, normalization_notes) onto the DataProduct record, and REMOVE GSI1PK/GSI1SK in the same update_item call so the product is no longer eligible for re-acquisition.",
+            "Resource": "${SpectraValidatorFunctionArn}",
+            "Parameters": {
+                "task_name": "RecordValidationResult",
+                "nova_id.$": "$.nova_id",
+                "provider.$": "$.provider",
+                "data_product_id.$": "$.data_product_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "data_product.$": "$.status.data_product",
+                "acquisition.$": "$.acquisition",
+                "validation.$": "$.validation"
+            },
+            "ResultPath": "$.record_result",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunSuccess"
+        },
+        "RecordDuplicateLinkage": {
+            "Type": "Task",
+            "Comment": "Set acquisition_status=SKIPPED_DUPLICATE and duplicate_of_data_product_id on the DataProduct record. Atomically clears GSI1PK/GSI1SK in the same update_item call.",
+            "Resource": "${SpectraValidatorFunctionArn}",
+            "Parameters": {
+                "task_name": "RecordDuplicateLinkage",
+                "nova_id.$": "$.nova_id",
+                "provider.$": "$.provider",
+                "data_product_id.$": "$.data_product_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "data_product.$": "$.status.data_product",
+                "acquisition.$": "$.acquisition",
+                "validation.$": "$.validation"
+            },
+            "ResultPath": "$.record_result",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunSuccess"
+        },
+        "FinalizeJobRunSuccess": {
+            "Type": "Task",
+            "Comment": "Mark the JobRun SUCCEEDED. The full execution context (acquisition, validation, skip_reason) is available in state for observability.",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "FinalizeJobRunSuccess",
+                "workflow_name": "acquire_and_validate_spectra",
+                "outcome": "COMPLETED",
+                "nova_id.$": "$.nova_id",
+                "data_product_id.$": "$.data_product_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "End": true
+        },
+        "TerminalFailHandler": {
+            "Type": "Task",
+            "Comment": "Classifies the error and persists error_classification + error_fingerprint onto the JobRun before the final FAILED status is written.",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "TerminalFailHandler",
+                "workflow_name": "acquire_and_validate_spectra",
+                "error.$": "$.error",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.terminal_fail",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "FinalizeJobRunFailed",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunFailed"
+        },
+        "FinalizeJobRunFailed": {
+            "Type": "Task",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "FinalizeJobRunFailed",
+                "workflow_name": "acquire_and_validate_spectra",
+                "error.$": "$.error",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 10,
+            "End": true
         }
     }
 }

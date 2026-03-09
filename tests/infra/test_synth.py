@@ -241,20 +241,29 @@ class TestSns:
 # Lambda
 # ---------------------------------------------------------------------------
 
-_EXPECTED_FUNCTIONS: dict[str, dict[str, int]] = {
+# Zip-bundled functions — have Runtime: python3.11 and a Lambda layer.
+_ZIP_FUNCTIONS: dict[str, dict[str, int]] = {
     "nova-cat-nova-resolver": {"memory": 256, "timeout": 30},
     "nova-cat-job-run-manager": {"memory": 256, "timeout": 30},
     "nova-cat-idempotency-guard": {"memory": 256, "timeout": 30},
-    "nova-cat-archive-resolver": {"memory": 256, "timeout": 90},
     "nova-cat-workflow-launcher": {"memory": 256, "timeout": 30},
     "nova-cat-reference-manager": {"memory": 256, "timeout": 90},
-    "nova-cat-spectra-discoverer": {"memory": 256, "timeout": 60},
     "nova-cat-spectra-acquirer": {"memory": 512, "timeout": 900},
-    "nova-cat-spectra-validator": {"memory": 512, "timeout": 300},
     "nova-cat-photometry-ingestor": {"memory": 512, "timeout": 300},
     "nova-cat-quarantine-handler": {"memory": 256, "timeout": 30},
     "nova-cat-name-reconciler": {"memory": 256, "timeout": 90},
 }
+
+# Container-bundled functions — PackageType: Image, no Runtime, no layer.
+# astropy/astroquery have compiled C extensions that exceed the zip size limit.
+_DOCKER_FUNCTIONS: dict[str, dict[str, int]] = {
+    "nova-cat-archive-resolver": {"memory": 256, "timeout": 90},
+    "nova-cat-spectra-discoverer": {"memory": 256, "timeout": 60},
+    "nova-cat-spectra-validator": {"memory": 512, "timeout": 300},
+}
+
+# Combined — used for tests that apply equally to both packaging types.
+_EXPECTED_FUNCTIONS: dict[str, dict[str, int]] = {**_ZIP_FUNCTIONS, **_DOCKER_FUNCTIONS}
 
 _REQUIRED_ENV_VARS = {
     "NOVA_CAT_TABLE_NAME",
@@ -277,13 +286,25 @@ class TestLambda:
                 f"Lambda function '{expected_name}' not found in template"
             )
 
-    def test_all_functions_use_python_311(self, template: assertions.Template) -> None:
-        for fn_name in _EXPECTED_FUNCTIONS:
+    def test_zip_functions_use_python_311(self, template: assertions.Template) -> None:
+        # Docker functions have PackageType=Image and no Runtime property.
+        # Only zip-bundled functions are checked here.
+        for fn_name in _ZIP_FUNCTIONS:
             template.has_resource_properties(
                 "AWS::Lambda::Function",
                 {
                     "FunctionName": fn_name,
                     "Runtime": "python3.11",
+                },
+            )
+
+    def test_docker_functions_use_image_package_type(self, template: assertions.Template) -> None:
+        for fn_name in _DOCKER_FUNCTIONS:
+            template.has_resource_properties(
+                "AWS::Lambda::Function",
+                {
+                    "FunctionName": fn_name,
+                    "PackageType": "Image",
                 },
             )
 
@@ -357,6 +378,13 @@ class TestOutputs:
             "*", {"Export": {"Name": "NovaCat-DiscoverSpectraProductsStateMachineArn"}}
         )
 
+    def test_acquire_and_validate_spectra_output_exists(
+        self, template: assertions.Template
+    ) -> None:
+        template.has_output(
+            "*", {"Export": {"Name": "NovaCat-AcquireAndValidateSpectraStateMachineArn"}}
+        )
+
 
 # ---------------------------------------------------------------------------
 # Step Functions
@@ -367,6 +395,7 @@ _EXPECTED_STATE_MACHINES = [
     "nova-cat-ingest-new-nova",
     "nova-cat-refresh-references",
     "nova-cat-discover-spectra-products",
+    "nova-cat-acquire-and-validate-spectra",
 ]
 
 
