@@ -21,6 +21,7 @@ Lambda function inventory (12 functions):
   spectra_discoverer     — provider adapter dispatch, data_product_id assignment, stub persist
   spectra_acquirer       — bytes download, fingerprint, ZIP unpack (acquire_and_validate_spectra)
   spectra_validator      — FITS profile selection, normalization, validation result record
+                           (DockerImageFunction — astropy + numpy require container bundling)
   photometry_ingestor    — photometry file validation, parquet rebuild, metadata persist
   quarantine_handler     — quarantine persistence + SNS best-effort notification (all workflows)
   name_reconciler        — naming authority queries, reconciliation, alias updates
@@ -41,7 +42,6 @@ import aws_cdk.aws_sns as sns
 from constructs import Construct
 
 # Default Lambda settings — tuned for Nova Cat's low-throughput, cost-aware profile.
-# Acquisition Lambda gets a higher memory and longer timeout; others are conservative.
 _DEFAULT_MEMORY_MB = 256
 _DEFAULT_TIMEOUT = cdk.Duration.seconds(30)
 _PYTHON_RUNTIME = lambda_.Runtime.PYTHON_3_11
@@ -50,7 +50,7 @@ _LOG_RETENTION = logs.RetentionDays.THREE_MONTHS
 
 @dataclass
 class _FunctionSpec:
-    """Internal spec for each Lambda function."""
+    """Internal spec for each zip-bundled Lambda function."""
 
     service_dir: str  # directory under services/
     description: str
@@ -58,6 +58,9 @@ class _FunctionSpec:
     timeout: cdk.Duration = _DEFAULT_TIMEOUT
 
 
+# spectra_validator, archive_resolver, and spectra_discoverer are intentionally
+# absent — all three are DockerImageFunctions (astropy/astroquery have compiled
+# C extensions that exceed the Lambda zip limit) and are constructed separately below.
 _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
     "nova_resolver": _FunctionSpec(
         service_dir="nova_resolver",
@@ -84,15 +87,6 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
             "Handles AcquireIdempotencyLock. Used by: all workflows (shared)."
         ),
     ),
-    "archive_resolver": _FunctionSpec(
-        service_dir="archive_resolver",
-        description=(
-            "Queries external public archives (SIMBAD, TNS) to resolve a candidate name "
-            "to coordinates and nova classification. "
-            "Handles ResolveCandidateAgainstPublicArchives. Used by: initialize_nova."
-        ),
-        timeout=cdk.Duration.seconds(90),  # External network calls; generous timeout
-    ),
     "workflow_launcher": _FunctionSpec(
         service_dir="workflow_launcher",
         description=(
@@ -108,14 +102,6 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
         ),
         timeout=cdk.Duration.seconds(90),  # ADS API calls
     ),
-    "spectra_discoverer": _FunctionSpec(
-        service_dir="spectra_discoverer",
-        description=(
-            "Dispatches provider discovery adapters, assigns stable data_product_id values, "
-            "persists DataProduct stubs. Used by: discover_spectra_products."
-        ),
-        timeout=cdk.Duration.seconds(60),
-    ),
     "spectra_acquirer": _FunctionSpec(
         service_dir="spectra_acquirer",
         description=(
@@ -125,15 +111,6 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
         ),
         memory_mb=512,  # Larger for in-memory FITS/ZIP handling
         timeout=cdk.Duration.minutes(15),  # Per execution-governance.md acquisition timeout
-    ),
-    "spectra_validator": _FunctionSpec(
-        service_dir="spectra_validator",
-        description=(
-            "Selects FITS profile, normalizes spectral arrays to IVOA-aligned model, "
-            "and records validation outcomes. Used by: acquire_and_validate_spectra."
-        ),
-        memory_mb=512,  # FITS parsing is memory-intensive
-        timeout=cdk.Duration.minutes(5),  # Per execution-governance.md validation timeout
     ),
     "photometry_ingestor": _FunctionSpec(
         service_dir="photometry_ingestor",
@@ -179,12 +156,12 @@ class NovaCatCompute(Construct):
     nova_resolver: lambda_.Function
     job_run_manager: lambda_.Function
     idempotency_guard: lambda_.Function
-    archive_resolver: lambda_.Function
+    archive_resolver: lambda_.DockerImageFunction
     workflow_launcher: lambda_.Function
     reference_manager: lambda_.Function
-    spectra_discoverer: lambda_.Function
+    spectra_discoverer: lambda_.DockerImageFunction
     spectra_acquirer: lambda_.Function
-    spectra_validator: lambda_.Function
+    spectra_validator: lambda_.DockerImageFunction
     photometry_ingestor: lambda_.Function
     quarantine_handler: lambda_.Function
     name_reconciler: lambda_.Function
@@ -203,9 +180,10 @@ class NovaCatCompute(Construct):
     ) -> None:
         super().__init__(scope, construct_id)
 
+        self._services_root = os.path.join(os.path.dirname(__file__), services_root)
+
         # ------------------------------------------------------------------
         # Shared environment variables injected into every Lambda.
-        # Functions read these rather than hardcoding resource names.
         # ------------------------------------------------------------------
         shared_env = {
             "NOVA_CAT_TABLE_NAME": table.table_name,
@@ -213,46 +191,34 @@ class NovaCatCompute(Construct):
             "NOVA_CAT_PUBLIC_SITE_BUCKET": public_site_bucket.bucket_name,
             "NOVA_CAT_QUARANTINE_TOPIC_ARN": quarantine_topic.topic_arn,
             "LOG_LEVEL": "INFO",
-            # AWS Lambda Powertools service name for structured logging
             "POWERTOOLS_SERVICE_NAME": "nova-cat",
         }
 
         # ------------------------------------------------------------------
         # nova_common Lambda Layer
-        #
-        # Shared utilities (Powertools Logger + Tracer, configure_logging)
-        # deployed as a layer so they don't need to be bundled into each
-        # Lambda zip. The layer asset follows Lambda's required structure:
-        #   nova_common_layer/python/nova_common/...
-        # which Lambda unpacks to /opt/python/nova_common/ at runtime.
         # ------------------------------------------------------------------
         nova_common_layer = lambda_.LayerVersion(
             self,
             "NovaCommonLayer",
             layer_version_name="nova-cat-nova-common",
-            code=lambda_.Code.from_asset(
-                os.path.join(os.path.dirname(__file__), services_root, "nova_common_layer")
-            ),
+            code=lambda_.Code.from_asset(os.path.join(self._services_root, "nova_common_layer")),
             compatible_runtimes=[_PYTHON_RUNTIME],
             description="Nova Cat shared utilities: Powertools Logger, Tracer, configure_logging",
         )
 
         # ------------------------------------------------------------------
-        # Build all Lambda functions from specs
+        # Build all zip-bundled Lambda functions from specs
         # ------------------------------------------------------------------
-        self._functions: dict[str, lambda_.Function] = {}
+        self._functions: dict[str, lambda_.Function | lambda_.DockerImageFunction] = {}
 
         for name, spec in _FUNCTION_SPECS.items():
             fn = lambda_.Function(
                 self,
-                # Logical ID: PascalCase for CloudFormation readability
                 _to_pascal(name),
                 function_name=f"nova-cat-{name.replace('_', '-')}",
                 runtime=_PYTHON_RUNTIME,
                 handler="handler.handle",
-                code=lambda_.Code.from_asset(
-                    os.path.join(os.path.dirname(__file__), services_root, spec.service_dir)
-                ),
+                code=lambda_.Code.from_asset(os.path.join(self._services_root, spec.service_dir)),
                 description=spec.description,
                 memory_size=spec.memory_mb,
                 timeout=spec.timeout,
@@ -264,7 +230,88 @@ class NovaCatCompute(Construct):
             self._functions[name] = fn
 
         # ------------------------------------------------------------------
-        # IAM grants — least-privilege, derived from dynamodb-access-patterns.md
+        # spectra_validator — DockerImageFunction
+        #
+        # astropy and numpy include compiled C extensions that exceed the
+        # Lambda zip size limit and cannot be deployed as a layer. The service
+        # directory contains a Dockerfile that installs these dependencies into
+        # the Lambda container image. The nova_common layer is NOT used here —
+        # its contents are instead installed directly via requirements.txt.
+        # ------------------------------------------------------------------
+        spectra_validator = lambda_.DockerImageFunction(
+            self,
+            "SpectraValidator",
+            function_name="nova-cat-spectra-validator",
+            code=lambda_.DockerImageCode.from_image_asset(
+                os.path.join(self._services_root, "spectra_validator")
+            ),
+            description=(
+                "Selects FITS profile, normalizes spectral arrays to IVOA-aligned model, "
+                "and records validation outcomes. Used by: acquire_and_validate_spectra. "
+                "Container-bundled: astropy + numpy require Docker deployment."
+            ),
+            memory_size=512,
+            timeout=cdk.Duration.minutes(5),
+            environment=shared_env,
+            log_retention=_LOG_RETENTION,
+            tracing=lambda_.Tracing.ACTIVE,
+        )
+        self._functions["spectra_validator"] = spectra_validator
+
+        # ------------------------------------------------------------------
+        # archive_resolver — DockerImageFunction
+        #
+        # astroquery (which wraps astropy) includes compiled C extensions.
+        # Container deployment is required for the same reason as spectra_validator.
+        # ------------------------------------------------------------------
+        archive_resolver = lambda_.DockerImageFunction(
+            self,
+            "ArchiveResolver",
+            function_name="nova-cat-archive-resolver",
+            code=lambda_.DockerImageCode.from_image_asset(
+                os.path.join(self._services_root, "archive_resolver")
+            ),
+            description=(
+                "Queries external public archives (SIMBAD, TNS) to resolve a candidate name "
+                "to coordinates and nova classification. "
+                "Handles ResolveCandidateAgainstPublicArchives. Used by: initialize_nova. "
+                "Container-bundled: astropy/astroquery require Docker deployment."
+            ),
+            memory_size=_DEFAULT_MEMORY_MB,
+            timeout=cdk.Duration.seconds(90),
+            environment=shared_env,
+            log_retention=_LOG_RETENTION,
+            tracing=lambda_.Tracing.ACTIVE,
+        )
+        self._functions["archive_resolver"] = archive_resolver
+
+        # ------------------------------------------------------------------
+        # spectra_discoverer — DockerImageFunction
+        #
+        # Provider adapters (e.g. eso.py) use astropy for coordinate handling.
+        # ------------------------------------------------------------------
+        spectra_discoverer = lambda_.DockerImageFunction(
+            self,
+            "SpectraDiscoverer",
+            function_name="nova-cat-spectra-discoverer",
+            code=lambda_.DockerImageCode.from_image_asset(
+                os.path.join(self._services_root, "spectra_discoverer")
+            ),
+            description=(
+                "Dispatches provider discovery adapters, assigns stable data_product_id values, "
+                "persists DataProduct stubs. Used by: discover_spectra_products. "
+                "Container-bundled: astropy/astroquery require Docker deployment."
+            ),
+            memory_size=_DEFAULT_MEMORY_MB,
+            timeout=cdk.Duration.seconds(60),
+            environment=shared_env,
+            log_retention=_LOG_RETENTION,
+            tracing=lambda_.Tracing.ACTIVE,
+        )
+        self._functions["spectra_discoverer"] = spectra_discoverer
+
+        # ------------------------------------------------------------------
+        # IAM grants — least-privilege
         # ------------------------------------------------------------------
         self._grant_permissions(
             table, private_bucket, public_site_bucket, quarantine_topic, ads_secret
@@ -291,48 +338,28 @@ class NovaCatCompute(Construct):
     ) -> None:
         """
         Grants least-privilege IAM permissions to each Lambda function.
-
-        Grants are derived directly from the access patterns in
-        dynamodb-access-patterns.md and the S3 layout in s3-layout.md.
         """
-
-        # nova_resolver: reads NameMapping + coordinate scan, writes Nova + NameMapping
         table.grant_read_write_data(self._functions["nova_resolver"])
 
-        # job_run_manager: writes JobRun and Attempt items (per-nova partition)
         table.grant_write_data(self._functions["job_run_manager"])
 
-        # idempotency_guard: conditional put/get on idempotency lock items
-        # (stored as per-nova JOBRUN# items or a dedicated LOCK# prefix)
         table.grant_read_write_data(self._functions["idempotency_guard"])
 
-        # archive_resolver: no DynamoDB access — only external HTTP calls
-        # (no grants needed beyond execution role basics)
-        # workflow_launcher: reads Nova status, writes product stubs, publishes SNS/SFN
-        # SFN start-execution permissions are added by the Step Functions construct
-        # when state machines are defined; grant SNS here.
         table.grant_read_data(self._functions["workflow_launcher"])
         quarantine_topic.grant_publish(self._functions["workflow_launcher"])
 
-        # reference_manager: reads + writes REF# and NOVAREF# items, updates Nova.discovery_date
         table.grant_read_write_data(self._functions["reference_manager"])
-        # ADS token read — required for FetchReferenceCandidates
         ads_secret.grant_read(self._functions["reference_manager"])
 
-        # spectra_discoverer: reads LocatorAlias, writes DataProduct stubs + LocatorAlias
         table.grant_read_write_data(self._functions["spectra_discoverer"])
-        # Publishes AcquireAndValidateSpectra events (via SNS or SFN start-execution)
         quarantine_topic.grant_publish(self._functions["spectra_discoverer"])
 
-        # spectra_acquirer: reads DataProduct metadata, writes raw bytes to S3,
-        # updates DataProduct cooldown fields
         table.grant_read_write_data(self._functions["spectra_acquirer"])
         private_bucket.grant_write(
             self._functions["spectra_acquirer"],
             "raw/spectra/*",
         )
 
-        # spectra_validator: reads DataProduct, writes validation results + derived artifacts
         table.grant_read_write_data(self._functions["spectra_validator"])
         private_bucket.grant_read(
             self._functions["spectra_validator"],
@@ -347,8 +374,6 @@ class NovaCatCompute(Construct):
             "quarantine/spectra/*",
         )
 
-        # photometry_ingestor: reads/writes DataProduct (PHOTOMETRY_TABLE),
-        # reads raw upload, writes canonical parquet + snapshots
         table.grant_read_write_data(self._functions["photometry_ingestor"])
         private_bucket.grant_read(
             self._functions["photometry_ingestor"],
@@ -359,8 +384,6 @@ class NovaCatCompute(Construct):
             "derived/photometry/*",
         )
 
-        # quarantine_handler: writes quarantine status to DynamoDB,
-        # writes quarantine context to S3, publishes to SNS
         table.grant_write_data(self._functions["quarantine_handler"])
         private_bucket.grant_write(
             self._functions["quarantine_handler"],
@@ -368,7 +391,6 @@ class NovaCatCompute(Construct):
         )
         quarantine_topic.grant_publish(self._functions["quarantine_handler"])
 
-        # name_reconciler: reads Nova naming state, writes NameMapping updates
         table.grant_read_write_data(self._functions["name_reconciler"])
 
 
