@@ -44,3 +44,16 @@ tests/workflow_runtime/test_idempotency.py
 tests/workflow_runtime/test_logging.py
 tests/workflow_runtime/test_persistence.py
 tests/workflow_runtime/test_s3_keys.py
+
+# nova_common_layer build artifacts — installed by deploy.sh
+services/nova_common_layer/python/aws_lambda_powertools*
+services/nova_common_layer/python/aws_xray_sdk*
+services/nova_common_layer/python/wrapt*
+services/nova_common_layer/python/typing_extensions*
+services/nova_common_layer/python/six*
+services/nova_common_layer/python/urllib3*
+services/nova_common_layer/python/botocore*
+services/nova_common_layer/python/boto3*
+services/nova_common_layer/python/bin/
+services/nova_common_layer/python/__pycache__/
+services/nova_common_layer/python/*.dist-info/

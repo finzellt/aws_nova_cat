@@ -38,10 +38,12 @@ Environment variables (injected by CDK):
 
 from __future__ import annotations
 
+import math
 import os
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import boto3
@@ -298,7 +300,6 @@ def _handle_deduplicate_and_assign_data_product_ids(
                 "skip_acquisition": skip_acquisition,
             }
         )
-
     logger.info(
         "DeduplicateAndAssign complete",
         extra={
@@ -527,7 +528,7 @@ def _insert_data_product_stub(
         "provider": provider,
         "locator_identity": locator_identity,
         "locators": locators,
-        "hints": hints,
+        "hints": _sanitize_hints_for_dynamodb(hints),
         "identity_strategy": identity_strategy,
         "acquisition_status": "STUB",
         "validation_status": "UNVALIDATED",
@@ -576,6 +577,25 @@ def _resolve_adapter(provider: str) -> SpectraDiscoveryAdapter:
             f"Known providers: {list(_PROVIDER_ADAPTERS)}"
         )
     return adapter
+
+
+def _sanitize_hints_for_dynamodb(hints: dict[str, Any]) -> dict[str, Any]:
+    """
+    Convert all numeric values in a hints dict to Decimal before a DynamoDB write.
+
+    Hints are produced as Decimal values by the adapter, but Step Functions
+    serializes Lambda outputs to JSON (which has no Decimal type) and back to
+    plain Python floats before the next invocation. boto3's DynamoDB resource
+    layer rejects raw floats, so this conversion must happen here at write time.
+    """
+    sanitized: dict[str, Any] = {}
+    for key, value in hints.items():
+        if isinstance(value, float):
+            if not (math.isnan(value) or math.isinf(value)):
+                sanitized[key] = Decimal(str(value))
+        else:
+            sanitized[key] = value
+    return sanitized
 
 
 def _now() -> str:

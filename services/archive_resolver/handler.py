@@ -97,10 +97,10 @@ _RECURRENT_TYPES = {"RNe", "RN*"}
 # Module-level Simbad client — instantiated once per cold start
 _simbad = Simbad()
 _simbad.add_votable_fields("ra", "dec", "otypes", "ids")
-_simbad.ROW_LIMIT = 1
+# _simbad.ROW_LIMIT = 1
 
 with contextlib.suppress(Exception):
-    _simbad.TIMEOUT = int(os.getenv("SIMBAD_TIMEOUT_SEC", "15"))
+    _simbad.TIMEOUT = int(os.getenv("SIMBAD_TIMEOUT_SEC", "30"))
 
 
 # ---------------------------------------------------------------------------

@@ -220,15 +220,20 @@ def _handle_fetchReferenceCandidates(event: dict, context: object) -> dict:
 
     docs = _ads_request(query, token)
 
+    # Normalize: ensure every ADS_FIELD is present in every doc.
+    # ADS omits fields when absent; the ReconcileReferences ItemSelector
+    # requires all keys to exist (JSONPath fails on missing fields).
+    normalized_docs = [{field: doc.get(field) for field in _ADS_FIELDS} for doc in docs]
+
     logger.info(
         "ADS returned candidates",
-        extra={"candidate_count": len(docs), "nova_id": nova_id},
+        extra={"candidate_count": len(normalized_docs), "nova_id": nova_id},
     )
 
     return {
         "nova_id": nova_id,
-        "candidates": docs,
-        "candidate_count": len(docs),
+        "candidates": normalized_docs,
+        "candidate_count": len(normalized_docs),
     }
 
 

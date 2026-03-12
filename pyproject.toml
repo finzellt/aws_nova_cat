@@ -4,6 +4,7 @@ target-version = "py311"
 extend-exclude = [
   "cdk.out",
   ".venv",
+  "services/nova_common_layer/python",
 ]
 
 [tool.ruff.lint]

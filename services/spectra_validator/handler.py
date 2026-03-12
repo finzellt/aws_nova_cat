@@ -62,8 +62,7 @@ from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError
 from nova_common.logging import configure_logging, logger
 from nova_common.tracing import tracer
-
-from .profiles import validate_spectrum
+from profiles import validate_spectrum  # type: ignore[import-not-found]
 
 
 def _bootstrap_astropy(base: str = "/tmp") -> None:

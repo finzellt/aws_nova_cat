@@ -239,7 +239,7 @@
                                 "JitterStrategy": "FULL"
                             }
                         ],
-                        "Next": "PublishAcquireAndValidateSpectraRequests"
+                        "Next": "SuppressDownstreamCheck"
                     },
                     "PublishAcquireAndValidateSpectraRequests": {
                         "Type": "Task",
@@ -266,6 +266,23 @@
                                 "JitterStrategy": "FULL"
                             }
                         ],
+                        "End": true
+                    },
+                    "SuppressDownstreamCheck": {
+                        "Type": "Choice",
+                        "Comment": "If suppress_downstream=true is set on the input, skip launching acquire_and_validate_spectra. Intended for smoke tests and operator dry-runs where stub creation should be verified in isolation without triggering downstream acquisition executions.",
+                        "Choices": [
+                            {
+                                "Variable": "$$.Execution.Input.suppress_downstream",
+                                "BooleanEquals": true,
+                                "Next": "DownstreamSuppressed"
+                            }
+                        ],
+                        "Default": "PublishAcquireAndValidateSpectraRequests"
+                    },
+                    "DownstreamSuppressed": {
+                        "Type": "Pass",
+                        "Comment": "suppress_downstream=true — downstream acquisition launch skipped.",
                         "End": true
                     }
                 }
