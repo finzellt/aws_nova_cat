@@ -64,18 +64,23 @@ class NovaCatWorkflows(Construct):
         self._workflows_dir = os.path.join(os.path.dirname(__file__), "../workflows")
 
         # ------------------------------------------------------------------
-        # acquire_and_validate_spectra state machine (placeholder stub)
-        #
-        # Placeholder ASL contains a single Fail state — will be replaced
-        # in its respective epic. Provisioned here so that workflow_launcher
-        # can reference its ARN via ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN
-        # before the full implementation lands.
+        # acquire_and_validate_spectra state machine
         # ------------------------------------------------------------------
         self.acquire_and_validate_spectra = self._create_state_machine(
             name="acquire-and-validate-spectra",
             asl_file="acquire_and_validate_spectra.asl.json",
-            substitutions={},
-            invokable_functions=[],
+            substitutions={
+                "JobRunManagerFunctionArn": compute.job_run_manager.function_arn,
+                "AcquireIdempotencyLockFunctionArn": compute.idempotency_guard.function_arn,
+                "SpectraValidatorFunctionArn": compute.spectra_validator.function_arn,
+                "SpectraAcquirerFunctionArn": compute.spectra_acquirer.function_arn,
+            },
+            invokable_functions=[
+                compute.job_run_manager,
+                compute.idempotency_guard,
+                compute.spectra_validator,
+                compute.spectra_acquirer,
+            ],
         )
 
         # ------------------------------------------------------------------

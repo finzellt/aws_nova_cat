@@ -21,7 +21,7 @@
         },
         "GenerateCorrelationId": {
             "Type": "Pass",
-            "Comment": "Inject null placeholder so $.correlation_id is always defined when BeginJobRun Parameters are evaluated. BeginJobRun Lambda replaces null with a fresh UUID via event.get('correlation_id') or str(uuid.uuid4()).",
+            "Comment": "Inject null placeholder so $.correlation_id is always defined when BeginJobRun Parameters are evaluated.",
             "Result": null,
             "ResultPath": "$.correlation_id",
             "Next": "BeginJobRun"
@@ -55,15 +55,20 @@
                     "ErrorEquals": [
                         "States.ALL"
                     ],
-                    "Next": "TerminalFailHandler",
+                    "Next": "BeginJobRunFailed",
                     "ResultPath": "$.error"
                 }
             ],
             "Next": "NormalizeCandidateName"
         },
+        "BeginJobRunFailed": {
+            "Type": "Fail",
+            "Error": "BeginJobRunFailed",
+            "Cause": "Fatal error before JobRun record was established. No finalization possible."
+        },
         "NormalizeCandidateName": {
             "Type": "Task",
-            "Comment": "Normalize candidate name to a canonical form for dedup and lookup (lowercase, strip whitespace, resolve common aliases). Returns normalized_candidate_name.",
+            "Comment": "Normalize candidate name to a canonical form for dedup and lookup.",
             "Resource": "${NormalizeCandidateNameFunctionArn}",
             "Parameters": {
                 "task_name": "NormalizeCandidateName",
@@ -94,46 +99,11 @@
                     "ResultPath": "$.error"
                 }
             ],
-            "Next": "AcquireIdempotencyLock"
-        },
-        "AcquireIdempotencyLock": {
-            "Type": "Task",
-            "Comment": "Acquire workflow-level idempotency lock. Key: InitializeNova:{normalized_candidate_name}:{schema_version}:{time_bucket}. If lock already held by a concurrent execution, raises RetryableError.",
-            "Resource": "${AcquireIdempotencyLockFunctionArn}",
-            "Parameters": {
-                "task_name": "AcquireIdempotencyLock",
-                "workflow_name": "initialize_nova",
-                "primary_id.$": "$.normalization.normalized_candidate_name",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
-            },
-            "ResultPath": "$.idempotency",
-            "TimeoutSeconds": 10,
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "RetryableError"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 3,
-                    "BackoffRate": 4,
-                    "JitterStrategy": "FULL"
-                }
-            ],
-            "Catch": [
-                {
-                    "ErrorEquals": [
-                        "States.ALL"
-                    ],
-                    "Next": "TerminalFailHandler",
-                    "ResultPath": "$.error"
-                }
-            ],
             "Next": "CheckExistingNovaByName"
         },
         "CheckExistingNovaByName": {
             "Type": "Task",
-            "Comment": "Query NameMapping items for normalized_candidate_name (primary name and aliases). Returns exists=true/false and nova_id if found.",
+            "Comment": "Query NameMapping items for normalized_candidate_name. Returns exists=true/false and nova_id if found.",
             "Resource": "${CheckExistingNovaByNameFunctionArn}",
             "Parameters": {
                 "task_name": "CheckExistingNovaByName",
@@ -168,7 +138,7 @@
         },
         "ExistsInDB": {
             "Type": "Choice",
-            "Comment": "Short-circuit: if the name already resolves to a known nova_id, skip archive resolution and launch ingest_new_nova immediately.",
+            "Comment": "Short-circuit: if the name already resolves to a known nova_id, skip archive resolution and lock acquisition — launch ingest_new_nova immediately.",
             "Choices": [
                 {
                     "Variable": "$.name_check.exists",
@@ -176,7 +146,7 @@
                     "Next": "PublishIngestNewNova_Exists"
                 }
             ],
-            "Default": "ResolveCandidateAgainstPublicArchives"
+            "Default": "AcquireIdempotencyLock"
         },
         "PublishIngestNewNova_Exists": {
             "Type": "Task",
@@ -242,9 +212,44 @@
             ],
             "End": true
         },
+        "AcquireIdempotencyLock": {
+            "Type": "Task",
+            "Comment": "Acquire workflow-level idempotency lock. Only reached for new (unseen) candidate names. Prevents concurrent executions from creating duplicate nova records.",
+            "Resource": "${AcquireIdempotencyLockFunctionArn}",
+            "Parameters": {
+                "task_name": "AcquireIdempotencyLock",
+                "workflow_name": "initialize_nova",
+                "primary_id.$": "$.normalization.normalized_candidate_name",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.idempotency",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "ResolveCandidateAgainstPublicArchives"
+        },
         "ResolveCandidateAgainstPublicArchives": {
             "Type": "Task",
-            "Comment": "Query SIMBAD, TNS, and other public resolvers. Returns: is_nova (bool), is_classical_nova (bool | ambiguous), coordinates (RA/Dec/epoch), classification_confidence, resolver_source.",
+            "Comment": "Query SIMBAD and TNS. Returns: is_nova (bool), coordinates (RA/Dec/epoch), resolver_source, aliases.",
             "Resource": "${ResolveCandidateAgainstPublicArchivesFunctionArn}",
             "Parameters": {
                 "task_name": "ResolveCandidateAgainstPublicArchives",
@@ -276,205 +281,11 @@
                     "ResultPath": "$.error"
                 }
             ],
-            "Next": "CheckExistingNovaByCoordinates"
-        },
-        "CheckExistingNovaByCoordinates": {
-            "Type": "Task",
-            "Comment": "Compute angular separation between resolved coordinates and all persisted nova coordinates. Returns: match_outcome (DUPLICATE|AMBIGUOUS|NONE), min_sep_arcsec, matched_nova_id (when DUPLICATE).",
-            "Resource": "${CheckExistingNovaByCoordinatesFunctionArn}",
-            "Parameters": {
-                "task_name": "CheckExistingNovaByCoordinates",
-                "workflow_name": "initialize_nova",
-                "resolved_ra.$": "$.resolution.resolved_ra",
-                "resolved_dec.$": "$.resolution.resolved_dec",
-                "resolved_epoch.$": "$.resolution.resolved_epoch",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
-            },
-            "ResultPath": "$.coordinate_check",
-            "TimeoutSeconds": 20,
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "RetryableError"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 3,
-                    "BackoffRate": 4,
-                    "JitterStrategy": "FULL"
-                }
-            ],
-            "Catch": [
-                {
-                    "ErrorEquals": [
-                        "States.ALL"
-                    ],
-                    "Next": "TerminalFailHandler",
-                    "ResultPath": "$.error"
-                }
-            ],
-            "Next": "CoordinateMatchClassification"
-        },
-        "CoordinateMatchClassification": {
-            "Type": "Choice",
-            "Comment": "Three-way classification on angular separation. < 2\": definite duplicate — upsert alias and launch. 2\"–10\": ambiguous band — quarantine for human review. > 10\": no match — proceed to nova classification.",
-            "Choices": [
-                {
-                    "Variable": "$.coordinate_check.match_outcome",
-                    "StringEquals": "DUPLICATE",
-                    "Next": "UpsertAliasForExistingNova"
-                },
-                {
-                    "Variable": "$.coordinate_check.match_outcome",
-                    "StringEquals": "AMBIGUOUS",
-                    "Next": "QuarantineHandler_CoordinateAmbiguity"
-                }
-            ],
-            "Default": "CandidateIsNova"
-        },
-        "UpsertAliasForExistingNova": {
-            "Type": "Task",
-            "Comment": "Coordinate match < 2\": add the candidate_name as an alias to the matched nova. Does not create a new nova_id.",
-            "Resource": "${UpsertAliasForExistingNovaFunctionArn}",
-            "Parameters": {
-                "task_name": "UpsertAliasForExistingNova",
-                "workflow_name": "initialize_nova",
-                "candidate_name.$": "$.candidate_name",
-                "normalized_candidate_name.$": "$.normalization.normalized_candidate_name",
-                "nova_id.$": "$.coordinate_check.matched_nova_id",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
-            },
-            "ResultPath": "$.alias_upsert",
-            "TimeoutSeconds": 20,
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "RetryableError"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 3,
-                    "BackoffRate": 4,
-                    "JitterStrategy": "FULL"
-                }
-            ],
-            "Catch": [
-                {
-                    "ErrorEquals": [
-                        "States.ALL"
-                    ],
-                    "Next": "TerminalFailHandler",
-                    "ResultPath": "$.error"
-                }
-            ],
-            "Next": "PublishIngestNewNova_CoordinateMatch"
-        },
-        "PublishIngestNewNova_CoordinateMatch": {
-            "Type": "Task",
-            "Comment": "Coordinate duplicate confirmed — launch ingest_new_nova with the matched nova_id. Outcome: EXISTS_AND_LAUNCHED.",
-            "Resource": "${PublishIngestNewNovaFunctionArn}",
-            "Parameters": {
-                "task_name": "PublishIngestNewNova",
-                "workflow_name": "initialize_nova",
-                "outcome": "EXISTS_AND_LAUNCHED",
-                "nova_id.$": "$.coordinate_check.matched_nova_id",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
-            },
-            "ResultPath": "$.launch",
-            "TimeoutSeconds": 10,
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "RetryableError"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 2,
-                    "BackoffRate": 4,
-                    "JitterStrategy": "FULL"
-                }
-            ],
-            "Catch": [
-                {
-                    "ErrorEquals": [
-                        "States.ALL"
-                    ],
-                    "Next": "TerminalFailHandler",
-                    "ResultPath": "$.error"
-                }
-            ],
-            "Next": "FinalizeJobRunSuccess_CoordinateMatch"
-        },
-        "FinalizeJobRunSuccess_CoordinateMatch": {
-            "Type": "Task",
-            "Comment": "Emit JobRun SUCCEEDED with outcome EXISTS_AND_LAUNCHED (via coordinate match path).",
-            "Resource": "${FinalizeJobRunSuccessFunctionArn}",
-            "Parameters": {
-                "task_name": "FinalizeJobRunSuccess",
-                "workflow_name": "initialize_nova",
-                "outcome": "EXISTS_AND_LAUNCHED",
-                "nova_id.$": "$.coordinate_check.matched_nova_id",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id",
-                "job_run.$": "$.job_run"
-            },
-            "ResultPath": "$.finalize",
-            "TimeoutSeconds": 10,
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "RetryableError"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 3,
-                    "BackoffRate": 4,
-                    "JitterStrategy": "FULL"
-                }
-            ],
-            "End": true
-        },
-        "QuarantineHandler_CoordinateAmbiguity": {
-            "Type": "Task",
-            "Comment": "Coordinate match in ambiguous 2\"–10\" band. Persist quarantine status, publish SNS notification (best-effort). quarantine_reason_code: COORDINATE_AMBIGUITY.",
-            "Resource": "${QuarantineHandlerFunctionArn}",
-            "Parameters": {
-                "task_name": "QuarantineHandler",
-                "workflow_name": "initialize_nova",
-                "quarantine_reason_code": "COORDINATE_AMBIGUITY",
-                "candidate_name.$": "$.candidate_name",
-                "normalized_candidate_name.$": "$.normalization.normalized_candidate_name",
-                "min_sep_arcsec.$": "$.coordinate_check.min_sep_arcsec",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id",
-                "job_run.$": "$.job_run"
-            },
-            "ResultPath": "$.quarantine",
-            "TimeoutSeconds": 10,
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "RetryableError"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 3,
-                    "BackoffRate": 4,
-                    "JitterStrategy": "FULL"
-                }
-            ],
-            "Catch": [
-                {
-                    "ErrorEquals": [
-                        "States.ALL"
-                    ],
-                    "Next": "FinalizeJobRunQuarantined",
-                    "ResultPath": "$.error"
-                }
-            ],
-            "Next": "FinalizeJobRunQuarantined"
+            "Next": "CandidateIsNova"
         },
         "CandidateIsNova": {
             "Type": "Choice",
-            "Comment": "Did the archive resolver determine this candidate is a nova at all? NOT_FOUND is a terminal success — no downstream launch.",
+            "Comment": "Is this object a nova? If not, terminal success with NOT_FOUND. Both classical and recurrent novae proceed to CreateNovaId.",
             "Choices": [
                 {
                     "Variable": "$.resolution.is_nova",
@@ -482,7 +293,7 @@
                     "Next": "FinalizeJobRunSuccess_NotFound"
                 }
             ],
-            "Default": "CandidateIsClassicalNova"
+            "Default": "CreateNovaId"
         },
         "FinalizeJobRunSuccess_NotFound": {
             "Type": "Task",
@@ -512,92 +323,9 @@
             ],
             "End": true
         },
-        "CandidateIsClassicalNova": {
-            "Type": "Choice",
-            "Comment": "Is this nova classical? NOT_A_CLASSICAL_NOVA is terminal success. AMBIGUOUS triggers quarantine.",
-            "Choices": [
-                {
-                    "Variable": "$.resolution.is_classical_nova",
-                    "StringEquals": "false",
-                    "Next": "FinalizeJobRunSuccess_NotClassical"
-                },
-                {
-                    "Variable": "$.resolution.is_classical_nova",
-                    "StringEquals": "ambiguous",
-                    "Next": "QuarantineHandler_ClassificationAmbiguity"
-                }
-            ],
-            "Default": "CreateNovaId"
-        },
-        "FinalizeJobRunSuccess_NotClassical": {
-            "Type": "Task",
-            "Comment": "Nova confirmed but not classical. Terminal success — no downstream launch. Outcome: NOT_A_CLASSICAL_NOVA.",
-            "Resource": "${FinalizeJobRunSuccessFunctionArn}",
-            "Parameters": {
-                "task_name": "FinalizeJobRunSuccess",
-                "workflow_name": "initialize_nova",
-                "outcome": "NOT_A_CLASSICAL_NOVA",
-                "candidate_name.$": "$.candidate_name",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id",
-                "job_run.$": "$.job_run"
-            },
-            "ResultPath": "$.finalize",
-            "TimeoutSeconds": 10,
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "RetryableError"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 3,
-                    "BackoffRate": 4,
-                    "JitterStrategy": "FULL"
-                }
-            ],
-            "End": true
-        },
-        "QuarantineHandler_ClassificationAmbiguity": {
-            "Type": "Task",
-            "Comment": "Nova classification is ambiguous — conflicting or inconclusive resolver results. quarantine_reason_code: OTHER.",
-            "Resource": "${QuarantineHandlerFunctionArn}",
-            "Parameters": {
-                "task_name": "QuarantineHandler",
-                "workflow_name": "initialize_nova",
-                "quarantine_reason_code": "OTHER",
-                "candidate_name.$": "$.candidate_name",
-                "normalized_candidate_name.$": "$.normalization.normalized_candidate_name",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id",
-                "job_run.$": "$.job_run"
-            },
-            "ResultPath": "$.quarantine",
-            "TimeoutSeconds": 10,
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "RetryableError"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 3,
-                    "BackoffRate": 4,
-                    "JitterStrategy": "FULL"
-                }
-            ],
-            "Catch": [
-                {
-                    "ErrorEquals": [
-                        "States.ALL"
-                    ],
-                    "Next": "FinalizeJobRunQuarantined",
-                    "ResultPath": "$.error"
-                }
-            ],
-            "Next": "FinalizeJobRunQuarantined"
-        },
         "CreateNovaId": {
             "Type": "Task",
-            "Comment": "Generate a new stable nova_id (UUID v4). Persists the nova record stub with PENDING status.",
+            "Comment": "Generate a new stable nova_id (UUID v4). Persists the nova record stub.",
             "Resource": "${CreateNovaIdFunctionArn}",
             "Parameters": {
                 "task_name": "CreateNovaId",
@@ -633,7 +361,7 @@
         },
         "UpsertMinimalNovaMetadata": {
             "Type": "Task",
-            "Comment": "Persist minimal nova metadata: nova_id, candidate_name, normalized_candidate_name, resolved coordinates, resolver_source, schema_version. Creates NameMapping item.",
+            "Comment": "Persist minimal nova metadata: nova_id, candidate_name, resolved coordinates, resolver_source, aliases.",
             "Resource": "${UpsertMinimalNovaMetadataFunctionArn}",
             "Parameters": {
                 "task_name": "UpsertMinimalNovaMetadata",
@@ -739,7 +467,7 @@
         },
         "TerminalFailHandler": {
             "Type": "Task",
-            "Comment": "Classifies the error and persists error_classification + error_fingerprint onto the JobRun before the final FAILED status is written. Implemented as a task in job_run_manager (task_name: TerminalFailHandler). ResultPath $.terminal_fail preserves $.job_run and $.error for the subsequent FinalizeJobRunFailed state.",
+            "Comment": "Classifies the error and persists error_classification + error_fingerprint onto the JobRun before the final FAILED status is written.",
             "Resource": "${JobRunManagerFunctionArn}",
             "Parameters": {
                 "task_name": "TerminalFailHandler",
@@ -773,33 +501,6 @@
                 }
             ],
             "Next": "FinalizeJobRunFailed"
-        },
-        "FinalizeJobRunQuarantined": {
-            "Type": "Task",
-            "Comment": "Emit JobRun QUARANTINED. Terminal state for all quarantine paths.",
-            "Resource": "${FinalizeJobRunQuarantinedFunctionArn}",
-            "Parameters": {
-                "task_name": "FinalizeJobRunQuarantined",
-                "workflow_name": "initialize_nova",
-                "candidate_name.$": "$.candidate_name",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id",
-                "job_run.$": "$.job_run"
-            },
-            "ResultPath": "$.finalize",
-            "TimeoutSeconds": 10,
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "RetryableError"
-                    ],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 3,
-                    "BackoffRate": 4,
-                    "JitterStrategy": "FULL"
-                }
-            ],
-            "End": true
         },
         "FinalizeJobRunFailed": {
             "Type": "Task",

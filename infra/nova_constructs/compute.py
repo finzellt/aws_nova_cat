@@ -30,6 +30,8 @@ Lambda function inventory (12 functions):
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 from dataclasses import dataclass
 
 import aws_cdk as cdk
@@ -39,7 +41,50 @@ import aws_cdk.aws_logs as logs
 import aws_cdk.aws_s3 as s3
 import aws_cdk.aws_secretsmanager as secretsmanager
 import aws_cdk.aws_sns as sns
+import jsii
 from constructs import Construct
+
+
+@jsii.implements(cdk.ILocalBundling)
+class _LocalPipBundler:
+    """
+    Local bundling implementation for zip-bundled Lambda functions.
+
+    CDK tries local bundling before Docker. If this returns True, Docker is
+    never invoked — which is essential in CI environments (act, GitHub Actions)
+    where Docker-in-Docker is unavailable.
+
+    Strategy:
+      1. Copy service source files to output_dir
+      2. Run pip install -r requirements.txt into output_dir
+      3. Return True on success, False to fall back to Docker
+    """
+
+    def __init__(self, service_path: str) -> None:
+        self._service_path = service_path
+
+    def try_bundle(self, output_dir: str, *, image: object = None, **kwargs: object) -> bool:
+        try:
+            # Copy all source files first
+            for item in os.listdir(self._service_path):
+                src = os.path.join(self._service_path, item)
+                dst = os.path.join(output_dir, item)
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(src, dst)
+
+            # Install dependencies if requirements.txt exists
+            req_file = os.path.join(self._service_path, "requirements.txt")
+            if os.path.exists(req_file):
+                subprocess.run(
+                    ["pip", "install", "-r", req_file, "-t", output_dir, "--quiet"],
+                    check=True,
+                )
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
 
 # Default Lambda settings — tuned for Nova Cat's low-throughput, cost-aware profile.
 _DEFAULT_MEMORY_MB = 256
@@ -218,7 +263,18 @@ class NovaCatCompute(Construct):
                 function_name=f"nova-cat-{name.replace('_', '-')}",
                 runtime=_PYTHON_RUNTIME,
                 handler="handler.handle",
-                code=lambda_.Code.from_asset(os.path.join(self._services_root, spec.service_dir)),
+                code=lambda_.Code.from_asset(
+                    os.path.join(self._services_root, spec.service_dir),
+                    bundling=cdk.BundlingOptions(
+                        image=_PYTHON_RUNTIME.bundling_image,
+                        command=[
+                            "bash",
+                            "-c",
+                            "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output",
+                        ],
+                        local=_LocalPipBundler(os.path.join(self._services_root, spec.service_dir)),
+                    ),
+                ),
                 description=spec.description,
                 memory_size=spec.memory_mb,
                 timeout=spec.timeout,
@@ -242,8 +298,10 @@ class NovaCatCompute(Construct):
             self,
             "SpectraValidator",
             function_name="nova-cat-spectra-validator",
+            architecture=lambda_.Architecture.ARM_64,
             code=lambda_.DockerImageCode.from_image_asset(
-                os.path.join(self._services_root, "spectra_validator")
+                self._services_root,
+                file="spectra_validator/Dockerfile",
             ),
             description=(
                 "Selects FITS profile, normalizes spectral arrays to IVOA-aligned model, "
@@ -268,8 +326,10 @@ class NovaCatCompute(Construct):
             self,
             "ArchiveResolver",
             function_name="nova-cat-archive-resolver",
+            architecture=lambda_.Architecture.ARM_64,
             code=lambda_.DockerImageCode.from_image_asset(
-                os.path.join(self._services_root, "archive_resolver")
+                self._services_root,  # context = services/
+                file="archive_resolver/Dockerfile",  # path relative to context
             ),
             description=(
                 "Queries external public archives (SIMBAD, TNS) to resolve a candidate name "
@@ -294,8 +354,10 @@ class NovaCatCompute(Construct):
             self,
             "SpectraDiscoverer",
             function_name="nova-cat-spectra-discoverer",
+            architecture=lambda_.Architecture.ARM_64,
             code=lambda_.DockerImageCode.from_image_asset(
-                os.path.join(self._services_root, "spectra_discoverer")
+                self._services_root,
+                file="spectra_discoverer/Dockerfile",
             ),
             description=(
                 "Dispatches provider discovery adapters, assigns stable data_product_id values, "

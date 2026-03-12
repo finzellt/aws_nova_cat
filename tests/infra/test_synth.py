@@ -26,7 +26,17 @@ _REGION = "us-east-1"
 @pytest.fixture(scope="module")
 def template() -> assertions.Template:
     """Synthesize the stack once for all tests in this module."""
-    app = cdk.App(context={"account": _ACCOUNT})
+    app = cdk.App(
+        context={
+            "account": _ACCOUNT,
+            # Disable Docker bundling during synth. Without this, CDK tries to
+            # build Docker images for DockerImageFunction constructs, which
+            # fails in CI and act where no Docker daemon is available. Setting
+            # this to an empty list tells CDK to skip bundling for all stacks —
+            # the resulting template is identical; assets just aren't staged.
+            "aws:cdk:bundling-stacks": [],
+        }
+    )
     stack = NovaCatStack(
         app,
         "NovaCatTest",

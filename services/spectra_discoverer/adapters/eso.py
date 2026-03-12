@@ -54,7 +54,7 @@ from nova_common.logging import logger
 
 # Search cone diameter in degrees.
 # 0.001 deg = 3.6 arcsec diameter / 1.8 arcsec radius.
-_SEARCH_DIAMETER_DEG = 0.001
+_SEARCH_DIAMETER_DEG = 1 / 60  # 10 arcsec diameter, divided by 2 for radius, converted to degrees
 
 _SSAP_ENDPOINT = "http://archive.eso.org/ssap"
 

@@ -3,3 +3,5 @@ astroquery>=0.4.7,<1.0.0
 numpy>=1.26.0,<2.0.0
 pyvo>=1.4
 requests>2.0.0
+aws_lambda_powertools>=2.0.0,<3.0.0
+aws_xray_sdk>=2.12.0,<3.0.0

@@ -29,7 +29,8 @@
                     "ErrorEquals": [
                         "States.ALL"
                     ],
-                    "Next": "TerminalFailHandler",
+                    "Comment": "If BeginJobRun fails there is no JobRun record to finalize — fail the execution directly.",
+                    "Next": "BeginJobRunFailed",
                     "ResultPath": "$.error"
                 }
             ],
@@ -227,6 +228,11 @@
             "ResultPath": "$.finalize",
             "TimeoutSeconds": 10,
             "End": true
+        },
+        "BeginJobRunFailed": {
+            "Type": "Fail",
+            "Error": "BeginJobRunFailed",
+            "Cause": "Fatal error before JobRun record was established. No finalization possible."
         }
     }
 }

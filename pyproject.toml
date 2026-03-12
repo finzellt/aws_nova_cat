@@ -4,6 +4,7 @@ target-version = "py311"
 extend-exclude = [
   "cdk.out",
   ".venv",
+  "services/nova_common_layer/python",
 ]
 
 [tool.ruff.lint]
@@ -16,3 +17,4 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["tests","infra/tests", "services"]
 addopts = "-q"
+pythonpath = [".", "services/spectra_validator", "services/spectra_acquirer"]
