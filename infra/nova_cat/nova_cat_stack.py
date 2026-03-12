@@ -27,7 +27,15 @@ from nova_constructs.workflows import NovaCatWorkflows
 
 
 class NovaCatStack(cdk.Stack):
-    def __init__(self, scope: Construct, construct_id: str, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        env_prefix: str = "nova-cat",
+        cf_prefix: str = "NovaCat",
+        **kwargs: Any,
+    ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         is_prod = self.node.try_get_context("env") == "prod"
@@ -41,6 +49,8 @@ class NovaCatStack(cdk.Stack):
             "Storage",
             enable_pitr=is_prod,
             removal_policy=removal_policy,
+            env_prefix=env_prefix,
+            cf_prefix=cf_prefix,
         )
 
         # ------------------------------------------------------------------
@@ -65,6 +75,7 @@ class NovaCatStack(cdk.Stack):
             public_site_bucket=self.storage.public_site_bucket,
             quarantine_topic=self.storage.quarantine_topic,
             ads_secret=ads_secret,
+            env_prefix=env_prefix,
         )
 
         # ------------------------------------------------------------------
@@ -74,6 +85,8 @@ class NovaCatStack(cdk.Stack):
             self,
             "Workflows",
             compute=self.compute,
+            env_prefix=env_prefix,
+            cf_prefix=cf_prefix,
         )
 
         # ------------------------------------------------------------------

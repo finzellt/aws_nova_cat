@@ -24,13 +24,12 @@ from typing import Any, cast
 
 import boto3
 import pytest
-from boto3.dynamodb.conditions import Attr
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-_STACK_NAME = "NovaCat"
+_STACK_NAME = "NovaCatSmoke"
 _REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 _POLL_INTERVAL_SECONDS = 5
 
@@ -38,15 +37,15 @@ _POLL_INTERVAL_SECONDS = 5
 # StackOutputs. Must stay in sync with the CfnOutput definitions in
 # nova_constructs/storage.py and nova_constructs/workflows.py.
 _CF_EXPORT_MAP: dict[str, str] = {
-    "table_name": "NovaCat-TableName",
-    "private_bucket_name": "NovaCat-PrivateBucketName",
-    "public_site_bucket_name": "NovaCat-PublicSiteBucketName",
-    "quarantine_topic_arn": "NovaCat-QuarantineTopicArn",
-    "initialize_nova_arn": "NovaCat-InitializeNovaStateMachineArn",
-    "ingest_new_nova_arn": "NovaCat-IngestNewNovaStateMachineArn",
-    "refresh_references_arn": "NovaCat-RefreshReferencesStateMachineArn",
-    "discover_spectra_products_arn": "NovaCat-DiscoverSpectraProductsStateMachineArn",
-    "acquire_and_validate_spectra_arn": "NovaCat-AcquireAndValidateSpectraStateMachineArn",
+    "table_name": "NovaCatSmoke-TableName",
+    "private_bucket_name": "NovaCatSmoke-PrivateBucketName",
+    "public_site_bucket_name": "NovaCatSmoke-PublicSiteBucketName",
+    "quarantine_topic_arn": "NovaCatSmoke-QuarantineTopicArn",
+    "initialize_nova_arn": "NovaCatSmoke-InitializeNovaStateMachineArn",
+    "ingest_new_nova_arn": "NovaCatSmoke-IngestNewNovaStateMachineArn",
+    "refresh_references_arn": "NovaCatSmoke-RefreshReferencesStateMachineArn",
+    "discover_spectra_products_arn": "NovaCatSmoke-DiscoverSpectraProductsStateMachineArn",
+    "acquire_and_validate_spectra_arn": "NovaCatSmoke-AcquireAndValidateSpectraStateMachineArn",
 }
 
 # Lambda function names as provisioned by NovaCatCompute.
@@ -249,48 +248,36 @@ def purge_smoke_items_before_session(stack: StackOutputs, dynamodb_resource: Any
     The per-test cleanup_smoke_items fixture handles ongoing cleanup after each
     test; this fixture just ensures the session starts with a known-clean state.
     """
-    _purge_smoke_items(dynamodb_resource.Table(stack.table_name))
+    _wipe_smoke_test_table(dynamodb_resource.Table(stack.table_name))
 
 
-def _purge_smoke_items(table: Any) -> None:
+def _wipe_smoke_test_table(table: Any) -> None:
     """
-    Delete all DynamoDB items that could have been written by smoke tests.
-    Shared by the session-start purge and the per-test cleanup fixture.
+    Delete every item in the smoke test table.
+
+    The smoke test table is dedicated exclusively to smoke test runs, so a
+    full wipe is always safe — there is no production data to protect. This
+    replaces the previous multi-pass targeted scan approach, which was
+    fragile (required tagging every item type) and dangerous (could have
+    nuked real data if pointed at a shared table by mistake).
     """
-    for attr, prefix in [
-        ("correlation_id", "smoke-"),
-        ("PK", "IDEMPOTENCY#"),
-        ("PK", "LOCATOR#"),
-    ]:
+    response = table.scan(ProjectionExpression="PK, SK")
+    with table.batch_writer() as batch:
+        for item in response.get("Items", []):
+            batch.delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
+    # Handle pagination — scan returns at most 1 MB per call
+    while "LastEvaluatedKey" in response:
         response = table.scan(
-            FilterExpression=Attr(attr).begins_with(prefix),
             ProjectionExpression="PK, SK",
+            ExclusiveStartKey=response["LastEvaluatedKey"],
         )
         with table.batch_writer() as batch:
             for item in response.get("Items", []):
                 batch.delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
 
-    # Delete Nova items (SK = "NOVA"). These are written both by _seed_nova
-    # and by initialize_nova itself, and neither sets correlation_id on the
-    # item, so the scan above misses them. Without this pass, Nova items
-    # outlive their test and cause "Nova already existed" skips on the next run.
-    response = table.scan(
-        FilterExpression=Attr("SK").begins_with("NOVA#"),
-        ProjectionExpression="PK, SK",
-    )
-    with table.batch_writer() as batch:
-        for item in response.get("Items", []):
-            batch.delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
-
 
 @pytest.fixture(autouse=True)
 def cleanup_smoke_items(stack: StackOutputs, dynamodb_resource: Any) -> Any:
-    """
-    Delete all DynamoDB items written by smoke tests after each test.
-
-    Delegates to _purge_smoke_items, which covers correlation_id-keyed items,
-    idempotency locks, and LocatorAlias items in three passes. See that
-    function's docstring for the rationale for each pass.
-    """
+    """Wipe the smoke test table after each test."""
     yield  # test runs here
-    _purge_smoke_items(dynamodb_resource.Table(stack.table_name))
+    _wipe_smoke_test_table(dynamodb_resource.Table(stack.table_name))

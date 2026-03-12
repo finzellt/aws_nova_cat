@@ -222,8 +222,11 @@ class NovaCatCompute(Construct):
         quarantine_topic: sns.Topic,
         ads_secret: secretsmanager.ISecret,
         services_root: str = "../../services",
+        env_prefix: str = "nova-cat",
     ) -> None:
         super().__init__(scope, construct_id)
+
+        self._env_prefix = env_prefix
 
         self._services_root = os.path.join(os.path.dirname(__file__), services_root)
 
@@ -245,7 +248,7 @@ class NovaCatCompute(Construct):
         nova_common_layer = lambda_.LayerVersion(
             self,
             "NovaCommonLayer",
-            layer_version_name="nova-cat-nova-common",
+            layer_version_name=f"{env_prefix}-nova-common",
             code=lambda_.Code.from_asset(os.path.join(self._services_root, "nova_common_layer")),
             compatible_runtimes=[_PYTHON_RUNTIME],
             description="Nova Cat shared utilities: Powertools Logger, Tracer, configure_logging",
@@ -260,7 +263,7 @@ class NovaCatCompute(Construct):
             fn = lambda_.Function(
                 self,
                 _to_pascal(name),
-                function_name=f"nova-cat-{name.replace('_', '-')}",
+                function_name=f"{env_prefix}-{name.replace('_', '-')}",
                 runtime=_PYTHON_RUNTIME,
                 handler="handler.handle",
                 code=lambda_.Code.from_asset(
@@ -297,7 +300,7 @@ class NovaCatCompute(Construct):
         spectra_validator = lambda_.DockerImageFunction(
             self,
             "SpectraValidator",
-            function_name="nova-cat-spectra-validator",
+            function_name=f"{env_prefix}-spectra-validator",
             architecture=lambda_.Architecture.ARM_64,
             code=lambda_.DockerImageCode.from_image_asset(
                 self._services_root,
@@ -325,7 +328,7 @@ class NovaCatCompute(Construct):
         archive_resolver = lambda_.DockerImageFunction(
             self,
             "ArchiveResolver",
-            function_name="nova-cat-archive-resolver",
+            function_name=f"{env_prefix}-archive-resolver",
             architecture=lambda_.Architecture.ARM_64,
             code=lambda_.DockerImageCode.from_image_asset(
                 self._services_root,  # context = services/
@@ -353,7 +356,7 @@ class NovaCatCompute(Construct):
         spectra_discoverer = lambda_.DockerImageFunction(
             self,
             "SpectraDiscoverer",
-            function_name="nova-cat-spectra-discoverer",
+            function_name=f"{env_prefix}-spectra-discoverer",
             architecture=lambda_.Architecture.ARM_64,
             code=lambda_.DockerImageCode.from_image_asset(
                 self._services_root,

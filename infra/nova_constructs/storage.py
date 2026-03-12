@@ -49,6 +49,8 @@ class NovaCatStorage(Construct):
         *,
         enable_pitr: bool = False,
         removal_policy: cdk.RemovalPolicy = cdk.RemovalPolicy.RETAIN,
+        env_prefix: str = "nova-cat",
+        cf_prefix: str = "NovaCat",
     ) -> None:
         super().__init__(scope, construct_id)
 
@@ -72,7 +74,7 @@ class NovaCatStorage(Construct):
         self.table = dynamodb.Table(
             self,
             "NovaCatTable",
-            table_name="NovaCat",
+            table_name=cf_prefix,
             partition_key=dynamodb.Attribute(
                 name="PK",
                 type=dynamodb.AttributeType.STRING,
@@ -182,7 +184,7 @@ class NovaCatStorage(Construct):
         self.quarantine_topic = sns.Topic(
             self,
             "QuarantineNotificationsTopic",
-            topic_name="nova-cat-quarantine-notifications",
+            topic_name=f"{env_prefix}-quarantine-notifications",
             display_name="Nova Cat — Quarantine Notifications",
         )
 
@@ -194,26 +196,26 @@ class NovaCatStorage(Construct):
             "TableName",
             value=self.table.table_name,
             description="NovaCat DynamoDB table name",
-            export_name="NovaCat-TableName",
+            export_name=f"{cf_prefix}-TableName",
         )
         cdk.CfnOutput(
             self,
             "PrivateBucketName",
             value=self.private_bucket.bucket_name,
             description="Nova Cat private data S3 bucket name",
-            export_name="NovaCat-PrivateBucketName",
+            export_name=f"{cf_prefix}-PrivateBucketName",
         )
         cdk.CfnOutput(
             self,
             "PublicSiteBucketName",
             value=self.public_site_bucket.bucket_name,
             description="Nova Cat public site S3 bucket name",
-            export_name="NovaCat-PublicSiteBucketName",
+            export_name=f"{cf_prefix}-PublicSiteBucketName",
         )
         cdk.CfnOutput(
             self,
             "QuarantineTopicArn",
             value=self.quarantine_topic.topic_arn,
             description="Nova Cat quarantine notifications SNS topic ARN",
-            export_name="NovaCat-QuarantineTopicArn",
+            export_name=f"{cf_prefix}-QuarantineTopicArn",
         )
