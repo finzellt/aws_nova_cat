@@ -1,6 +1,6 @@
 # Nova Cat — Current Architecture Snapshot
 
-_Last Updated: 2026-03-07_
+_Last Updated: 2026-03-12_
 
 This document captures the **authoritative architectural baseline** of Nova Cat at this point in time.
 
@@ -410,6 +410,37 @@ The following must remain true:
 - Full VO compliance enforcement
 - Advanced photometry version diffing
 - Provider auto-discovery scaling
+
+---
+
+# 11. Deployment Model
+
+Nova Cat is deployed as two independent CDK stacks in the same AWS account and region:
+
+## NovaCat (production)
+
+The live stack. All production workflows, Lambdas, state machines, and the primary
+DynamoDB table (`NovaCat`) live here. CloudFormation exports are prefixed `NovaCat-`.
+
+## NovaCatSmoke (smoke test)
+
+An isolated parallel deployment used exclusively by the smoke test suite.
+Identical to `NovaCat` in every functional respect — same Lambda code, same ASL,
+same IAM grants — but with independently namespaced resources:
+
+- Lambda functions: `nova-cat-smoke-*`
+- State machines: `nova-cat-smoke-*`
+- DynamoDB table: `NovaCatSmoke`
+- CloudFormation exports: `NovaCatSmoke-*`
+
+The smoke stack uses `DESTROY` removal policy throughout. Its DynamoDB table is
+wiped between test runs, eliminating any risk of smoke tests touching production data.
+
+Smoke tests resolve all stack outputs from `NovaCatSmoke` via CloudFormation exports.
+If the smoke stack is not deployed, all smoke tests skip cleanly with a descriptive message.
+
+Both stacks are deployed together via `./deploy.sh`. Individual stack targeting is
+supported: `./deploy.sh NovaCat` or `./deploy.sh NovaCatSmoke`.
 
 ---
 

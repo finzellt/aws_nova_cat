@@ -58,8 +58,13 @@ class NovaCatWorkflows(Construct):
         construct_id: str,
         *,
         compute: NovaCatCompute,
+        env_prefix: str = "nova-cat",
+        cf_prefix: str = "NovaCat",
     ) -> None:
         super().__init__(scope, construct_id)
+
+        self._env_prefix = env_prefix
+        self._cf_prefix = cf_prefix
 
         self._workflows_dir = os.path.join(os.path.dirname(__file__), "../workflows")
 
@@ -166,7 +171,7 @@ class NovaCatWorkflows(Construct):
             return stack.format_arn(
                 service="states",
                 resource="stateMachine",
-                resource_name=f"nova-cat-{name}",
+                resource_name=f"{env_prefix}-{name}",
                 arn_format=cdk.ArnFormat.COLON_RESOURCE_NAME,
             )
 
@@ -234,35 +239,35 @@ class NovaCatWorkflows(Construct):
             "InitializeNovaStateMachineArn",
             value=self.initialize_nova.attr_arn,
             description="initialize_nova Step Functions state machine ARN",
-            export_name="NovaCat-InitializeNovaStateMachineArn",
+            export_name=f"{cf_prefix}-InitializeNovaStateMachineArn",
         )
         cdk.CfnOutput(
             self,
             "IngestNewNovaStateMachineArn",
             value=self.ingest_new_nova.attr_arn,
             description="ingest_new_nova Step Functions state machine ARN",
-            export_name="NovaCat-IngestNewNovaStateMachineArn",
+            export_name=f"{cf_prefix}-IngestNewNovaStateMachineArn",
         )
         cdk.CfnOutput(
             self,
             "RefreshReferencesStateMachineArn",
             value=self.refresh_references.attr_arn,
             description="refresh_references Step Functions state machine ARN",
-            export_name="NovaCat-RefreshReferencesStateMachineArn",
+            export_name=f"{cf_prefix}-RefreshReferencesStateMachineArn",
         )
         cdk.CfnOutput(
             self,
             "DiscoverSpectraProductsStateMachineArn",
             value=self.discover_spectra_products.attr_arn,
             description="discover_spectra_products Step Functions state machine ARN",
-            export_name="NovaCat-DiscoverSpectraProductsStateMachineArn",
+            export_name=f"{cf_prefix}-DiscoverSpectraProductsStateMachineArn",
         )
         cdk.CfnOutput(
             self,
             "AcquireAndValidateSpectraStateMachineArn",
             value=self.acquire_and_validate_spectra.attr_arn,
             description="acquire_and_validate_spectra Step Functions state machine ARN (placeholder stub)",
-            export_name="NovaCat-AcquireAndValidateSpectraStateMachineArn",
+            export_name=f"{cf_prefix}-AcquireAndValidateSpectraStateMachineArn",
         )
 
     def _create_state_machine(
@@ -294,7 +299,7 @@ class NovaCatWorkflows(Construct):
             self,
             f"{_to_pascal(name)}Role",
             assumed_by=iam.ServicePrincipal("states.amazonaws.com"),
-            description=f"Execution role for nova-cat-{name} state machine",
+            description=f"Execution role for {self._env_prefix}-{name} state machine",
         )
 
         # Grant lambda:InvokeFunction scoped to only the Lambdas this
@@ -326,7 +331,7 @@ class NovaCatWorkflows(Construct):
         return sfn.CfnStateMachine(
             self,
             _to_pascal(name),
-            state_machine_name=f"nova-cat-{name}",
+            state_machine_name=f"{self._env_prefix}-{name}",
             state_machine_type="STANDARD",
             role_arn=role.role_arn,
             definition_substitutions=substitutions if substitutions else None,
@@ -342,6 +347,7 @@ class NovaCatWorkflows(Construct):
 def _grant_start_execution(
     fn: lambda_.Function,
     stack: cdk.Stack,
+    env_prefix: str = "nova-cat",
 ) -> None:
     """
     Grant a Lambda function permission to start any nova-cat Step Functions
@@ -360,7 +366,7 @@ def _grant_start_execution(
                 stack.format_arn(
                     service="states",
                     resource="stateMachine",
-                    resource_name="nova-cat-*",
+                    resource_name=f"{env_prefix}-*",
                     arn_format=cdk.ArnFormat.COLON_RESOURCE_NAME,
                 )
             ],

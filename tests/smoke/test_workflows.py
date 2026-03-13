@@ -354,18 +354,12 @@ class TestInitializeNova:
             f"Expected finalize to be InitializeNovaFinalizeOutput, "
             f"got {type(model.finalize).__name__} — workflow likely failed"
         )
-        # if model.finalize.outcome != "CREATED_AND_LAUNCHED":
-        #     pytest.skip("Nova already existed — CREATED path not exercised this run")
-        if model.finalize.outcome == "CREATED_AND_LAUNCHED":
-            pass
-        elif model.finalize.outcome == "EXISTS_AND_LAUNCHED":
+        if model.finalize.outcome == "EXISTS_AND_LAUNCHED":
             pytest.skip("Nova already existed — CREATED path not exercised this run")
-        elif model.finalize.outcome == "NOT_FOUND":
-            pytest.skip("Unexpected NOT_FOUND outcome — workflow likely failed")
-        elif model.finalize.outcome == "QUARANTINED":
-            pytest.skip("Unexpected QUARANTINED outcome — workflow likely failed")
-        else:
-            pytest.skip(f"Unexpected outcome {model.finalize.outcome} — workflow likely failed")
+        assert model.finalize.outcome == "CREATED_AND_LAUNCHED", (
+            f"Unexpected finalize outcome {model.finalize.outcome!r} — "
+            f"expected CREATED_AND_LAUNCHED or EXISTS_AND_LAUNCHED"
+        )
 
         assert model.nova_creation is not None, "nova_creation absent on CREATED path"
         nova_id = model.nova_creation.nova_id
@@ -551,18 +545,12 @@ class TestInitializeNova:
             f"Expected finalize to be InitializeNovaFinalizeOutput, "
             f"got {type(model.finalize).__name__} — workflow likely failed"
         )
-        # if model.finalize.outcome != "CREATED_AND_LAUNCHED":
-        #     pytest.skip("Nova already existed — CREATED field-presence path not exercised")
-        if model.finalize.outcome == "CREATED_AND_LAUNCHED":
-            pass
-        elif model.finalize.outcome == "EXISTS_AND_LAUNCHED":
-            pytest.skip("Nova already existed — CREATED path not exercised this run")
-        elif model.finalize.outcome == "NOT_FOUND":
-            pytest.skip("Unexpected NOT_FOUND outcome — workflow likely failed")
-        elif model.finalize.outcome == "QUARANTINED":
-            pytest.skip("Unexpected QUARANTINED outcome — workflow likely failed")
-        else:
-            pytest.skip(f"Unexpected outcome {model.finalize.outcome} — workflow likely failed")
+        if model.finalize.outcome == "EXISTS_AND_LAUNCHED":
+            pytest.skip("Nova already existed — CREATED field-presence path not exercised")
+        assert model.finalize.outcome == "CREATED_AND_LAUNCHED", (
+            f"Unexpected finalize outcome {model.finalize.outcome!r} — "
+            f"expected CREATED_AND_LAUNCHED or EXISTS_AND_LAUNCHED"
+        )
 
         # Fields present on CREATED_AND_LAUNCHED
         assert model.normalization is not None, "normalization absent on CREATED path"

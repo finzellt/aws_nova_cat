@@ -53,13 +53,34 @@ echo ""
 
 # ---------------------------------------------------------------------------
 # Step 3 — CDK deploy
+#
+# Deploys both the production stack (NovaCat) and the smoke test stack
+# (NovaCatSmoke). Pass a stack name to target a specific stack, e.g.:
+#   ./deploy.sh NovaCat
+#   ./deploy.sh NovaCatSmoke
 # ---------------------------------------------------------------------------
-echo "==> [3/3] Deploying CDK stack..."
+echo "==> [3/3] Deploying CDK stacks..."
 cd "$REPO_ROOT/infra"
+# Separate stack names from CDK flags.
+# Stack names are positional args that don't start with -.
+# All other args (--hotswap, -c env=prod, etc.) are passed through as flags.
+STACKS=()
+FLAGS=()
+for arg in "$@"; do
+  if [[ "$arg" == -* ]]; then
+    FLAGS+=("$arg")
+  else
+    STACKS+=("$arg")
+  fi
+done
+if [[ ${#STACKS[@]} -eq 0 ]]; then
+  STACKS=(NovaCat NovaCatSmoke)
+fi
 cdk deploy \
   -c account="$ACCOUNT_ID" \
   --require-approval never \
-  "$@"
+  "${FLAGS[@]+"${FLAGS[@]}"}" \
+  "${STACKS[@]}"
 
 echo ""
 echo "==> Deploy complete."
