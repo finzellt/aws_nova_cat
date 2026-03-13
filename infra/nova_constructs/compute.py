@@ -422,17 +422,17 @@ class NovaCatCompute(Construct):
         table.grant_read_write_data(self._functions["spectra_acquirer"])
         private_bucket.grant_write(
             self._functions["spectra_acquirer"],
-            "raw/spectra/*",
+            "raw/*",
         )
 
         table.grant_read_write_data(self._functions["spectra_validator"])
         private_bucket.grant_read(
             self._functions["spectra_validator"],
-            "raw/spectra/*",
+            "raw/*",
         )
         private_bucket.grant_write(
             self._functions["spectra_validator"],
-            "derived/spectra/*",
+            "derived/*",
         )
         private_bucket.grant_write(
             self._functions["spectra_validator"],
@@ -442,11 +442,11 @@ class NovaCatCompute(Construct):
         table.grant_read_write_data(self._functions["photometry_ingestor"])
         private_bucket.grant_read(
             self._functions["photometry_ingestor"],
-            "raw/photometry/*",
+            "raw/*",
         )
         private_bucket.grant_read_write(
             self._functions["photometry_ingestor"],
-            "derived/photometry/*",
+            "derived/*",
         )
 
         table.grant_write_data(self._functions["quarantine_handler"])
