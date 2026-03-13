@@ -335,8 +335,10 @@ def _handle_persist_data_product_metadata(event: dict[str, Any], context: object
         GSI1 attributes written → product appears in EligibilityIndex
 
     Returns:
-        persisted_products — newly stubbed products eligible for acquisition,
-                             fed to PublishAcquireAndValidateSpectraRequests
+        persisted_products — all products eligible for acquisition (newly stubbed
+                             and existing unvalidated); named 'persisted' for
+                             historical reasons but includes existing UNVALIDATED
+                             products queued for re-acquisition, not just new stubs.
     """
     provider: str = event["provider"]
     nova_id: str = event["nova_id"]
@@ -391,8 +393,18 @@ def _handle_persist_data_product_metadata(event: dict[str, Any], context: object
                 extra={"data_product_id": data_product_id, "provider": provider},
             )
         else:
+            # NOTE: 'persisted_products' is a misnomer here — this product already
+            # exists in DynamoDB (is_new=False) but is still UNVALIDATED and needs
+            # acquisition. We append it so it gets launched alongside new stubs.
+            persisted_products.append(
+                {
+                    "data_product_id": data_product_id,
+                    "provider": provider,
+                    "nova_id": nova_id,
+                }
+            )
             logger.info(
-                "Existing non-VALID product — LocatorAlias ensured, no stub re-write",
+                "Existing non-VALID product — LocatorAlias ensured, queued for acquisition",
                 extra={"data_product_id": data_product_id},
             )
 
@@ -401,7 +413,7 @@ def _handle_persist_data_product_metadata(event: dict[str, Any], context: object
         extra={
             "nova_id": nova_id,
             "provider": provider,
-            "newly_persisted": len(persisted_products),
+            "eligible_for_acquisition": len(persisted_products),
         },
     )
     return {"persisted_products": persisted_products}

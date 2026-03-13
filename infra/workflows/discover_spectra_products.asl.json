@@ -252,8 +252,8 @@
                             "job_run.$": "$.job_run",
                             "persisted_products.$": "$.persist_result.persisted_products"
                         },
-                        "ResultPath": "$.publish_result",
-                        "TimeoutSeconds": 10,
+                        "ResultPath": null,
+                        "TimeoutSeconds": 60,
                         "Retry": [
                             {
                                 "ErrorEquals": [

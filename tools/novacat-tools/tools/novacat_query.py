@@ -74,7 +74,7 @@ class NovaCatQuery:
         Columns: data_product_id, provider, acquisition_status,
                  validation_status, eligibility, fits_profile_id,
                  attempt_count, last_attempt_at, quarantine_reason_code,
-                 sha256, byte_length, updated_at
+                 sha256, byte_length, raw_s3_key, updated_at
         """
         nova_id = self._require_nova_id(name)
         items = self._query_prefix(nova_id, "PRODUCT#SPECTRA#")
@@ -94,11 +94,92 @@ class NovaCatQuery:
                 "quarantine_reason_code": item.get("quarantine_reason_code"),
                 "sha256": item.get("sha256"),
                 "byte_length": item.get("byte_length"),
+                "raw_s3_key": item.get("raw_s3_key"),
                 "updated_at": item.get("updated_at"),
             }
             for item in items
         ]
         return pd.DataFrame(rows).sort_values(["provider", "data_product_id"])
+
+    def spectra_by_instrument(self, name: str) -> pd.DataFrame:
+        """
+        Break down spectra data products by instrument (hints.collection).
+
+        Returns one row per product with instrument/wavelength/SNR fields
+        extracted from the hints dict, sorted by instrument then date.
+
+        Columns: instrument, validation_status, acquisition_status,
+                 attempt_count, last_execution_arn, raw_s3_key, data_product_id,
+                 provider, snr, em_min_nm, em_max_nm, t_min_mjd, t_max_mjd, eligibility
+        """
+        nova_id = self._require_nova_id(name)
+        items = self._query_prefix(nova_id, "PRODUCT#SPECTRA#")
+        if not items:
+            return pd.DataFrame()
+
+        rows = []
+        for item in items:
+            hints = item.get("hints") or {}
+            em_min = hints.get("em_min_m")
+            em_max = hints.get("em_max_m")
+            rows.append(
+                {
+                    "instrument": hints.get("collection"),
+                    "validation_status": item.get("validation_status"),
+                    "acquisition_status": item.get("acquisition_status"),
+                    "data_product_id": item.get("data_product_id"),
+                    "provider": item.get("provider"),
+                    "snr": float(hints["snr"]) if hints.get("snr") else None,
+                    "em_min_nm": round(float(em_min) * 1e9, 1) if em_min else None,
+                    "em_max_nm": round(float(em_max) * 1e9, 1) if em_max else None,
+                    "t_min_mjd": hints.get("t_min_mjd"),
+                    "t_max_mjd": hints.get("t_max_mjd"),
+                    "attempt_count": int(item.get("attempt_count") or 0),
+                    "last_execution_arn": item.get("last_execution_arn"),
+                    "raw_s3_key": item.get("raw_s3_key"),
+                    "eligibility": item.get("eligibility"),
+                }
+            )
+
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            df = df.sort_values(["instrument", "t_min_mjd"], na_position="last")
+        return df
+
+    def spectra_instrument_summary(self, name: str) -> pd.DataFrame:
+        """
+        Aggregate spectra counts and wavelength coverage per instrument.
+
+        Returns one row per instrument with counts by validation status
+        and the full wavelength range covered across all products.
+
+        Columns: instrument, total, valid, unvalidated, quarantined,
+                 terminal_invalid, em_min_nm, em_max_nm, snr_median
+        """
+        df = self.spectra_by_instrument(name)
+        if df.empty:
+            return pd.DataFrame()
+
+        rows = []
+        for instrument, grp in df.groupby("instrument", dropna=False):
+            vs = grp["validation_status"]
+            rows.append(
+                {
+                    "instrument": instrument,
+                    "total": len(grp),
+                    "valid": (vs == "VALID").sum(),
+                    "unvalidated": (vs == "UNVALIDATED").sum(),
+                    "quarantined": (vs == "QUARANTINED").sum(),
+                    "terminal_invalid": (vs == "TERMINAL_INVALID").sum(),
+                    "em_min_nm": grp["em_min_nm"].min(),
+                    "em_max_nm": grp["em_max_nm"].max(),
+                    "snr_median": round(grp["snr"].median(), 1)
+                    if grp["snr"].notna().any()
+                    else None,
+                }
+            )
+
+        return pd.DataFrame(rows).sort_values("total", ascending=False)
 
     # ── View 2: Full nova summary ──────────────────────────────────────────────
 
@@ -547,7 +628,15 @@ Examples:
     parser.add_argument("--nova", type=str, help="Nova name (primary or alias)")
     parser.add_argument(
         "--view",
-        choices=["spectra", "summary", "jobs", "refs", "name_mappings", "global_refs"],
+        choices=[
+            "spectra",
+            "summary",
+            "jobs",
+            "refs",
+            "name_mappings",
+            "global_refs",
+            "instruments",
+        ],
         default="spectra",
         help="Which per-nova view to display (default: spectra)",
     )
@@ -608,6 +697,11 @@ Examples:
 
     elif args.view == "global_refs":
         _print_df(q.global_references(args.nova), f"Global Reference Entities — {args.nova}")
+
+    elif args.view == "instruments":
+        _print_df(q.spectra_instrument_summary(args.nova), f"Spectra by Instrument — {args.nova}")
+        print()
+        _print_df(q.spectra_by_instrument(args.nova), f"All Products — {args.nova}")
 
 
 if __name__ == "__main__":

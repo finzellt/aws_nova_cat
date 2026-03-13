@@ -40,7 +40,8 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -81,7 +82,8 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -116,7 +118,8 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -201,7 +204,8 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
                     ],
                     "Comment": "Lambda-level transients only (throttle, cold start crash). Each SFN retry increments attempt_count again, which is intentional. Provider-level download backoff is enforced by next_eligible_attempt_at checked at workflow re-entry via CheckOperationalStatus.",
                     "IntervalSeconds": 5,
@@ -240,7 +244,8 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
                     ],
                     "Comment": "Covers transient astropy I/O failures (S3 read errors, Lambda memory pressure) that propagate as RetryableError from the profile adapter contract.",
                     "IntervalSeconds": 5,
@@ -292,7 +297,8 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -330,7 +336,8 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -368,7 +375,8 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -404,7 +412,8 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
