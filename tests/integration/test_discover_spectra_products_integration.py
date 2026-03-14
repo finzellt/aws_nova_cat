@@ -33,8 +33,8 @@ Paths covered:
   5. Already-VALID product — existing product with validation_status=VALID
      is skipped entirely; no acquisition event fired
   6. Existing non-VALID product — known LocatorAlias resolves to existing
-     data_product_id; alias re-written (idempotent), no new stub, no
-     acquisition event (is_new=False, skip_acquisition=False → alias only)
+     data_product_id; alias re-written (idempotent), no new stub, but
+     acquisition IS triggered (is_new=False, skip_acquisition=False → queued)
 """
 
 from __future__ import annotations
@@ -869,15 +869,12 @@ class TestAlreadyValidProduct:
 
 
 class TestExistingNonValidProduct:
-    def test_existing_non_valid_writes_alias_only(self, table: Any) -> None:
+    def test_existing_non_valid_queued_for_acquisition(self, table: Any) -> None:
         """
         If LocatorAlias resolves to an existing data_product_id that is NOT
-        VALID, LocatorAlias is re-written (idempotent) but no new stub is
-        inserted and no acquisition event is fired (is_new=False).
-
-        The existing product's acquisition state is preserved — the workflow
-        spec says: 'existing non-VALID product: LocatorAlias ensured, no stub
-        re-write'.
+        VALID, LocatorAlias is re-written (idempotent), no new stub is
+        inserted, but the product IS added to persisted_products so that
+        acquire_and_validate_spectra is launched for it.
         """
         dp_id = str(uuid.uuid5(_ID_NAMESPACE, "ESO:eso:prod-in-flight"))
         locator_identity = "provider_product_id:eso:prod-in-flight"
@@ -919,15 +916,17 @@ class TestExistingNonValidProduct:
                 mock_sfn.exceptions.ExecutionAlreadyExists = type(
                     "ExecutionAlreadyExists", (Exception,), {}
                 )
+                mock_sfn.start_execution.return_value = {"executionArn": _FAKE_EXECUTION_ARN}
                 state = _run_prefix(h)
                 result = _run_provider_iteration(h, state)
                 _finalize_success(h, state)
 
-            # No new acquisition event
-            mock_sfn.start_execution.assert_not_called()
-            assert result["persist_result"]["persisted_products"] == []
+            # Acquisition IS triggered for the existing non-VALID product
+            mock_sfn.start_execution.assert_called_once()
+            assert len(result["persist_result"]["persisted_products"]) == 1
+            assert result["persist_result"]["persisted_products"][0]["data_product_id"] == dp_id
 
-            # Existing stub's acquisition state is preserved
+            # Existing stub's acquisition state is preserved (no re-write)
             stub = _get_data_product(table, dp_id)
             assert stub is not None
             assert stub["acquisition_status"] == "IN_PROGRESS"

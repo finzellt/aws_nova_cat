@@ -1,35 +1,46 @@
 """
-profiles/__init__.py — Profile registry and public entry point.
+profiles/__init__.py — FITS profile registry and public entry point.
 
-Public API (imported by spectra_validator/handler.py):
+Public surface:
     validate_spectrum(hdulist, *, provider, data_product_id, hints) -> ProfileResult
 
-Registry order matters: more specific profiles MUST precede fallbacks.
-Current order:
-    1. EsoUvesProfile     — ESO + INSTRUME starts with "UVES"
-    [2. EsoXShooterProfile — future]
-    [3. EsoFallbackProfile — future]
+Internal:
+    _PROFILE_REGISTRY  — ordered list of FitsProfile instances
+                         First match wins; more specific profiles must come
+                         before any fallback.
+
+Adding a new profile:
+    1. Implement FitsProfile in a new module (e.g. profiles/eso_harps.py).
+    2. Instantiate and insert into _PROFILE_REGISTRY below.
+       Order matters: more specific profiles (instrument-level) before
+       any catch-all fallback.
+    No other files need to change.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .base import FitsProfile, ProfileResult
+from .base import FitsProfile, NormalizedSpectrum, ProfileResult
+from .eso_fallback import EsoFallbackProfile
 from .eso_uves import EsoUvesProfile
+from .eso_xshooter import EsoXShooterProfile
+
+# ---------------------------------------------------------------------------
+# Profile registry
+# ---------------------------------------------------------------------------
+# Order is significant — first match wins.
+# Instrument-specific profiles must appear before provider-level fallbacks.
 
 _PROFILE_REGISTRY: list[FitsProfile] = [
     EsoUvesProfile(),
-    # EsoXShooterProfile(),
-    # EsoFallbackProfile(),
+    EsoXShooterProfile(),
+    EsoFallbackProfile(),  # catch-all — must be last
 ]
 
-
-def _select_profile(provider: str, hdulist: Any) -> FitsProfile | None:
-    for profile in _PROFILE_REGISTRY:
-        if profile.matches(provider, hdulist):
-            return profile
-    return None
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
 
 def validate_spectrum(
@@ -37,47 +48,49 @@ def validate_spectrum(
     *,
     provider: str,
     data_product_id: str,
-    hints: dict[str, Any],
+    hints: dict[str, Any] | None = None,
 ) -> ProfileResult:
     """
-    Select a FITS profile and validate/normalize a spectrum.
+    Select a profile for the given FITS file and run validation.
 
-    The only function imported by spectra_validator/handler.py.
+    Profile selection: iterate _PROFILE_REGISTRY in order; call the first
+    profile whose matches(provider, hdulist) returns True.
 
-    Returns ProfileResult(success=True, spectrum=...) on success.
     Returns ProfileResult(success=False, quarantine_reason_code="UNKNOWN_PROFILE")
-        if no profile matches.
-    Returns ProfileResult(success=False, ...) on deterministic validation failure.
+    if no registered profile matches. This is a deterministic failure —
+    it does not raise.
 
-    Transient I/O exceptions propagate uncaught — ValidateBytes converts them
-    to RetryableError.
+    Transient I/O exceptions from inside a profile's validate() are NOT caught
+    here — they propagate to ValidateBytes, which converts them to RetryableError.
     """
-    profile = _select_profile(provider, hdulist)
+    product_metadata: dict[str, Any] = {
+        "data_product_id": data_product_id,
+        "provider": provider,
+        "hints": hints or {},
+    }
 
-    if profile is None:
-        try:
-            instrume = str(hdulist[0].header.get("INSTRUME", "")).strip()
-            telescop = str(hdulist[0].header.get("TELESCOP", "")).strip()
-        except Exception:
-            instrume = telescop = "unknown"
+    for profile in _PROFILE_REGISTRY:
+        if profile.matches(provider, hdulist):
+            return profile.validate(hdulist, product_metadata)
 
-        return ProfileResult(
-            success=False,
-            quarantine_reason=(
-                f"No FITS profile matched for provider={provider!r}. "
-                f"INSTRUME={instrume!r} TELESCOP={telescop!r}. "
-                "Register a new profile in profiles/_PROFILE_REGISTRY."
-            ),
-            quarantine_reason_code="UNKNOWN_PROFILE",
-            normalization_notes=[],
-            profile_id=None,
-        )
-
-    return profile.validate(
-        hdulist=hdulist,
-        product_metadata={
-            "data_product_id": data_product_id,
-            "provider": provider,
-            "hints": hints,
-        },
+    # No profile matched — quarantine with a clear operator-facing reason.
+    collection = (hints or {}).get("collection", "")
+    reason = (
+        f"No registered profile matched provider={provider!r}"
+        + (f", collection={collection!r}" if collection else "")
+        + f". Registered profiles: {[p.profile_id for p in _PROFILE_REGISTRY]}"
     )
+    return ProfileResult(
+        success=False,
+        quarantine_reason=reason,
+        quarantine_reason_code="UNKNOWN_PROFILE",
+        profile_id=None,
+    )
+
+
+__all__ = [
+    "validate_spectrum",
+    "FitsProfile",
+    "NormalizedSpectrum",
+    "ProfileResult",
+]

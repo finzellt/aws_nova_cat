@@ -47,6 +47,11 @@ pick_from_list() {
 }
 
 # ---------------------------------------------------------------------------
+# Outer loop — restart here when user selects "Start over"
+# ---------------------------------------------------------------------------
+while true; do
+
+# ---------------------------------------------------------------------------
 # Step 1 — Pick a state machine
 # ---------------------------------------------------------------------------
 hr
@@ -133,10 +138,16 @@ out = d.get('output')
 print(out if out else '(no output)')
 ")
 
-EXEC_HISTORY=$(aws stepfunctions get-execution-history \
+# Write execution history to a temp file to avoid shell variable corruption
+# of large JSON payloads (Lambda error cause fields can contain embedded JSON
+# with special characters that zsh mangles during variable assignment).
+EXEC_HISTORY_FILE=$(mktemp /tmp/sfn_history_XXXXXX.json)
+trap "rm -f $EXEC_HISTORY_FILE" EXIT
+
+aws stepfunctions get-execution-history \
     --execution-arn "$CHOSEN_EXEC_ARN" \
     --region "$REGION" \
-    --output json)
+    --output json > "$EXEC_HISTORY_FILE"
 
 # ---------------------------------------------------------------------------
 # Step 4 — Inspection menu
@@ -150,6 +161,7 @@ while true; do
     print -P "  %F{cyan}4%f) Full event history"
     print -P "  %F{cyan}5%f) CloudWatch Lambda logs (1h lookback)"
     print -P "  %F{cyan}6%f) Exit"
+    print -P "  %F{cyan}7%f) Start over (pick a different state machine / execution)"
     read -r "ACTION?Enter number: "
 
     case "$ACTION" in
@@ -166,7 +178,7 @@ while true; do
         print -P "  Started       : $EXEC_START"
 
         if [[ "$EXEC_STATUS" == "FAILED" ]]; then
-            ERROR_SUMMARY=$(echo "$EXEC_HISTORY" | python3 -c "
+            ERROR_SUMMARY=$(python3 -c "
 import json, sys
 history = json.load(sys.stdin)['events']
 failed = [e for e in history if e['type'] in ('ExecutionFailed', 'TaskFailed')]
@@ -192,7 +204,7 @@ else:
         print(f'  Error  : {error}')
         print(f'  Cause  : {msg}')
         print()
-" 2>/dev/null || echo "  (could not parse failure details)")
+" 2>/dev/null < "$EXEC_HISTORY_FILE" || echo "  (could not parse failure details)")
             print -P "\n%F{red}%BFailure Summary:%b%f"
             echo "$ERROR_SUMMARY"
         fi
@@ -209,7 +221,7 @@ else:
         hr
         print -P "%BFailed States%b"
         hr
-        echo "$EXEC_HISTORY" | python3 -c "
+        python3 -c "
 import json, sys
 history = json.load(sys.stdin)['events']
 failed = [e for e in history if e['type'] in ('ExecutionFailed', 'TaskFailed', 'TaskStateAborted')]
@@ -231,14 +243,14 @@ else:
         print(f'  Error : {error}')
         print(f'  Cause : {msg}')
         print()
-"
+" < "$EXEC_HISTORY_FILE"
         ;;
 
     4)
         hr
         print -P "%BFull Event History%b"
         hr
-        echo "$EXEC_HISTORY" | python3 -c "
+        python3 -c "
 import json, sys
 history = json.load(sys.stdin)['events']
 for e in history:
@@ -259,7 +271,7 @@ for e in history:
                 detail = '(output present)'
             break
     print(f'  [{ts}] {etype:<45} {detail}')
-"
+" < "$EXEC_HISTORY_FILE"
         ;;
 
     5)
@@ -306,8 +318,16 @@ for e in history:
         exit 0
         ;;
 
+    7)
+        print -P "\n%F{yellow}Restarting...%f"
+        rm -f "$EXEC_HISTORY_FILE"
+        break  # break inner menu loop → outer loop restarts from Step 1
+        ;;
+
     *)
         echo "Invalid choice."
         ;;
     esac
-done
+done  # end inner menu loop
+
+done  # end outer loop

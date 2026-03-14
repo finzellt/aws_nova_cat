@@ -516,13 +516,14 @@ class TestValidateSpectrumEntryPoint:
         assert result.quarantine_reason is not None
         assert "MAST" in result.quarantine_reason
 
-    def test_eso_non_uves_returns_unknown_profile(self) -> None:
-        """ESO + non-UVES instrument has no registered profile yet → UNKNOWN_PROFILE."""
-        header = _make_primary_header(INSTRUME="XSHOOTER")
-        hdulist = _make_hdulist(primary_header=header)
+    def test_non_eso_provider_returns_unknown_profile(self) -> None:
+        """Non-ESO provider has no registered profile → UNKNOWN_PROFILE.
+        Note: ESO + any instrument is now covered by EsoFallbackProfile.
+        """
+        hdulist = _make_hdulist()
         result = validate_spectrum(
             hdulist,
-            provider="ESO",
+            provider="MAST",
             data_product_id="test-dpid-9999",
             hints={},
         )

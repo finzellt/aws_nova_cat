@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -62,6 +63,8 @@ _ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN = os.environ[
 ]
 
 _sfn = boto3.client("stepfunctions")
+_dynamodb = boto3.resource("dynamodb")
+_table = _dynamodb.Table(os.environ["NOVA_CAT_TABLE_NAME"])
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +167,9 @@ def _publish_acquire_and_validate_spectra_requests(
     nova_id: str = event["nova_id"]
     correlation_id: str = event["correlation_id"]
     job_run_id: str = event["job_run"]["job_run_id"]
+    # NOTE: "persisted_products" includes both newly-stubbed products (is_new=True)
+    # and existing UNVALIDATED products re-queued for acquisition (is_new=False).
+    # The name is historical; treat it as "eligible_for_acquisition".
     persisted_products: list[dict[str, Any]] = event["persisted_products"]
 
     launched: list[dict[str, Any]] = []
@@ -183,7 +189,18 @@ def _publish_acquire_and_validate_spectra_requests(
                 data_product_id=data_product_id,
                 provider=provider,
             )
+            # Persist the execution ARN on the DataProduct so failed executions
+            # can be looked up directly without scanning all SFN executions.
+            execution_arn = result.get("execution_arn")
+            if execution_arn:
+                _record_execution_arn(
+                    nova_id=nova_id,
+                    provider=provider,
+                    data_product_id=data_product_id,
+                    execution_arn=execution_arn,
+                )
             launched.append({"data_product_id": data_product_id, "provider": provider, **result})
+            time.sleep(0.25)  # stagger launches to avoid Lambda concurrency burst
         except Exception as exc:
             logger.error(
                 "Failed to launch acquire_and_validate_spectra execution",
@@ -221,6 +238,40 @@ def _publish_acquire_and_validate_spectra_requests(
 # ---------------------------------------------------------------------------
 # Shared SFN helper
 # ---------------------------------------------------------------------------
+
+
+def _record_execution_arn(
+    *,
+    nova_id: str,
+    provider: str,
+    data_product_id: str,
+    execution_arn: str,
+) -> None:
+    """
+    Persist the SFN execution ARN on the DataProduct item.
+
+    Written as last_execution_arn so that repeated re-runs always reflect
+    the most recent launch. Failures are logged but not raised — an ARN
+    write failure must never abort the fan-out loop.
+    """
+    try:
+        _table.update_item(
+            Key={
+                "PK": nova_id,
+                "SK": f"PRODUCT#SPECTRA#{provider}#{data_product_id}",
+            },
+            UpdateExpression="SET last_execution_arn = :arn",
+            ExpressionAttributeValues={":arn": execution_arn},
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to record execution_arn on DataProduct — non-fatal",
+            extra={
+                "data_product_id": data_product_id,
+                "execution_arn": execution_arn,
+                "error": str(exc),
+            },
+        )
 
 
 def _start_execution(
