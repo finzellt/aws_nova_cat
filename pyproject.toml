@@ -5,7 +5,9 @@ extend-exclude = [
   "cdk.out",
   ".venv",
   "services/nova_common_layer/python",
+  "tools/novacat-tools/notebooks",
 ]
+exclude = ["tools/novacat-tools/notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]

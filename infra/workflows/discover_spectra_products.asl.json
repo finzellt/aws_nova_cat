@@ -252,8 +252,8 @@
                             "job_run.$": "$.job_run",
                             "persisted_products.$": "$.persist_result.persisted_products"
                         },
-                        "ResultPath": "$.publish_result",
-                        "TimeoutSeconds": 10,
+                        "ResultPath": null,
+                        "TimeoutSeconds": 60,
                         "Retry": [
                             {
                                 "ErrorEquals": [
@@ -273,8 +273,16 @@
                         "Comment": "If suppress_downstream=true is set on the input, skip launching acquire_and_validate_spectra. Intended for smoke tests and operator dry-runs where stub creation should be verified in isolation without triggering downstream acquisition executions.",
                         "Choices": [
                             {
-                                "Variable": "$$.Execution.Input.suppress_downstream",
-                                "BooleanEquals": true,
+                                "And": [
+                                    {
+                                        "Variable": "$$.Execution.Input.suppress_downstream",
+                                        "IsPresent": true
+                                    },
+                                    {
+                                        "Variable": "$$.Execution.Input.suppress_downstream",
+                                        "BooleanEquals": true
+                                    }
+                                ],
                                 "Next": "DownstreamSuppressed"
                             }
                         ],

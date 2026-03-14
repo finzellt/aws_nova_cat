@@ -332,7 +332,7 @@ class NovaCatWorkflows(Construct):
             self,
             _to_pascal(name),
             state_machine_name=f"{self._env_prefix}-{name}",
-            state_machine_type="STANDARD",
+            state_machine_type="EXPRESS",
             role_arn=role.role_arn,
             definition_substitutions=substitutions if substitutions else None,
             definition_string=cdk.Fn.sub(

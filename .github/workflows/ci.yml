@@ -36,7 +36,8 @@ jobs:
             -r services/archive_resolver/requirements.txt \
             -r services/spectra_validator/requirements.txt \
             -r services/nova_common_layer_requirements.txt \
-            -r services/requirements.txt
+            -r services/requirements.txt \
+            -r tools/novacat-tools/requirements.txt
 
       - name: Lint (ruff)
         run: python -m ruff check .

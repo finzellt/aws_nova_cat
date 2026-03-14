@@ -560,17 +560,20 @@ class TestPersistDataProductMetadata:
         ).get("Item")
         assert item["eligibility"] == "NONE"
 
-    def test_existing_non_valid_product_writes_alias_only(
+    def test_existing_non_valid_product_queued_for_acquisition(
         self, table: Any, mock_adapter: MagicMock
     ) -> None:
+        """Existing UNVALIDATED product is included in persisted_products so
+        acquire_and_validate_spectra is launched for it on re-discovery."""
         product = self._product_with_id(is_new=False, skip=False)
 
         with mock_aws():
             handler = _load_handler(mock_adapter)
             result = handler.handle(_base_persist_event([product]), None)
 
-        # Not added to persisted_products (no acquisition event)
-        assert result["persisted_products"] == []
+        # Added to persisted_products so acquisition is triggered
+        assert len(result["persisted_products"]) == 1
+        assert result["persisted_products"][0]["data_product_id"] == product["data_product_id"]
         # Alias still written
         alias = table.get_item(
             Key={
