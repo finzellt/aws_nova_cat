@@ -212,3 +212,13 @@ This data model provides a clear structure for representing nova pages and allow
 Because the dataset is delivered as a structured JSON document, the frontend can render nova pages without complex backend queries.
 
 Future versions of the catalog may expand this data model to include additional observational datasets, derived products, or cross-nova comparison features.
+
+---
+
+## Long-Term Nova Page Vision
+
+The long-term goal of the nova page is to serve as a one-stop public resource for information about an individual nova.
+
+As the catalog matures, nova pages should expand toward including any publicly accessible information about the nova that would otherwise require users to consult multiple external archives or resources.
+
+Not all such information must be equally prominent, and this level of completeness is not required for the MVP. However, this principle should guide future expansion of nova page content and linked resources.

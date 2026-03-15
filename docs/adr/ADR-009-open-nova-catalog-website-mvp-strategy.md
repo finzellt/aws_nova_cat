@@ -141,98 +141,79 @@ As a result, the MVP distributes observational data through curated prebuilt nov
 
 ## Decision
 
-The MVP website will prioritize **simple catalog exploration and curated dataset access** rather than advanced querying or programmatic data retrieval.
+The MVP of the Open Nova Catalog website will follow a **published artifact architecture**.
 
-The site will focus on enabling users to:
+Internal ingestion and processing systems generate **derived website artifacts** that are exposed through a public static hosting layer. The browser-based frontend retrieves these artifacts directly and renders the catalog interface.
 
-- discover novae
-- inspect available observations
-- download curated datasets
+This architecture is described in:
 
-To minimize infrastructure complexity and operational cost, the catalog browsing interface will be implemented primarily in the browser.
+`docs/architecture/frontend-artifact-architecture.md`
 
-Catalog data may be delivered as static data files rather than generated dynamically by backend queries.
+Under this model:
 
-The frontend architecture should remain flexible so that catalog data could later be provided by a backend API without requiring major changes to the user interface.
+• Internal systems ingest and normalize observational data and literature.
+• Internal pipelines generate derived artifacts optimized for website consumption.
+• These artifacts are published to a public storage bucket and served through static hosting.
+• The frontend loads these artifacts directly and renders catalog browsing, nova pages, and visualizations.
 
----
+The frontend therefore interacts only with **published artifacts**, not with internal databases or ingestion systems.
 
-## MVP Capabilities
-
-The MVP website will provide the following capabilities.
-
-### Catalog Browsing
-
-Users can browse the catalog of novae through a tabular interface.
+Because the frontend consumes published artifacts rather than live services, the public website remains operational even if ingestion pipelines or internal
+processing systems are temporarily unavailable.
 
 ---
 
-### Catalog Search
+## Website Artifacts
 
-Users can search for novae by primary name and known aliases.
+The frontend consumes several classes of derived artifacts produced by the internal system:
 
----
+• **Catalog artifact**
+  A dataset used to populate the catalog browsing interface.
 
-### Catalog Sorting
+• **Nova page artifacts**
+  Per-object datasets containing metadata, references, and summaries of available observations.
 
-Users can sort the catalog using available metadata fields.
+• **Plot-ready visualization artifacts**
+  Data prepared for client-side visualization (e.g. downsampled spectra, photometric time-series data, axis/unit metadata).
 
----
+• **Curated downloadable bundles**
+  Packaged observational datasets intended for convenient scientific inspection.
 
-### Catalog Pagination
-
-The catalog will display a limited number of entries per page with classic page navigation.
-
----
-
-### Optional Catalog Thumbnails
-
-Light-curve thumbnails may be included in the catalog view if they can be implemented without significantly increasing complexity.
-
-These thumbnails are not required for the MVP to be considered successful.
+These artifacts are optimized for direct use by the website and are independent from the internal data storage format.
 
 ---
 
-### Catalog Filtering
+## Frontend Rendering Model
 
-The MVP may include lightweight catalog filtering implemented within the browser interface.
+The frontend is responsible for rendering catalog views, nova pages, and scientific visualizations.
 
-These filters are intended to assist catalog browsing rather than to provide full archive-style querying.
+Visualization rendering occurs in the browser using client-side plotting libraries. Internal systems provide **plot-ready data artifacts**, while the frontend performs the final rendering of spectra and photometric visualizations.
 
----
-
-### Nova Detail Pages
-
-Each nova will have a dedicated page containing:
-
-- core metadata
-- references
-- observational visualizations
-- download access to the nova bundle
+This separation keeps the website artifacts lightweight and avoids coupling artifact formats to a specific visualization implementation.
 
 ---
 
-### Spectra Visualization
+## MVP Constraints
 
-Nova pages will include interactive visualizations of available spectra.
+The MVP architecture prioritizes simplicity and low operational complexity.
 
----
+Key constraints include:
 
-### Dataset Download
+• The frontend should operate without requiring a live backend API.
+• Catalog browsing, searching, and filtering should occur in the browser when feasible.
+• Infrastructure complexity should be minimized while the catalog dataset remains small.
 
-Users will be able to download curated nova bundles containing aggregated observational datasets.
-
----
-
-### References Display
-
-Nova pages will provide a list of relevant literature references and may include links to external literature search tools.
+This approach allows the system to remain inexpensive to operate and easy to evolve while ingestion pipelines and data coverage continue to mature.
 
 ---
 
-### Lightweight Documentation
+## MVP Data Coverage
 
-The website will include a minimal documentation page explaining the purpose of the catalog and how to access its data.
+The initial data acquisition pipeline is expected to produce uneven coverage across different observation types.
+
+In particular, spectral datasets may be more readily available during early catalog development, while photometric datasets and other observations may expand more gradually.
+
+The architecture should therefore support incomplete observational coverage while remaining capable of incorporating additional dataset types as ingestion pipelines mature.
 
 ---
 

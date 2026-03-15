@@ -37,70 +37,97 @@ The Open Nova Catalog website provides a simple and elegant interface for explor
 
 ---
 
-## Product Goals
+## Intended Audience
 
-### Rapid Data Access
+The Open Nova Catalog is designed primarily as a **research data tool for observational astronomy**.
 
-Astronomers should be able to rapidly obtain a curated dataset for a nova without manually aggregating observations from multiple archives.
+Its primary users are researchers who need to quickly discover, interpret, and obtain observational data related to classical novae. These users may include professional astronomers, graduate students, and others conducting observational research.
 
-### Exploration of Nova Diversity
+Typical research tasks include:
 
-Users should be able to browse the catalog to understand how different novae compare to one another and to explore the diversity of nova behavior.
+• identifying novae relevant to a research question
+• determining what observational data exist for a given object
+• locating spectra, photometry, and associated literature
+• obtaining datasets suitable for immediate scientific inspection or analysis
 
-### Showcase the Richness of Nova Observations
+The catalog prioritizes **rapid discovery and contextual understanding of observational data**, rather than access to raw archive holdings.
 
-The interface should make the depth and diversity of available observations visible and easy to inspect, highlighting the scientific value of nova datasets across wavelengths and instruments.
+A secondary audience includes **data producers and observers**, such as professional observatories, survey teams, and citizen scientists who collect nova observations. While the MVP focuses on data discovery and research use, a longer-term goal of the project is to help observational data reach researchers who can make scientific use of it.
 
-### Lower the Barrier to Nova Research
+---
 
-Astronomers unfamiliar with nova research should be able to easily explore and understand nova datasets, reducing the effort required to begin working with nova observations.
+## Core Product Objectives
+
+The Open Nova Catalog is intended to function as a research data interface for classical novae. Its core objectives are to:
+
+1. **Enable rapid discovery of nova objects and their observational records**
+
+   Users should be able to quickly locate novae by name, alias, or catalog browsing, and immediately see what observations and references exist for the object.
+
+2. **Provide contextual understanding of nova observations**
+
+   Observational datasets should be presented in the context of the specific nova to which they belong, along with key metadata such as coordinates, eruption year, and relevant literature.
+
+3. **Reduce the effort required to identify and obtain useful datasets**
+
+   Researchers should be able to determine what spectra, photometry, and other observational products exist for a nova without needing to independently search multiple archives.
+
+4. **Preserve scientific provenance**
+
+   All data and metadata should clearly identify their originating archives, instruments, and publications so that users can trace information back to authoritative sources.
+
+Together, these objectives aim to make the catalog a central entry point for understanding and accessing observational information about classical novae.
+
+---
+
+## Curated Scientific Resource
+
+The Open Nova Catalog is not intended to replicate astronomical data archives.
+
+Large archives are designed to provide access to **raw observational products and full data holdings**. These systems support detailed reprocessing, specialized reductions, and precision analysis workflows.
+
+The Open Nova Catalog serves a different role.
+
+It is a **curated, object-centered resource** that organizes observational information around individual nova objects. Data products, references, and metadata are aggregated and presented in context so that users can quickly understand what is known about a given nova and what observations exist.
+
+Key characteristics of this approach include:
+
+• Emphasizing observational products that are immediately informative
+• Organizing data in the context of specific nova objects
+• Linking datasets to their originating archives and publications
+• Prioritizing discoverability and scientific interpretation over archive completeness
+
+Researchers seeking raw observations or specialized reductions should access the originating archives. The catalog instead focuses on **discoverability, context, and curated access to observational data.**
 
 ---
 
 ## Design Principles
 
-### Scientific Clarity
+### Scientific Interpretability
 
-The interface should prioritize readability, clear presentation of data, and scientific interpretability. Features should support understanding of the data rather than obscure it.
+The catalog should present information in ways that support scientific reasoning and interpretation. Interface elements and data summaries should help users quickly understand the observational characteristics of a nova and the nature of the available data.
 
 ### Transparency of Data Provenance
 
-Metadata and references should be clearly visible so users can understand the origin, context, and reliability of the data.
+All datasets and metadata should clearly indicate their originating archives, instruments, and associated literature. Users should be able to trace catalog information back to authoritative sources.
+
+### Rapid Observational Understanding
+
+Users should be able to quickly determine the observational state of a nova: what data exist, what instruments observed it, and where the observations originate. The interface should minimize the effort required to answer these questions.
 
 ### Immediate Visual Insight
 
-Where appropriate, visualizations should help users quickly understand the observational characteristics of a nova and the nature of the available data.
+Where possible, the catalog should provide visual representations of observational data that allow users to quickly understand the characteristics of a nova and the nature of the available observations.
 
-### Extensibility
+Visual summaries (for example spectra or light curves) help transform the catalog from a simple listing of datasets into a contextual scientific resource. These visualizations should prioritize rapid comprehension over exhaustive analytical capability.
 
-Although initially focused on classical novae, the architecture and conceptual model of the Open Nova Catalog should support extension to other classes of astronomical transient events.
+### Object-Centered Organization
 
----
+Information in the catalog should be organized around individual nova objects rather than around individual datasets or archive holdings. Observations, references, and metadata should be presented in the context of the specific nova to which they belong.
 
-## Long-Term Vision
+### Generalizable Transient Model
 
-While the initial focus of the Open Nova Catalog is classical novae, the broader goal is to establish a robust and extensible framework for curated transient-event catalogs.
-
-Future versions of the system may support:
-
-- comparison of observational data across multiple novae
-- richer visualization tools
-- programmatic access through APIs
-- integration with external analysis tools
-- community data contributions
-- extension to other classes of transient astronomical phenomena
-
----
-
-## Success Criteria
-
-The website will be considered successful if it enables astronomers to:
-
-- quickly locate and access curated datasets for specific novae
-- browse the catalog to discover novae with rich observational data
-- visually inspect key observational characteristics of a nova
-- understand the provenance and sources of the data
-- obtain datasets in a form suitable for scientific analysis with minimal additional processing
+Although the catalog initially focuses on classical novae, the underlying conceptual model should be capable of representing other classes of transient astronomical objects. Extending the system to new transient types should not require rethinking the core object-centered architecture.
 
 ---
 
@@ -108,11 +135,11 @@ The website will be considered successful if it enables astronomers to:
 
 Adopting this product vision implies that:
 
-- the website should prioritize clarity, discoverability, and data access over complex interface features
-- the catalog interface will play a central role in the user experience
-- visualization tools will be used to help users interpret available observations
-- metadata and references will be treated as first-class elements of the interface
-- future architectural decisions should preserve extensibility beyond nova-specific applications
+- The website should prioritize clarity, discoverability, and data access over complex interface features
+- The catalog interface will play a central role in the user experience
+- Visualization tools will be used to help users interpret available observations
+- Metadata and references will be treated as first-class elements of the interface
+- Future architectural decisions should preserve extensibility beyond nova-specific applications
 
 ---
 

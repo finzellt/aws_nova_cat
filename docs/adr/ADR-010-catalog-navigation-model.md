@@ -23,13 +23,35 @@ The goal is to ensure that users can move through the system easily while mainta
 
 ---
 
+## Meaning of "Catalog"
+
+Within the Open Nova Catalog system, the term **catalog** refers to the complete curated collection of nova-related information published by the website.
+
+This includes:
+
+• the listing of known novae
+• observational datasets associated with each nova
+• visualizations of observational data
+• metadata and literature references
+• curated downloadable data bundles
+
+The catalog page (`/catalog`) provides a browsing interface into this larger collection, but the catalog itself encompasses all information associated with the novae represented in the system.
+
+The conceptual structure of the catalog and its core entities are described in:
+
+`docs/architecture/catalog-ontology.md`
+
+---
+
 ## Decision
 
 The Open Nova Catalog website will use a **catalog-centered navigation model**.
 
 The catalog is the primary interaction point for the system, allowing users to browse, search, and discover novae.
 
-Dedicated nova pages provide detailed information and access to observational datasets.
+Dedicated nova pages act as the central information hub for each object.
+
+Each nova page aggregates observational data, metadata, literature references, and curated datasets associated with the object. This object-centric design allows users to understand the observational history of a nova and explore its available data in a single location.
 
 The navigation model prioritizes simplicity, clarity, and discoverability.
 
@@ -54,7 +76,7 @@ Example:
 The site will include a minimal top-level navigation bar with the following links:
 
 ```
-Search | Catalog | Documentation | About
+Catalog | Search | Documentation | About
 ```
 
 Each item provides access to a major functional area of the site.
@@ -81,20 +103,13 @@ Provides a brief description of the Open Nova Catalog project and its goals.
 
 The catalog page (`/catalog`) is the primary browsing interface.
 
-The page displays a table of novae that allows users to explore the catalog and identify objects of interest.
+The page displays a structured listing of novae that allows users to explore the catalog and identify objects of interest.
 
 ### Catalog Columns
 
-The catalog table will include the following visible columns:
+The catalog table displays a concise set of fields summarizing each nova and the observational coverage available for that object.
 
-- Primary Name
-- Right Ascension (RA)
-- Declination (Dec)
-- Year of eruption
-- Spectra Available
-- Photometry Available
-
-These fields provide a concise overview of each nova and its available observations.
+The exact set of fields presented in the catalog table is defined in ADR-011 (Catalog Website Data Model).
 
 ### Catalog Row Behavior
 
@@ -104,7 +119,7 @@ The **Primary Name** column links directly to the corresponding nova detail page
 
 ### Default Sorting
 
-The catalog should prioritize novae with rich observational datasets.
+The catalog should prioritize novae with substantial observational coverage
 
 The default sorting order should therefore emphasize entries with the greatest number of available spectra.
 
@@ -117,15 +132,6 @@ The catalog will use classic pagination rather than infinite scrolling.
 Approximately 25 novae will be displayed per page.
 
 Pagination improves navigability and maintains consistent page structure.
-
-### Optional Photometry Thumbnails
-
-Catalog entries may optionally include small photometry or light-curve thumbnails.
-
-If implemented, these thumbnails will appear at the trailing edge of the catalog row.
-
-These thumbnails are considered enhancements and are **not required for the MVP**.
-The catalog must remain fully usable without them.
 
 ---
 
@@ -142,9 +148,15 @@ This page presents a search-focused interface that allows users to locate novae 
 
 The search page is intentionally minimal and closely mirrors the search functionality available within the catalog page.
 
-The existence of a dedicated search route helps accommodate users who expect search and catalog browsing to be separate interactions.
-
 Internally, the search interface may reuse the same components used by the catalog page.
+
+### Rationale for a Dedicated Search Page
+
+Although name-based search functionality is also available within the catalog page, the system provides a dedicated `/search` route for usability reasons.
+
+Many users expect search to exist as a clearly identifiable page within a website's navigation structure. Providing a dedicated search page makes this capability immediately discoverable and reduces friction for users who prefer direct name-based lookup over catalog browsing.
+
+The search page therefore serves as an explicit entry point for users who already know the nova they are looking for, while the catalog page remains the primary interface for exploratory discovery.
 
 ---
 
@@ -222,6 +234,21 @@ Download Data
 
 
 This workflow allows users to quickly move from discovery to dataset access.
+
+---
+
+## Architectural Expansion Areas
+
+While the initial focus of the Open Nova Catalog is classical novae, the broader goal is to establish a robust and extensible framework for curated transient-event catalogs.
+
+Future versions of the system may support:
+
+- Comparison of observational data across multiple novae
+- Richer visualization tools
+- Programmatic access through APIs
+- Integration with external analysis tools
+- Community data contributions
+- Extension to other classes of transient astronomical phenomena
 
 ---
 
