@@ -1,0 +1,268 @@
+Line_ID,Fe_II,He_N,Nebular
+He II 3203,,x,
+Fe II 3228 (6),x,,
+Fe II 3256 (1),x,,
+Fe II 3277 (1),x,,
+Fe II 3281 (1),x,,
+[Ne III] 3343,,,x
+[Ne V] 3346,,,x
+[Ne V] 3426,,,x
+O VI 3435,,x,
+O III 3444,,x,
+[Fe VI] 3492,,,x
+[Fe VI] 3556,,,x
+[Fe VII] 3586,,,x
+[Fe VI] 3663,,,x
+O III 3713 (14),,,x
+[S III] 3722,,,x
+[O II] 3727,,,x
+H I 3734,x,x,x
+Ca II 3706/37 (3),x,,
+H I 3750,x,x,x
+[Fe VII] 3759,,,x
+H I 3771,x,x,x
+H I 3798,x,x,x
+O VI 3811,,x,
+[Fe VI] 3814,,,x
+O VI 3834,,x,
+H I 3835,x,x,x
+Mg I 3835 (3),x,,
+Mg II 3849 (5),x,,
+He II 3858,,x,
+Si II 3858 (1),x,,
+[Ne III] 3869,,,x
+H I 3889,x,x,x
+He I 3889,x,x,
+Al II 3901 (1),x,,
+He II 3923,,x,
+Ca II 3934 (K),x,,
+Ca II 3968 (H),x,,
+[Ne III] 3968,,,x
+H I 3970,x,x,x
+[Fe XI] 3987,,,x
+He I 4026,x,x,
+[Fe V] 4026,,,x
+[S II] 4069,,,x
+[Fe V] 4071,,,x
+[S II] 4076,,,x
+H I 4102,x,x,x
+He I 4144,x,x,
+Fe II 4179 (28),x,,
+[Fe V] 4181,,,x
+C III 4187,,x,
+He II 4200,x,x,
+[Fe V] 4229,,,x
+Fe II 4233 (27),x,,
+[Fe II] 4244,,,x
+C II 4267,,x,
+[Fe II] 4287,,,x
+Fe II 4297 (28),x,,
+Fe II 4303 (27),x,,
+H I 4340,x,x,x
+Fe II 4352 (27),x,,
+[Fe II] 4359,,,x
+[O III] 4363,,,x
+Fe II 4385 (27),x,,
+He I 4388,x,x,
+[Fe II] 4416,,,x
+Fe II 4417 (27),x,,
+He I 4438,x,x,
+[Fe II] 4458,,,x
+He I 4471,x,x,
+Mg II 4481 (4),x,,
+Fe II 4491 (37),x,,
+Fe II 4508 (38),x,,
+Fe II 4515 (37),x,,
+N III 4517 (3),x,x,
+Fe II 4523 (38),x,,
+He II 4542,x,x,
+Fe II 4549 (38),x,,
+Fe II 4556 (37),x,,
+Mg I] 4571,x,,
+Fe II 4584 (38),x,,
+N V 4609 (1),x,x,
+Fe II 4629 (37),x,,
+N III 4638,x,x,
+C IV 4658,,x,
+[Fe III] 4658,,,x
+Al II 4663 (2),x,,
+He II 4686,x,x,
+[Fe III] 4702,,,x
+He I 4713,x,x,
+[Ne IV] 4721,,,x
+[Ar IV] 4740,,,x
+[Fe III] 4755,,,x
+[Fe II] 4815,,,x
+H I 4861,x,x,x
+[Fe III] 4881,,,x
+[Fe VII] 4893,,,x
+He I 4922,x,x,
+Fe II 4924 (42),x,,
+[Ca VII] 4939,,,x
+[Fe VII] 4942,,,x
+N V 4945,x,x,
+[O III] 4959,,,x
+[Fe VI] 4967/72,,,x
+[Fe VII] 4989,,,x
+N II 5001 (24),x,,
+[O III] 5007,,,x
+He I 5016,x,x,
+Fe II 5018 (42),x,,
+He I 5048,x,x,
+[Fe VI] 5146,,,x
+[Fe VII] 5158,,,x
+[Fe II] 5159,,,x
+Fe II 5169 (42),x,,
+[Fe VI] 5176,,,x
+Mg I 5178 (2),x,,
+Fe II 5198 (49),x,,
+[N I] 5199,,,x
+Fe II 5235 (49),x,,
+[Fe II] 5262,,,x
+Fe II 5265 (48),x,,
+[Fe III] 5270,,,x
+Fe II 5276 (49),x,,
+[Fe VII] 5276,,,x
+Fe II 5284 (41),x,,
+O VI 5292,x,x,
+[Fe XIV] 5303,,,x
+[Ca V] 5309,,,x
+Fe II 5317 (49,48),x,
+Fe II 5363 (48),x,,
+He II 5412,x,x,
+[Fe VI] 5424,,,x
+Fe II 5425 (49,48),x,
+N II 5479 (29),x,,
+Mg I 5528 (9),x,,
+[Ar X] 5533,,,x
+Fe II 5535 (55),x,,
+[O I] 5577,,,x
+[Ca VII] 5619,,,x
+[Fe VI] 5631,,,x
+[Fe VI] 5677,,,x
+N II 5679 (3),x,,
+Na I 5686 (6),x,,
+Al III 5706 (2),x,,
+[Fe VII] 5721,,,x
+[N II] 5755,,,x
+C IV 5805 (1),,x,
+He I 5876,x,x,
+Na I 5892 (D),x,,
+N II 5938 (28),x,,
+Si II 5958/79 (4),x,,
+Fe II 5991 (46),x,,
+Fe II 6084 (46),x,,
+[Fe VII] 6086,,,x
+[Ca V] 6087,,,x
+Fe II 6148 (74),x,,
+Na I 6159 (5),x,,
+O VI 6200,,x,
+He II 6234,,x,
+Al II 6237 (10),x,,
+Fe II 6248 (74),x,,
+[O I] 6300,,,x
+He II 6311,x,x,
+[S III] 6312,,,x
+N II 6346 (46),x,,
+Si II 6347/71 (2),x,,
+[O I] 6364,,,x
+[Fe X] 6375,,,x
+Fe II 6417 (74),x,,
+[Ar V] 6435,,,x
+Fe II 6456 (74),x,,
+N II 6482 (8),x,,
+N I 6486 (21),x,,
+[N II] 6548,,,x
+H I 6563,x,x,x
+He II 6560,,x,
+[N II] 6584,,,x
+He I 6678,x,x,
+He II 6683,,x,
+[S II] 6716/31,,,x
+Al II 6830 (9),x,,
+He II 6891,,x,
+O I 7002 (21),x,,
+[Ar V] 7006,,,x
+Al II 7049 (3),x,,
+He I 7065,x,x,
+[Ar III] 7136,,,x
+[Fe II] 7155,,,x
+[Ar IV] 7171,,,x
+He II 7178,x,x,
+C II 7235 (3),x,x,
+[Ar IV] 7237,,,x
+[Ar IV] 7263,,,x
+He I 7281,x,x,
+Fe II 7308 (73),x,,
+[O II] 7320/30,,,x
+N I 7452 (3),x,,
+Fe II 7462 (73),x,,
+Al II 7471 (21),x,,
+O I 7477 (55),x,,
+He II 7593,x,x,
+N IV 7703,x,x,
+Fe II 7712 (73),x,,
+O IV 7713,,x,
+[S I] 7725,,,x
+C IV 7726,,x,
+[Ar III] 7751,,,x
+O I 7773 (1),x,,
+[P II] 7876,,,x
+[Fe XI] 7892,,,x
+Mg II 7896 (8),x,,
+[Mn IX] 7968,,,x
+N I 7904,x,,
+N I 8166/8202,x,,
+Na I 8191 (4),x,,
+N I 8212 (2),x,,
+O I 8227 (34),x,,
+Mg II 8232 (7),x,,
+He II 8237,x,x,
+Ca II 8251/03 (13),x,,
+C I 8335 (10),x,,
+O I 8446 (4),x,x,x
+Ca II 8498 (2),x,,
+H I 8502 (P16),x,x,x
+Ca II 8542 (2),x,,
+H I 8545,x,x,x
+H I 8598,x,x,x
+N I 8617 (8),x,x,
+Al II 8641 (4),x,,
+Ca II 8662 (2),x,,
+H I 8665,x,x,x
+N I 8692 (1),x,x,
+[C I] 8727,,,x
+H I 8750 (P12),x,x,x
+Mg I 8807 (7),x,,
+H I 8863 (P11),x,x,x
+H I 9015 (P10),x,x,x
+N I 9029/60,x,x,
+[S III] 9069,,,x
+C I 9087 (3),x,,
+N I 9208/9188,x,x,
+H I 9229 (P9),x,x,x
+Mg II 9218/44 (1),x,,
+O I 9264 (8),x,,
+He II 9345,x,x,
+N I 9395 (7),x,x,
+C I 9406 (9),x,,
+[S III] 9531,,,x
+He II 9542,x,x,
+H I 9546 (P8),x,x,x
+C I 9658 (2),x,,
+He II 9762,x,x,
+N I 9831 (19),x,,
+[S VIII] 9911,,,x
+He II 10045,x,x,
+H I 10049 (P7),x,x,x
+Al II 10090 (6),x,,
+N I 10117 (18),x,,
+He II 10124,x,x,
+C I 10124,x,,
+[N I] 10404,,,x
+N I 10526 (28),x,x,
+C I 10541 (20),x,,
+C I 10693 (1),x,,
+He I 10830,x,x,x
+Mg II 10926 (3),x,,
+H I 10938 (P6),x,x,x
