@@ -1,0 +1,170 @@
+{
+  "_comment": "Synonym registry for PhotometryRow column name normalisation. Governs Tier 2 of the ADR-015 three-tier column mapping strategy. Keys are non-canonical column name variants; matching is case-insensitive at runtime. Values are canonical PhotometryRow field names. Additions are non-breaking; removals or renames require a registry version increment. See: ADR-015, Decision 2.",
+  "_registry_version": "1.0",
+  "synonyms": {
+    "MAG": "magnitude",
+    "MAGNITUDE": "magnitude",
+    "MAG_ERR": "mag_err",
+    "MAGERR": "mag_err",
+    "ERR": "mag_err",
+    "EMAG": "mag_err",
+    "E_MAG": "mag_err",
+    "SIGMA_MAG": "mag_err",
+    "E(MAG)": "mag_err",
+
+    "MJD": "time_mjd",
+    "TIME": "time_mjd",
+    "EPOCH": "time_mjd",
+    "T": "time_mjd",
+    "DATE_MJD": "time_mjd",
+
+    "TIME_ORIG": "time_orig",
+    "JD": "time_orig",
+    "HJD": "time_orig",
+    "BJD": "time_orig",
+
+    "TIMESYS": "time_orig_sys",
+    "TIME_SYS": "time_orig_sys",
+
+    "BARY_CORR": "time_bary_corr",
+    "BARYCORR": "time_bary_corr",
+    "BARY": "time_bary_corr",
+
+    "FILTER": "filter_name",
+    "BAND": "filter_name",
+    "FILT": "filter_name",
+    "BANDPASS": "filter_name",
+
+    "SVO_ID": "svo_filter_id",
+    "SVO_FILTER": "svo_filter_id",
+    "FILTER_ID": "svo_filter_id",
+
+    "PHOT_SYS": "phot_system",
+    "PHOTSYS": "phot_system",
+    "SYSTEM": "phot_system",
+    "PHOT_SYSTEM": "phot_system",
+
+    "SPEC_TYPE": "spectral_coord_type",
+    "SPECTRAL_TYPE": "spectral_coord_type",
+    "COORD_TYPE": "spectral_coord_type",
+
+    "SPEC_VAL": "spectral_coord_value",
+    "SPECTRAL_VAL": "spectral_coord_value",
+    "WAVELENGTH": "spectral_coord_value",
+    "WAVE": "spectral_coord_value",
+    "LAMBDA": "spectral_coord_value",
+    "FREQ": "spectral_coord_value",
+    "FREQUENCY": "spectral_coord_value",
+    "ENERGY": "spectral_coord_value",
+
+    "SPEC_UNIT": "spectral_coord_unit",
+    "SPECTRAL_UNIT": "spectral_coord_unit",
+    "WAVE_UNIT": "spectral_coord_unit",
+    "FREQ_UNIT": "spectral_coord_unit",
+
+    "BANDPASS_WIDTH": "bandpass_width",
+    "BW": "bandpass_width",
+    "FWHM": "bandpass_width",
+
+    "MAG_SYS": "mag_system",
+    "MAGSYS": "mag_system",
+    "MAG_SYSTEM": "mag_system",
+
+    "ZP": "zero_point_flux",
+    "ZEROPOINT": "zero_point_flux",
+    "ZERO_POINT": "zero_point_flux",
+    "ZP_FLUX": "zero_point_flux",
+
+    "FLUX": "flux_density",
+    "FLUX_DENSITY": "flux_density",
+    "FLUX_DENS": "flux_density",
+
+    "FLUX_ERR": "flux_density_err",
+    "E_FLUX": "flux_density_err",
+    "FLUX_DENS_ERR": "flux_density_err",
+    "EFLUX": "flux_density_err",
+    "SIGMA_FLUX": "flux_density_err",
+
+    "FLUX_UNIT": "flux_density_unit",
+    "FLUXUNIT": "flux_density_unit",
+    "FLUX_DENS_UNIT": "flux_density_unit",
+
+    "COUNT_RATE": "count_rate",
+    "COUNTRATE": "count_rate",
+    "RATE": "count_rate",
+    "CTS_S": "count_rate",
+
+    "COUNT_RATE_ERR": "count_rate_err",
+    "E_RATE": "count_rate_err",
+    "RATE_ERR": "count_rate_err",
+
+    "UPPER_LIMIT": "is_upper_limit",
+    "UPPERLIMIT": "is_upper_limit",
+    "UL": "is_upper_limit",
+    "IS_UL": "is_upper_limit",
+    "LIMIT_FLAG": "is_upper_limit",
+
+    "LIM": "limiting_value",
+    "LIMIT": "limiting_value",
+    "LIM_VAL": "limiting_value",
+    "UL_VALUE": "limiting_value",
+
+    "LIM_SIGMA": "limiting_sigma",
+    "UL_SIGMA": "limiting_sigma",
+    "SIGMA_LIMIT": "limiting_sigma",
+
+    "QUALITY": "quality_flag",
+    "QUAL": "quality_flag",
+    "FLAG": "quality_flag",
+    "QFLAG": "quality_flag",
+    "Q": "quality_flag",
+
+    "NOTES": "notes",
+    "NOTE": "notes",
+    "COMMENT": "notes",
+    "COMMENTS": "notes",
+    "REMARKS": "notes",
+
+    "BIBCODE": "bibcode",
+    "BIB": "bibcode",
+    "ADS": "bibcode",
+
+    "DOI": "doi",
+
+    "URL": "data_url",
+    "DATA_URL": "data_url",
+    "SOURCE_URL": "data_url",
+    "TABLE_URL": "data_url",
+
+    "CATALOG": "orig_catalog",
+    "CATALOGUE": "orig_catalog",
+    "ORIG_CAT": "orig_catalog",
+    "SOURCE": "orig_catalog",
+    "SURVEY": "orig_catalog",
+
+    "TABLE": "orig_table_ref",
+    "TABLE_REF": "orig_table_ref",
+    "TABLE_ID": "orig_table_ref",
+    "ORIG_TABLE": "orig_table_ref",
+
+    "TELE": "telescope",
+    "TELESCOPE": "telescope",
+    "TEL": "telescope",
+    "OBSERVATORY": "telescope",
+
+    "INST": "instrument",
+    "INS": "instrument",
+    "INSTRUMENT": "instrument",
+    "DETECTOR": "instrument",
+
+    "OBSERVER": "observer",
+    "OBS": "observer",
+    "OBSV": "observer",
+    "OBSERVER_CODE": "observer",
+
+    "RIGHTS": "data_rights",
+    "LICENSE": "data_rights",
+    "LICENCE": "data_rights",
+    "DATA_RIGHTS": "data_rights"
+  }
+}
