@@ -1,7 +1,7 @@
 # ADR-013: Visualization Design — Spectra
 
 Status: Proposed
-Date: 2026-03-16
+Date: 2026-03-17
 
 ---
 
@@ -13,11 +13,9 @@ ADR-012 explicitly defers all visualization and plot design to this ADR.
 
 This ADR defines the complete design specification for the spectra viewer component,
 covering layout, axes, normalization, color, interactions, epoch labeling, and spectral
-feature markers. A companion section covering photometry visualizations (light curve panel,
-catalog sparklines) will be addressed in a subsequent ADR.
-
-The design decisions recorded here were developed iteratively with reference to the
-ADR-011 open questions on spectra viewer interaction details.
+feature markers. This ADR has been extended to include photometry visualizations (light curve panel,
+catalog sparklines). Those design decisions were developed in a subsequent design session
+and are recorded in the Photometry sections below.
 
 ---
 
@@ -28,6 +26,23 @@ visualization standards. No IVOA standards prescribe visual rendering of spectra
 standard governs data interchange formats (VOTable, FITS, XML) and field semantics, not
 display. Nanometres (nm) are explicitly valid as a spectral axis unit under the standard's
 SI-prefix rules.
+
+---
+
+## Visualization Philosophy: Clarity over Completeness
+
+A visualization crowded with every available data point risks becoming a display of
+observational volume rather than a communication of scientific content. Where data
+density obscures the story — through overlapping traces, compressed dynamic range, or
+sheer point count — the catalog makes deliberate accommodations: representative
+subsampling, per-band magnitude offsets, and suppression of non-constraining
+measurements. The goal is always to surface the signal, not to enumerate the record.
+
+This is not a scientific compromise: the complete dataset is available in the curated
+bundle download for researchers who need it.
+
+This principle governs visualization decisions throughout this ADR — for both the
+spectra viewer and the light curve panel.
 
 ---
 
@@ -42,15 +57,18 @@ This ADR covers:
 - Density and temporal spacing rules
 - Interactive controls
 - Spectral feature markers
+- Visualization design philosophy
+- Light curve panel design (wavelength regime tabs, per-regime axes, interactions,
+  dynamic range)
+- Catalog sparkline design
 - Backend / frontend responsibility boundary
 - Empty and error states
 
 This ADR does **not** cover:
 
-- Light curve panel design (deferred)
-- Catalog sparkline design (deferred)
 - Artifact schema definitions (deferred to a dedicated artifact schema ADR)
-- Photometry visualization (deferred)
+- Per-band offset computation algorithm (deferred to a dedicated backend
+  responsibilities ADR)
 
 ---
 
@@ -341,6 +359,242 @@ does not affect the metadata panel.
 
 ---
 
+## Light Curve Panel
+
+The light curve panel is a Plotly.js scatter plot component displayed on the nova page
+below the spectra viewer. It renders photometric time-series data for the nova across
+all available wavelength regimes.
+
+### Wavelength regime tabs
+
+Photometric observations span wavelength regimes whose physical interpretations,
+instrumental characteristics, and natural units are mutually incompatible. Displaying
+them on a shared axis would produce a misleading or unreadable plot. The light curve
+panel is therefore organized into tabs by wavelength regime, each tab containing a
+self-contained plot with its own axes and color scheme.
+
+**Available tabs:**
+
+| Tab | Y axis | Y orientation | Y scale |
+|---|---|---|---|
+| Optical | Magnitude | Inverted (brighter = top) | Linear |
+| X-ray | Count rate (cts/s) | Standard (higher = top) | Linear or log |
+| Gamma-ray | Photon flux (ph/cm²/s) | Standard (higher = top) | Linear or log |
+| Radio / Sub-mm | Flux density (mJy) | Standard (higher = top) | Log (default) |
+
+**Tab visibility:** Only tabs for which data exists are shown. Absent regime tabs are
+hidden entirely rather than shown in a disabled state. A nova with only optical data
+shows a single unlabeled plot; the tab bar appears only when two or more regimes have
+data.
+
+---
+
+### X axis (shared across all tabs)
+
+- **Unit:** Time, with format user-togglable (DPO / MJD / Calendar Date)
+- **Scale:** Linear or log, user-togglable
+- **Default scale:** Selected automatically using the same gap-ratio rule as the spectra
+  viewer temporal axis (see Density and Temporal Spacing). If `gap_ratio > 0.5`, default
+  to log scale.
+- **Log scale availability:** The log toggle is hidden (not merely disabled) when the
+  active epoch format is MJD or Calendar Date. Log time is only physically meaningful in
+  the DPO frame. This mirrors the log Y-axis hide behavior in the spectra viewer's
+  single-spectrum mode.
+- **Epoch label format toggle:** Same three-way toggle as the spectra viewer (DPO / MJD
+  / Calendar Date), same header placement, same DPO-unavailable disable behavior.
+
+---
+
+### Optical tab
+
+#### Multi-band color scheme
+
+Each photometric band is assigned a fixed, semantically anchored color. Band color is a
+categorical distinction, not a temporal one — unlike the spectra viewer color ramp, which
+encodes epoch.
+
+Proposed anchor assignments:
+
+| Band group | Color |
+|---|---|
+| U / UV | Violet / purple |
+| B | Blue |
+| V | Green |
+| R / r | Orange-red |
+| I / i | Deep red |
+| Other / unfiltered | Neutral gray |
+
+Johnson and Sloan bands (e.g., V vs. g', R vs. r') are treated as **distinct bands** and
+assigned distinct colors, even when they occupy similar wavelength ranges. They are not
+interchangeable and should not be presented as equivalent.
+
+The exact palette must be validated for deuteranopia and protanopia before
+implementation.
+
+#### Upper limits
+
+Non-detections are plotted as downward-pointing triangles at the limiting magnitude, in
+the same color as the corresponding band, at 40% opacity. They are included in hover
+tooltips with a clear "Upper limit" label.
+
+**Non-constraining upper limit suppression (per-band):** An upper limit is dropped from
+the artifact if its magnitude value is brighter than the brightest detection in the same
+band. Such a limit provides no constraint on the data already shown and would only
+compress the y-axis dynamic range. This filtering is applied per-band so that the rule
+remains correct when a user isolates a single band and the y-axis rescales accordingly.
+This is a backend operation, applied during artifact generation.
+
+Upper limits are excluded from automatic Y-axis range fitting.
+
+#### Dynamic range and band offsets
+
+When multiple bands occupy overlapping magnitude ranges, their data points can obscure
+one another, producing a dense unreadable cluster rather than a legible set of distinct
+light curves. In these cases, a constant per-band magnitude offset is applied to
+vertically separate the traces.
+
+Offsets are computed by the backend during artifact generation, using a nearest-neighbor
+density analysis (kd-tree approach) on the subsampled per-band data. An offset is applied
+only when a band's data overlaps significantly with adjacent bands; if natural separation
+is sufficient, the offset is zero. When applied, offsets are rounded to the nearest
+half-integer increment (e.g., +0.5, +1.0, +1.5) to produce clean, publication-style
+separations.
+
+Applied offsets are displayed explicitly in the band legend strip (e.g., "R (+1.5)") so
+researchers are always aware that a shift has been applied. The exact overlap threshold
+and density metric are deferred to the backend responsibilities ADR.
+
+---
+
+### X-ray tab
+
+Count rate (cts/s) on the Y axis. Instrument provenance is encoded by color, since count
+rates are instrument-dependent and direct comparison across instruments is not valid. The
+expected instrument set for MVP is small (primarily Swift/XRT, with occasional Chandra
+and XMM-Newton observations).
+
+Energy flux conversion is explicitly deferred post-MVP. The model-dependence of
+ECF-based conversion introduces scientific ambiguity that is not appropriate for a
+catalog positioned as a trusted reference resource.
+
+---
+
+### Gamma-ray tab
+
+Photon flux (ph/cm²/s) above 100 MeV on the Y axis, consistent with standard Fermi/LAT
+reporting. Upper limits are expected to dominate this tab for most novae and are rendered
+using the same downward-pointing triangle convention as the optical tab.
+
+Non-constraining upper limit suppression is applied using the same per-dataset logic as
+the optical tab, adapted for flux orientation: an upper limit is dropped if it falls
+below the faintest detection in the same dataset (since higher flux = higher on this
+axis).
+
+---
+
+### Radio / Sub-mm tab
+
+Flux density (mJy) on the Y axis, log scale by default. The log default reflects the
+typical dynamic range of radio nova light curves and the potential presence of
+sub-millimetre observations spanning multiple orders of magnitude in flux density
+alongside centimetre-wavelength radio detections.
+
+---
+
+### Density and subsampling
+
+Nova photometric datasets can be extremely large. A hard cap of **500 data points per
+wavelength regime tab** is applied during artifact generation. The subsampled artifact is
+the render target; the full dataset is available in the bundle download.
+
+Subsampling uses a **density-preserving log sampler**: the time axis is divided into N
+log-spaced intervals, and interval boundaries are stretched dynamically so that no
+interval is empty. This ensures that sparse late-epoch observations — which would be lost
+under uniform log binning — are always represented, and that the displayed subset
+reflects the shape of the nova's temporal evolution rather than the density of its
+observational record.
+
+The 500-point cap applies independently per regime tab. Radio and gamma-ray tabs will
+rarely approach this ceiling; the subsampler is primarily active for optical data.
+
+---
+
+### Interactions
+
+All interactions are implemented as React state within the light curve panel component.
+No server round-trips are required.
+
+- **Epoch label format toggle** (DPO / MJD / Calendar Date) — same three-way toggle as
+  spectra viewer, same header placement.
+- **Log / Linear time axis toggle** — hidden when MJD or Calendar Date is the active
+  epoch format.
+- **Band visibility toggles** — a legend strip below the plot lists each band as a
+  clickable chip, colored to match the band. All bands visible by default. Toggling a
+  band on/off dynamically re-evaluates which upper limits are displayed (per-band
+  suppression rule).
+- **Error bars** — magnitude uncertainties are shown as error bars by default. A toggle
+  to hide them is provided in the viewer header.
+- **Hover tooltip** — displays: time (active epoch format), magnitude or flux (to 2
+  decimal places), band, instrument / source, and "Upper limit" label where applicable.
+- **Zoom, pan, reset** — Plotly.js built-ins.
+
+---
+
+### Backend / Frontend Responsibility Boundary (photometry)
+
+**Backend generates (during artifact generation):**
+
+- Per-observation records: MJD, band, magnitude or flux value, uncertainty, upper limit
+  flag, instrument / source
+- Outburst reference date (shared with spectra artifact)
+- Non-constraining upper limit suppression (per-band)
+- Density-preserving log subsampling (500-point cap per regime)
+- Per-band magnitude offsets (kd-tree density analysis; exact algorithm deferred to
+  backend responsibilities ADR)
+- Sparkline artifact (separate stripped-down artifact; see Catalog Sparkline)
+
+**Frontend computes (at render time):**
+
+- DPO from MJD and outburst reference date
+- Default log/linear time scale selection (gap-ratio rule)
+- Y-axis range (excluding upper limits from fitting)
+- Band color assignment
+- Dynamic re-evaluation of upper limit visibility on band toggle
+
+---
+
+### Empty and Error States (light curve panel)
+
+**No photometry available:** The visualization region displays the `Activity` Lucide icon
+(32px, per ADR-012 iconography spec) with a short explanatory message.
+
+**Render error:** Inline error message in `--color-status-error-fg` with a `CircleAlert`
+icon and a "Try again" ghost button. Scoped to the light curve panel; does not affect the
+spectra viewer or metadata region.
+
+---
+
+## Catalog Sparkline
+
+The catalog sparkline is a small, non-interactive thumbnail rendering of the optical
+light curve, displayed in the "Light Curve" column of the catalog table.
+
+**Dimensions:** 90×55px. Temporal and magnitude resolution are treated as equally
+important; the aspect ratio reflects this.
+
+**Content:** Optical band only. A single representative trace showing the overall shape
+of the light curve — the rise, peak, and decline. No axes, no labels, no tooltips, no
+legend.
+
+**Rendering:** Pre-generated by the backend as a standalone artifact (separate from
+`photometry.json`). The frontend consumes this artifact as a static image; no
+client-side Plotly rendering occurs for sparklines.
+
+**Empty state:** The "No data" placeholder text specified in ADR-011, per ADR-012 empty
+state spec.
+
+---
+
 ## Open Questions
 
 The following decisions are not resolved in this ADR and should be addressed before or
@@ -363,6 +617,24 @@ during implementation:
    suppression has not been specified. This value should be determined empirically during
    implementation.
 
+5. **Photometry artifact schema:** The exact JSON structure of the `photometry.json`
+   artifact (including per-observation records, outburst reference date, band metadata,
+   and pre-computed offsets) is not specified here. This is a hard dependency for both
+   backend generation and frontend consumption and must be resolved in a dedicated
+   artifact schema ADR.
+
+6. **Per-band offset algorithm:** The exact overlap threshold and density metric for the
+   kd-tree-based band offset computation are not specified here. These are implementation
+   details to be resolved in a dedicated backend responsibilities ADR.
+
+7. **Band color palette:** The exact colors for the optical multi-band color scheme have
+   not been selected. Palette selection, colorblind validation, and integration with
+   ADR-012 color tokens should occur during the frontend implementation phase.
+
+8. **Sparkline artifact format:** Whether the sparkline is pre-rendered as a PNG/SVG
+   image or as a stripped-down JSON data artifact rendered by a minimal client-side
+   component is not resolved here.
+
 ---
 
 ## Consequences
@@ -376,3 +648,14 @@ during implementation:
 - The design is intentionally scoped to the MVP. Post-MVP enhancements (flux-calibrated
   view, cross-nova comparison, wavelength range selector) are compatible with the component
   architecture but are not specified here.
+- The light curve panel is a tabbed React component. Only tabs for which photometric
+  data exists are rendered. Tab structure is determined at artifact consumption time,
+  not hardcoded.
+- The backend photometry artifact pipeline is responsible for subsampling, upper limit
+  suppression, and band offset computation before the artifact is written. The frontend
+  performs no heavy data transforms at render time.
+- The 500-point-per-regime subsampling cap is a hard constraint on artifact generation.
+  Full photometric datasets are available exclusively via the bundle download.
+- The log time axis toggle is hidden (not disabled) when MJD or Calendar Date epoch
+  formats are active. This is consistent with the spectra viewer's log Y-axis hide
+  behavior and avoids presenting a meaningless interaction.
