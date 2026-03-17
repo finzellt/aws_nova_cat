@@ -177,6 +177,38 @@ class IngestPhotometryEvent(EventBase):
     source: str | None = Field(
         default=None, description="Where this request came from (e.g., UI, ingest feed)."
     )
+
+    # --- ADR-015, Decision 1: S3 staging fields ----------------------
+    raw_s3_key: str = Field(
+        ...,
+        min_length=1,
+        max_length=2048,
+        description=(
+            "S3 key of the staged photometry source file within the private data bucket. "
+            "Convention: uploads/photometry/<nova_id>/<filename>."
+        ),
+    )
+    raw_s3_bucket: str | None = Field(
+        default=None,
+        max_length=256,
+        description=(
+            "S3 bucket containing the staged file. "
+            "Defaults to the NovaCat private data bucket when absent."
+        ),
+    )
+    # --- ADR-015, Decision 3: idempotency key = IngestPhotometry:{nova_id}:{file_sha256}
+    file_sha256: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+        description=(
+            "SHA-256 hex digest of the source file bytes. "
+            "If absent, the workflow computes it from the S3 object before the "
+            "idempotency check. "
+            "Idempotency key: IngestPhotometry:{nova_id}:{file_sha256}."
+        ),
+    )
+
     attributes: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")

@@ -1,0 +1,209 @@
+# Repository Tree
+# Root : /Users/tfinzell/Git/aws_nova_cat
+# Depth: 3
+#
+# Exclusions applied:
+#   top-level dirs : ['lambdas']
+#   exact name     : ['.git', '.github', '.venv', 'cdk.out']
+#   substring match: ['cache', 'compressed', 'diagrams', 'engineering']
+#   exact filenames : ['.DS_Store']
+#
+
+aws_nova_cat/
+├── .vscode/
+│   ├── extensions.json
+│   └── settings.json
+├── contracts/
+│   ├── fixtures/
+│   │   └── events/
+│   ├── models/
+│   │   ├── entities.py
+│   │   ├── events.py
+│   │   └── outputs.py
+│   └── schema_export.py
+├── docs/
+│   ├── adr/
+│   │   ├── 0000-template.md
+│   │   ├── 0001-contracts-and-schema.md
+│   │   ├── ADR-002-workflow-orchestration-and-execution-model.md
+│   │   ├── ADR-003-Persistence-Model-for-DynamoDB+S3.md
+│   │   ├── ADR-004-architecture-baseline-and-alignment-policy.md
+│   │   ├── ADR-005-Amendment-discovery-date.md
+│   │   ├── ADR-005-reference-model-and-ads-integration.md
+│   │   ├── ADR-006-documentation-alignment-pass.md
+│   │   ├── ADR-007-workflow-alignment-pass.md
+│   │   ├── ADR-008-open-nova-catalog-website-product-vision-and-design-principles.md
+│   │   ├── ADR-009-open-nova-catalog-website-mvp-strategy.md
+│   │   ├── ADR-010-catalog-navigation-model.md
+│   │   ├── ADR-011-frontend-architecture-and-design-spec.md
+│   │   ├── ADR-012-visual-design-system.md
+│   │   ├── ADR-013-visualization-design-spectra_and_photometry.md
+│   │   ├── ADR-014-artifact-schemas.md
+│   │   ├── ADR-015-photometry-ingestion-and-column-mapping.md
+│   │   └── README.md
+│   ├── architecture/
+│   │   ├── catalog-ontology.md
+│   │   ├── current-architecture.md
+│   │   ├── frontend-artifact-architecture.md
+│   │   └── frontend-artifact-architecture.pdf
+│   ├── execution/
+│   │   ├── execution-governance.md
+│   │   └── observability-plan.md
+│   ├── specs/
+│   │   ├── photometry_table_model.md
+│   │   ├── spectra-fits-profiles.md
+│   │   └── williams_line_list.csv
+│   ├── storage/
+│   │   ├── dynamodb-access-patterns.md
+│   │   ├── dynamodb-item-model.md
+│   │   ├── s3-layout.md
+│   │   ├── s3-layout.pdf
+│   │   └── s3-layout.png
+│   └── workflows/
+│       ├── acquire-and-validate-spectra.md
+│       ├── discover-spectra-products.md
+│       ├── ingest-new-nova.md
+│       ├── ingest-photometry.md
+│       ├── initialize-nova.md
+│       ├── name-check-and-reconcile.md
+│       └── refresh-references.md
+├── infra/
+│   ├── nova_cat/
+│   │   ├── __init__.py
+│   │   └── nova_cat_stack.py
+│   ├── nova_constructs/
+│   │   ├── __init__.py
+│   │   ├── compute.py
+│   │   ├── storage.py
+│   │   └── workflows.py
+│   ├── workflows/
+│   │   ├── acquire_and_validate_spectra.asl.json
+│   │   ├── discover_spectra_products.asl.json
+│   │   ├── ingest_new_nova.asl.json
+│   │   ├── initialize_nova.asl.json
+│   │   └── refresh_references.asl.json
+│   ├── app.py
+│   ├── cdk.json
+│   ├── lint_stack.py
+│   └── requirements.txt
+├── schemas/
+│   ├── entities/
+│   │   ├── attempt/
+│   │   ├── data_product/
+│   │   ├── file_object/
+│   │   ├── job_run/
+│   │   ├── locator_alias/
+│   │   ├── name_mapping/
+│   │   ├── nova/
+│   │   ├── nova_reference/
+│   │   └── reference/
+│   └── events/
+│       ├── acquire_and_validate_spectra/
+│       ├── discover_spectra_products/
+│       ├── ingest_new_nova/
+│       ├── ingest_photometry/
+│       ├── initialize_nova/
+│       ├── name_check_and_reconcile/
+│       └── refresh_references/
+├── services/
+│   ├── archive_resolver/
+│   │   ├── Dockerfile
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── idempotency_guard/
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── job_run_manager/
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── name_reconciler/
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── nova_common/
+│   │   ├── __init__.py
+│   │   ├── errors.py
+│   │   ├── logging.py
+│   │   └── tracing.py
+│   ├── nova_common_layer/
+│   │   └── python/
+│   ├── nova_resolver/
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── photometry_ingestor/
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── quarantine_handler/
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── reference_manager/
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── spectra_acquirer/
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── spectra_discoverer/
+│   │   ├── adapters/
+│   │   ├── Dockerfile
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── spectra_validator/
+│   │   ├── profiles/
+│   │   ├── Dockerfile
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── workflow_launcher/
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   ├── nova_common_layer_requirements.txt
+│   └── requirements.txt
+├── tests/
+│   ├── infra/
+│   │   └── test_synth.py
+│   ├── integration/
+│   │   ├── test_acquire_and_validate_spectra_integration.py
+│   │   ├── test_discover_spectra_products_integration.py
+│   │   ├── test_ingest_new_nova_integration.py
+│   │   ├── test_initialize_nova_integration.py
+│   │   └── test_refresh_references_integration.py
+│   ├── services/
+│   │   ├── spectra_validator/
+│   │   ├── test_archive_resolver.py
+│   │   ├── test_eso_adapter.py
+│   │   ├── test_idempotency_guard.py
+│   │   ├── test_job_run_manager.py
+│   │   ├── test_nova_resolver.py
+│   │   ├── test_quarantine_handler.py
+│   │   ├── test_reference_manager.py
+│   │   ├── test_spectra_discoverer_handler.py
+│   │   ├── test_workflow_launcher.py
+│   │   └── tests-spectra_acquirer.py
+│   ├── smoke/
+│   │   ├── conftest.py
+│   │   ├── test_deploy.py
+│   │   ├── test_e2e.py
+│   │   └── test_workflows.py
+│   └── __init__.py
+├── tools/
+│   ├── contract-patching/
+│   │   └── apply_photometry_contracts.py
+│   ├── novacat-tools/
+│   │   ├── notebooks/
+│   │   ├── scripts/
+│   │   ├── tools/
+│   │   ├── README.md
+│   │   └── requirements.txt
+│   └── repo_tree_diagram/
+│       ├── repo_tree.py
+│       └── repo_tree_structure.txt
+├── .gitignore
+├── .pre-commit-config.yaml
+├── __init__.py
+├── conftest.py
+├── deploy.sh
+├── fetch_logs.sh
+├── mypy.ini
+├── pyproject.toml
+├── README.md
+├── requirements-dev.txt
+├── requirements.txt
+└── sfn_debug.sh
