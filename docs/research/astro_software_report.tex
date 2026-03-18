@@ -1,0 +1,217 @@
+\documentclass[twocolumn]{aastex701}
+
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{url}
+
+\shorttitle{NovaCat Photometry Ingestion Survey}
+\shortauthors{Finzell et al.}
+
+\begin{document}
+
+\title{NovaCat Multi-Wavelength Photometry Ingestion: Software Ecosystem Survey}
+
+\author{Author Name}
+\affiliation{Your Institution}
+\email{your.email@example.com}
+
+\section{Candidate Tools Overview}
+
+The current astronomy Python ecosystem provides strong “building blocks” for (a) discovering photometric filter metadata (especially via the SVO Filter Profile Service), and (b) parsing astronomy-oriented table formats (VOTable, CDS ReadMe+data, etc.). What is largely not available out-of-the-box is the end-to-end “normalization layer” you described: robust aliasing, systematic disambiguation, and a unified multi-regime measurement schema spanning magnitudes, flux densities, count rates, and energy fluxes across UV/optical/IR and high-energy (X-ray/gamma) and radio regimes. \citep{ref1}
+
+\newpage
+
+\begin{longtable}{p{3cm} p{3cm} p{3cm} p{5cm}}
+\caption{Candidate Tools Overview}\\
+\hline
+Tool / service & One-line description & Sub-problems it addresses & Key fit notes for NovaCat + AWS Lambda \\
+\hline
+\endfirsthead
+
+\hline
+Tool / service & One-line description & Sub-problems it addresses & Key fit notes for NovaCat + AWS Lambda \\
+\hline
+\endhead
+
+SVO Filter Profile Service (FPS) (VO service + web portal) &
+A large filter registry offering standardized filter curves + calibration metadata accessible as VOTables &
+SP1 (registry + metadata), supports SP5 via VO-style queries &
+The VO service exposes filter lookup by ID/PhotCalID and “SSAP-like” search by wavelength range, instrument, facility, photometric system; current index reports 11013 filters and a last update timestamp (2025-09-04). \citep{ref2} \\
+
+astroquery.svo\_fps &
+Python client for SVO FPS returning results as Astropy tables &
+SP1, SP5 &
+Provides get\_filter\_index, get\_filter\_list, get\_transmission\_data, and get\_filter\_metadata; returned tables include wavelength statistics and calibration fields like PhotCalID, MagSys, ZeroPoint, ZeroPointType (when available). \citep{ref3} \\
+
+svo\_filters &
+A local, Python-native wrapper that ships filter files (XML) and exposes filter objects + metadata &
+SP1 (offline-ish), partial SP4 &
+Stores “actual filters” locally as XML and ships a large set of named filters (UV→IR including GALEX, 2MASS, WISE, JWST/NIRCam+MIRI, etc.). This can remove ingestion-time network dependency at the cost of deployment size. Licensed MIT; repo shows recent release activity. \citep{ref4} \\
+
+speclite.filters &
+Lightweight local library of common filter response curves + utilities &
+SP1 (subset), partial SP4 &
+Includes specific, named filter groups (e.g., GALEX, 2MASS, WISE, LSST) and supports custom filter definitions; scope is intentionally limited to included curves, rather than a global registry. \citep{ref5} \\
+
+pyphot &
+Synthetic photometry toolkit with Filter/Library abstractions and an SVO interface &
+SP1 (partial), SP4 (partial) &
+Provides filter objects, computed band properties, and an interface for pulling filters from SVO; internal library is “not exhaustive.” Installation currently calls out an HDF5 dependency (relevant for Lambda packaging). \citep{ref6} \\
+
+sncosmo &
+Time-series photometry handling for transients using an Astropy Table convention &
+SP3 (partial), SP4 (partial), SP5 (partial) &
+Defines a de-facto schema for light-curve rows and—critically for your SP3—documents case-insensitive alias sets for key column names (time/band/flux/etc.). Has a bandpass registry and built-in magnitude systems (e.g., AB, Vega). Not a general multi-regime ingestion framework. \citep{ref7} \\
+
+sedpy (astro-sedpy) &
+Filter + SED utilities with a local filter library, AB mags by default, and Vega conversions &
+SP1 (subset), SP4 (partial) &
+Defines a Filter object keyed by unique identifiers and supports listing available filters and adding new transmission files; primarily aimed at synthetic photometry/SED workflows rather than messy ingestion normalization. \citep{ref8} \\
+
+synphot / stsynphot &
+Synthetic photometry core (synphot) plus mission-specific extensions (notably STScI ecosystems) &
+SP4 (partial), niche SP1 &
+synphot supports constructing bandpasses from arrays/files and supports common magnitude systems (VEGAMAG/AB/ST). stsynphot is oriented to STScI missions and depends on mission reference data tables/files. This is usually overkill for a catalog-ingestion system and can be heavy for serverless packaging. \citep{ref9} \\
+
+Astropy (tables, units, time, I/O) &
+Core infrastructure: tables with metadata, time scales, units (including photometric/log units), file I/O &
+SP3–SP5 (foundational), supports SP4 &
+Unified Table I/O (Table.read/write) covers CSV-like inputs, ECSV (metadata-preserving), and VO Tables; provides UCD parsing, VOUnit parsing, and strongly-typed time and spectral coordinate primitives needed for an internal canonical schema. \citep{ref10} \\
+
+astroquery VizieR (+ other modules) &
+High-level clients for common archives/services, returning Astropy tables &
+SP5 &
+VizieR querying is well-supported; results are returned as tables, but semantic normalization (column → canonical schema) remains your responsibility. \citep{ref11} \\
+
+pyvo &
+IVOA protocol client (TAP, SIA, etc.) + newer model-annotation tooling &
+SP5 (strong), partial SP3 &
+For VO results, provides helpers like fieldname\_with\_ucd/fieldname\_with\_utype. Also documents MIVOT support for VOTables annotated with VO-DML mappings—useful when such annotations exist, but not guaranteed for your sources. \citep{ref12} \\
+
+AAVSO export format documentation &
+Defines the structure of AAVSO downloadable observation data and accepted “Band” values &
+SP1 (reject modes), SP5 &
+The AAVSO format specifies columns like JD/Magnitude/Uncertainty/Band and encodes upper limits using a leading “<” in Magnitude. The accepted filter list explicitly includes Visual (Vis.) and Clear (CV/CR) entries, which you may need to reject or special-case as not standard photometric bandpasses in your canonical registry. \citep{ref13} \\
+
+\hline
+\end{longtable}
+\section{Per-Sub-Problem Assessment}
+
+\subsection{Sub-problem 1 — Filter/Band Identity and Registry}
+
+For UV/optical/NIR/mid-IR style “filter passbands,” the closest thing to a comprehensive, queryable registry in common use is the SVO Filter Profile Service (FPS). Its VO endpoint supports: (a) direct retrieval of a filter by ID, (b) retrieval by PhotCalID for a specific magnitude system (Vega/AB/ST), and (c) “SSAP-like” searching by wavelength ranges and categorical fields like Instrument, Facility, and PhotSystem. \citep{ref14}
+
+From Python, astroquery.svo\_fps makes this registry operationally convenient: you can retrieve an index over wavelength ranges, list filters for Facility+Instrument, fetch transmission curves, and pull per-filter metadata (e.g., effective wavelength and FWHM) using a known filterID. The returned index/list tables include many wavelength summary fields and calibration-oriented columns like PhotCalID, MagSys, and ZeroPoint. \citep{ref15}
+
+However, none of the SVO-facing clients solve your hardest SP1 obligations: turning real-world, messy filter strings into canonical identities with robust aliasing and rejection logic. The SVO service itself primarily exposes filters via controlled fields (IDs, facility/instrument, wavelength constraints), not via a standardized synonym or alias dictionary that understands community shorthand (“V”, “Johnson V”, “uvw2”, “W1”, “Ks”, etc.) across heterogeneous source files. \citep{ref16}
+
+Two notable “offline” alternatives exist for portions of this: svo\_filters ships a large set of filter files locally (XML), and speclite ships a curated local subset for common surveys (including GALEX, 2MASS, WISE, LSST). These are valuable if you want to pre-bake filter definitions into your Lambda artifact, but they still do not provide a general-purpose alias resolution layer—you must define that mapping yourself. \citep{ref17}
+
+For regimes like X-ray, gamma-ray, and much of radio astronomy, the concept of a “filter registry” is less standardized: observations are often represented as energy or frequency bands (e.g., “0.3–10 keV”) rather than a discrete transmission curve with a community-wide identifier. While the IVOA Photometry Data Model explicitly discusses photometric measurements across all spectral domains and allows a simplified bandpass description (e.g., central coordinate + bandwidth), it does not by itself provide a practical, globally adopted registry of “bands” comparable to SVO’s optical/IR filter provisioning. \citep{ref18}
+
+Bottom line: SVO FPS + astroquery.svo\_fps (and optionally svo\_filters as a local snapshot) can cover the “registry and metadata retrieval” portion for a large fraction of UV/optical/IR filters, but there is no out-of-the-box Python solution that (a) fully resolves aliases the way your ingestion needs, and (b) spans optical→gamma/radio uniformly. \citep{ref19}
+
+\subsection{Sub-problem 2 — Filter String Disambiguation}
+
+No widely used astronomy Python package appears to provide a principled, general disambiguation model for filter strings as they appear in arbitrary source files (including a curated taxonomy of ambiguous tokens plus a resolution policy). The closest “documented taxonomy” you can leverage today is not filter-name based; it is semantic metadata (UCDs, units, wavelength/frequency/energy domains) that may accompany VO-formatted tables or well-annotated catalogs. Astropy includes a UCD parser (optionally checking against the controlled vocabulary), and PyVO can locate a column by UCD/utype inside VO results—useful for extracting contextual signals that drive your own disambiguation. \citep{ref20}
+
+A concrete example from your prompt (“K”) demonstrates why existing tools stop short. In near-IR photometry contexts, “K” is commonly a ~2.2 $\mu$m bandpass (and the AAVSO’s accepted filter table explicitly lists “Near-Infrared K” at 2.2 microns). \citep{ref21}
+
+In radio contexts, “K-band” refers to a microwave receiver range; for example, the VLA documentation defines K-band receivers over roughly 18–26.5 GHz. \citep{ref22}
+
+These are both legitimate “K” usages, but they live in different physical coordinate systems (wavelength vs frequency), and they are not resolvable from the bare token “K” alone. The IVOA UCD vocabulary is helpful in that it explicitly enumerates both “em.IR.K” (IR K region) and multiple radio frequency ranges (“em.radio.GHz”), but again, it does not define how to map strings like “K”, “Ks”, “K-band”, or “K (GHz)” to canonical filter identities without context. \citep{ref23}
+
+Bottom line: You should assume SP2 is an actual gap. The ecosystem provides building blocks for extracting context (units, UCDs, provenance), but not a reusable “filter string disambiguator” component.
+
+\subsection{Sub-problem 3 — Column Name Normalization}
+
+General-purpose column-name synonym resolution is not provided as a single, standard, cross-project registry in Astropy or VO clients. Astropy tables are designed to preserve and carry metadata (units, descriptions, and—when read from VOTables—additional VO metadata), but they do not automatically rename or canonicalize your heterogeneous column headers. \citep{ref24}
+
+There are two partial solutions in the ecosystem:
+
+First, sncosmo explicitly documents a case-insensitive alias map for a small set of canonical columns used in transient photometry tables (time, band, flux, fluxerr, zp, zpsys, covariance). This directly demonstrates the pattern you want for SP3, but it is limited to sncosmo’s own schema and does not cover the broader set of photometry-quantity columns you need (magnitudes, flux densities, energy fluxes, count rates, upper limit modalities, etc.). \citep{ref25}
+
+Second, VO-facing tooling can help avoid name-centric normalization when the input file is semantically annotated. Astropy provides parse\_ucd (and can validate UCD tokens), and PyVO DAL results can locate fields by UCD or utype. This enables an ingestion strategy where, for VOTable exports from VizieR or VO services, you map by UCD (phot.mag;em.opt.V, time.epoch, etc.) rather than by column header strings. \citep{ref26}
+
+Bottom line: SP3 is partially covered if your input has UCDs (VOTable/VO contexts) and/or if you adopt a sncosmo-like alias strategy for your own canonical schema. For arbitrary CSV/literature tables without semantic annotations, you will need to build and maintain your own synonym dictionary.
+
+\subsection{Sub-problem 4 — Multi-Regime Photometry Schema}
+
+The IVOA Photometry Data Model (PhotDM) is the most relevant standards artifact for your goal of IVOA compliance: it explicitly defines concepts around photometry filters, photometric systems, magnitude systems, and zero points, and situates photometric measurements as flux density measurements across the electromagnetic spectrum. It also explicitly motivates a “Filter Profile Service” concept to expose external filter information for software clients. \citep{ref27}
+
+The SVO Filter Profile Service’s design aligns to this ecosystem: its documentation defines PhotCalID conventions and provides calibration data for common magnitude systems (Vega/AB/ST), including a “Zero Point Type” distinction (Pogson/Asinh/Linear) that matters for magnitudes↔flux conversion semantics. \citep{ref28}
+
+That said, PhotDM is a standards data model, not a ready-to-use Python class hierarchy for “one measurement row across all regimes.” In practice, the best-supported approach in Python is to compose a bespoke schema using Astropy primitives:
+
+\begin{itemize}
+\item astropy.time is designed around astronomy time scales (UTC/TAI/TDB etc.) and representations (JD/MJD/ISO), which matches your need to preserve original time systems while normalizing to a canonical one. \citep{ref29}
+
+\item astropy.coordinates.SpectralCoord provides a unified interface for spectral coordinates (wavelength/frequency/energy) with transformations, matching your need to represent optical/IR wavelengths, radio frequencies, and X-ray energies in a single schema. \citep{ref30}
+
+\item astropy.units supports physical units and also logarithmic/magnitude units, including photometric magnitude-related definitions in astropy.units.photometric and general logarithmic quantity handling. \citep{ref31}
+
+\item Astropy tables (QTable) can store quantity-bearing columns with units and preserve metadata, and related containers like NDData emphasize the same “data + uncertainty + unit + metadata” principle (even though NDData is aimed at n-D datasets rather than point measurements). \citep{ref32}
+\end{itemize}
+
+There are “schema-like” precedents (e.g., sncosmo’s photometry table contract), but they are domain-specific and not multi-regime in the sense you need (e.g., they model bandpass + flux relative to a zeropoint system, not arbitrary flux density units, count rates, or energy fluxes). \citep{ref33}
+
+Bottom line: PhotDM gives you vocabulary and conceptual structure (filters/systems/zero points), and Astropy gives you robust physical-time/spectral primitives. No existing Python package appears to provide a clean, general, multi-regime “photometric measurement row” class hierarchy with upper limits, multiple measurement types, and provenance as first-class fields.
+
+\subsection{Sub-problem 5 — Heterogeneous File Ingestion}
+
+On the “read data from lots of formats” axis, the ecosystem is comparatively strong:
+
+Astropy’s unified I/O for tables (Table.read/write) covers a broad range of tabular formats (text/CSV-like, FITS tables, VO Tables). ECSV is particularly relevant to your operator-prepared canonical files because it can store data type and unit metadata alongside table metadata in a text-only format. Astropy’s ASCII reader infrastructure also supports explicit type conversion and has a fast engine for compatible formats. \citep{ref34}
+
+For VOTables specifically, Astropy supports reading/parsing VOTable XML (and via the unified interface when treating it as a single table), and it provides UCD parsing utilities you can use as part of a semantic ingestion layer. \citep{ref35}
+
+For VO-distributed catalogs and services, astroquery and pyvo provide complementary access patterns. astroquery.vizier supports VizieR queries and returns tables suitable for downstream normalization; pyvo supports TAP and provides helper methods for identifying fields by UCD/utype in VO results—a key capability when source-column names are inconsistent but semantics are present. pyvo also documents support for MIVOT, which—when present—can map VOTable columns/params to VO-DML model elements. \citep{ref36}
+
+For AAVSO exports, AAVSO’s own documentation clearly defines the output file columns and indicates upper limits via a leading “<” in the magnitude field; it also defines the accepted “Band” values and includes non-instrumental/ambiguous modes like “Visual (Vis.)” and “Clear (CV/CR).” This is sufficient to build a robust parser and rule-based rejections, but it does not constitute a maintained ingestion “pipeline library” with schema validation and canonical mapping. \citep{ref13}
+
+Bottom line: SP5 is well-covered for parsing and basic typing across the formats you listed, but the ecosystem generally stops at “return an Astropy Table.” The specific tasks you need—column mapping to a canonical schema, type coercion to your domain model, and validation including bandpass canonicalization—remain application-specific code.
+
+
+\section{Recommendation}
+
+Scenario B — Partial coverage best matches the observed ecosystem.
+
+Existing tools can cover large, high-value parts of your pipeline, particularly:
+
+\begin{itemize}
+\item Treat the SVO Filter Profile Service as the authoritative registry for UV/optical/IR-style filter passbands and their calibration metadata, using either direct VO queries (ID/PhotCalID + VERB controls for lightweight lookups) or astroquery.svo\_fps calls to retrieve metadata and transmission curves as needed. \citep{ref37}
+
+\item Use Astropy’s table and I/O stack as the backbone for reading CSV-like inputs, VOTables, and other common literature table encodings; prefer ECSV for your operator-prepared canonical files to preserve units/dtypes and reduce ingestion ambiguity. \citep{ref38}
+
+\item Use VO semantics (UCDs/utypes) whenever available to drive column mapping, leveraging Astropy’s UCD parsing and PyVO’s “find column by UCD” helpers, instead of relying on brittle header-string synonyms. \citep{ref39}
+\end{itemize}
+
+Where you should expect to build bespoke components (because the ecosystem does not provide them in a reusable, general way):
+
+\begin{itemize}
+\item A filter-string normalization layer (SP1+SP2) that combines: curated alias dictionaries, context-based disambiguation, and explicit rejection rules for non-photometric modes (e.g., AAVSO Vis., “clear to V” encodings like CV) and high-energy “energy range strings” that are not SVO-style passbands. \citep{ref40}
+
+\item A canonical, multi-regime photometry measurement schema (SP4) built from Astropy primitives (Time, SpectralCoord, Quantity) plus your own “measurement kind” taxonomy (mag/flux density/count rate/energy flux, with upper limits, reference systems, and provenance fields). PhotDM can guide naming and long-term interoperability, but it will not remove the need for a concrete implementation. \citep{ref41}
+
+\item A validation/mapping layer that sits between “read a table” and “emit canonical rows,” handling coercions, unit parsing, and well-defined failure/escalation policies. (This is precisely the gap between SP5’s file parsers and SP4’s canonical schema.) \citep{ref42}
+\end{itemize}
+
+An implementation pattern consistent with your Lambda constraints is to run “registry synchronization” out-of-band (CI job or scheduled batch) that snapshots the subset of SVO metadata you actually need into a compact artifact (JSON/SQLite/Parquet) that is bundled with the Lambda. The SVO VO service explicitly supports verbosity controls (e.g., omitting transmission curves) to reduce payload sizes during such snapshotting. \citep{ref43}
+
+\section{Notable Caveats or Risks}
+
+Your AWS Lambda deployment constraints (no persistent local filesystem, cold-start sensitivity) interact strongly with how astronomy tooling typically behaves around caching and remote lookups. Astroquery centrally manages caching and uses the Astropy configuration and cache directory patterns; by default, this implies filesystem writes to a cache directory that is usually under \$HOME/.astropy/cache. In Lambda, this becomes ephemeral and can increase cold-start and per-invocation variance. \citep{ref44}
+
+If ingestion-time network calls are unacceptable, svo\_filters is an attractive option because it ships filter definitions locally as XML in the package data, but you should explicitly evaluate artifact size and import-time overhead given the large number of packaged filter files (the repository includes many filters spanning missions/instruments such as GALEX, JWST/NIRCam+MIRI, etc.). \citep{ref45}
+
+Some photometry-oriented toolchains are optimized for synthetic photometry or mission pipelines rather than lightweight ingestion: stsynphot (and similar STScI-adjacent workflows) depend on reference data tables/files (graph/component tables, throughput curves, calibration spectra), which can be substantial and operationally complex for serverless deployments. \citep{ref46}
+
+Maintenance status matters for Python 3.11: pysynphot is explicitly described as past end-of-life and no longer supported, so it is a poor dependency choice for a new ingestion backend. \citep{ref47}
+
+Finally, some libraries introduce native or system-level dependencies that complicate Lambda packaging. For example, pyphot’s installation notes call out an HDF5 requirement, which can be a non-trivial deployment concern unless you control your build environment carefully (e.g., via Lambda layers or container images). \citep{ref48}
+
+\bibliographystyle{aasjournal}
+\bibliography{references}
+
+\end{document}
