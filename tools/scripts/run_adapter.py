@@ -38,15 +38,17 @@ SHOW_RAW = False  # Include raw source row in each failure printout
 
 # ---------------------------------------------------------------------------
 
-# _REPO_ROOT = Path(__file__).resolve().parent
-_REPO_ROOT = "/Users/tfinzell/Git/aws_nova_cat"
+_REPO_ROOT = Path(__file__).resolve().parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from services.photometry_ingestor.adapters.canonical_csv import (  # noqa: E402
+from photometry_ingestor.adapters.base import AdaptationFailure  # noqa: E402
+from photometry_ingestor.adapters.canonical_csv import (  # noqa: E402
     CanonicalCsvAdapter,
     MissingRequiredColumnsError,
 )
+
+from contracts.models.entities import PhotometryRow  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -66,7 +68,7 @@ def _print_section(title: str) -> None:
     print(f"{'=' * 60}")
 
 
-def _print_failure(index: int, failure, show_raw: bool) -> None:
+def _print_failure(index: int, failure: AdaptationFailure, show_raw: bool) -> None:
     print(f"\n  [{index}] row_index={failure.row_index}")
     print(f"      error : {failure.error}")
     if show_raw:
@@ -74,14 +76,14 @@ def _print_failure(index: int, failure, show_raw: bool) -> None:
         print(f"      raw   : {raw_str}")
 
 
-def _print_valid_row(index: int, row) -> None:
+def _print_valid_row(index: int, row: PhotometryRow) -> None:
     data = {k: v for k, v in row.model_dump().items() if v is not None}
     print(f"\n  [{index}]")
     for k, v in data.items():
         print(f"      {k:<28} {v}")
 
 
-def _categorise_failures(failures) -> dict[str, list]:
+def _categorise_failures(failures: list[AdaptationFailure]) -> dict[str, list[AdaptationFailure]]:
     categories: dict[str, list] = {
         "excluded_filter": [],
         "unrecognized_filter": [],
@@ -148,7 +150,7 @@ def main() -> None:
         _adapter._synonyms = adapter._synonyms
         _adapter._excluded_filters = adapter._excluded_filters
         # Monkey-patch the check to a no-op for this run
-        _adapter._check_required_columns = lambda resolved: None
+        _adapter._check_required_columns = lambda resolved: None  # type: ignore[method-assign]
         result = _adapter.adapt(
             raw_rows=iter(rows),
             nova_id=NOVA_ID,
@@ -183,7 +185,7 @@ def main() -> None:
             else:
                 visible_failures.append(f)
         if suppressed_count:
-            print(f"Suppressed      : {suppressed_count} failures matching {SUPPRESS_ERRORS}")
+            print(f"\n  Suppressed      : {suppressed_count} failures matching {SUPPRESS_ERRORS}")
 
     if visible_failures:
         _print_section("FAILURE BREAKDOWN")
