@@ -1,0 +1,21 @@
+{
+  "_comment": "Filter codes excluded from NovaCat photometry ingestion. These represent non-standard observation modes that are not usable as calibrated photometry. Keys are exact, case-sensitive filter strings. See: ADR-016, Decision 5.",
+  "_registry_version": "1.0",
+  "_maintenance_note": "Before adding entries, cross-check the filter string against the SVO Filter Profile Service (https://svo2.cab.inta-csic.es/theory/fps/) to confirm it does not correspond to a legitimate registered filter.",
+  "excluded": {
+    "Vis.":   "visual estimate",
+    "Visual": "visual estimate",
+    "TG":     "unfiltered DSLR tri-color green channel",
+    "TR":     "unfiltered DSLR tri-color red channel",
+    "TB":     "unfiltered DSLR tri-color blue channel",
+    "CV":     "unfiltered (V-band corrected)",
+    "CR":     "unfiltered (R-band corrected)",
+    "CBB":    "unfiltered broadband",
+    "Clear":  "unfiltered",
+    "STD":    "standard star observation marker",
+    "Tri-Color Red":   "unfiltered DSLR tri-color red channel",
+    "Tri-Color Blue":   "unfiltered DSLR tri-color blue channel",
+    "Tri-Color Green":   "unfiltered DSLR tri-color green channel",
+    "Unfiltered with V Zeropoint": "unfiltered (V-band corrected)"
+  }
+}
