@@ -336,9 +336,15 @@ prior work.
 
 ### UnpackSource — Source File Unpacking
 
-`UnpackSource` is the entry point for all photometry ingestion. Its sole responsibility
-is to determine whether a staged source file is a zip archive, and if so, to unpack it
-and fan out each valid file entry as an independent ingestion event. It is a
+`UnpackSource` is the entry point for all photometry ingestion. Its sole responsibility is to determine whether a staged source file is
+a supported archive format (`.zip`, `.gz`, `.tar.gz`), and if so, to
+unpack it and fan out each valid file entry as an independent ingestion
+event. Archive format detection precedes the four-case decision tree:
+`.gz` single-file archives are unpacked to their contained file and
+processed as a single-entry archive; `.tar.gz` archives are unpacked to
+their full entry list and each entry is processed independently per the
+decision tree. The decision tree itself applies uniformly across all
+supported archive formats once unpacked.It is a
 fire-and-forget dispatcher: once all events are published, the workflow exits without
 waiting for downstream results.
 
@@ -357,7 +363,11 @@ waiting for downstream results.
 
 **Accepted format allowlist:** `.csv`, `.ecsv`, `.fits`, `.fts`, `.vot`, `.xml`, `.json`.
 This list is the authoritative gate; additions require an explicit allowlist update.
-`.json` entries are treated as sidecar candidates and routed accordingly.
+`.json` entries are written to S3 as-is and their resulting S3 key is
+passed to `prep_photometry_file` as `sidecar_s3_key` alongside the
+primary data file from the same archive. `UnpackSource` does not
+interpret the `.json` entry as a sidecar — that association is
+`prep_photometry_file`'s responsibility.
 
 **Fan-out mechanics:** Each `IngestPhotometryEvent` published by `UnpackSource` is
 independent. `UnpackSource` does not track downstream execution status. This means a
