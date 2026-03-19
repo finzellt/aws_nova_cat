@@ -334,6 +334,19 @@ implementation above them. The remainder of this document focuses primarily on t
 design questions in Layers 0–3, which are the most novel and the least addressed by
 prior work.
 
+**Structured diagnostic residuals.** Multiple layers in the pipeline encounter inputs
+they cannot fully interpret: Layer 0 encounters header lines it cannot parse and
+synonym keys it does not recognise; the adapter (Layer 4) encounters band strings it
+cannot resolve; the validation handler (Layer 5) encounters rows that fail structural
+checks. These partial-interpretation artifacts are operationally valuable — they are the
+primary signal for expanding `synonyms.json` coverage, improving parser tiers, and
+extending the band registry. Rather than scattering these artifacts across layer-specific
+ad hoc fields, the pipeline uses a single consolidated residual model
+(`HeaderResidual`) that tags each residual by source layer and failure category. This
+gives operator review tooling one artifact to inspect per ingestion event. The normative
+specification for the residual model is in ADR-021 §7.5; any pipeline stage that
+produces diagnostic residuals should emit into the same model.
+
 ### UnpackSource — Source File Unpacking
 
 `UnpackSource` is the entry point for all photometry ingestion. Its sole responsibility is to determine whether a staged source file is
