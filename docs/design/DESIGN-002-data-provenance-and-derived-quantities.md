@@ -192,7 +192,11 @@ beginning with `#` or `%`, up to the first non-comment line), attempts to parse 
 `KEY: value` or `KEY = value` pairs, and extracts any recognized keys into the ingestion
 context. Recognized keys are a controlled vocabulary (see §3.5 for the full field set;
 the header scan uses the same canonical field names and their synonyms from the synonym
-registry).
+registry). The existing `synonyms.json` is scoped to `PhotometryRow` field names; the
+inline header scan requires coverage of sidecar/context fields (e.g. `nova_name`,
+`file_format`) that fall outside that scope. The resolution adopted in ADR-021 is to
+expand `synonyms.json` into a registry for all ingestion metadata, not just
+`PhotometryRow` fields.
 
 This is not a sidecar — it is a second, distinct source of file-internal context that
 Layer 0 harvests before passing the file to the adapter. The extracted key-value pairs
@@ -1041,7 +1045,7 @@ donation API is introduced. The specific forward-compatibility constraints are:
 | 7 | What is the `ColorRow` workflow architecture: extended `ingest_photometry` branch (Option A), separate `ingest_color` workflow (Option B), or post-processing sweep (Option C)? | ADR-021 or ADR-022 | See §5.5. |
 | 8 | What is the canonical storage target and persistence format for `ColorRow` records? | TBD (likely ADR-020 extension or ADR-022) | May share the photometry Parquet target with a `row_type` partition. |
 | 9 | What is the deduplication key for `ColorRow` records? | ADR-022 | The `PhotometryRow` bibcode + band + epoch key is not directly applicable. |
-| 10 | What is the inline header keyword controlled vocabulary and synonym registry for Layer 0 header extraction? | ADR-021 | Should reuse `synonyms.json` structure; scope to be defined. |
+| 10 | ~~What is the inline header keyword controlled vocabulary and synonym registry for Layer 0 header extraction?~~ **Resolved:** `synonyms.json` is expanded in scope to cover all ingestion metadata fields, not just `PhotometryRow` fields. Inline header extraction reuses this expanded registry. | ADR-021 | Decision reached in ADR-021 conversation. |
 | 11 | How does embargo status interact with the publication gate? Which layer enforces embargo exclusion? | DESIGN-003 / publication gate ADR (TBD) | Not in scope for the ingestion pipeline; flagged for DESIGN-003. |
 | 12 | What is the full donation workflow design, including the upload API, donor trust tiers, donor registry, abuse prevention, and embargo enforcement? | DESIGN-003 | §6 establishes forward-compatibility constraints only. |
 

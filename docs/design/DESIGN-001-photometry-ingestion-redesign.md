@@ -318,15 +318,56 @@ of design and implementation that can be addressed in a separate epic.
 │  Layer 0 — Pre-Ingestion Normalization                      │
 │  File shape normalization, multi-nova splitting,            │
 │  sidecar context ingestion                                  │
+├─────────────────────────────────────────────────────────────┤
+│  UnpackSource — Source File Unpacking                       │
+│  Zip detection, format filtering, per-file fan-out          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Layer 0 sits *below* the adapter pipeline and runs first: it takes raw, heterogeneous
-input files in whatever shape they arrive and produces normalized, per-nova, long-format
-tables ready for the adapter. Layers 1 and 2 are the foundational data-model layers that
-must be designed before any implementation above them. The remainder of this document
-focuses primarily on the design questions in Layers 0–3, which are the most novel and
-the least addressed by prior work.
+`UnpackSource` is a pre-pipeline gate that runs before Layer 0. It is not a numbered
+layer because it carries no data model responsibility — it is a pure routing and
+dispatch component. Layer 0 sits below the adapter pipeline and runs first for each
+individual file: it takes a raw, heterogeneous input file in whatever shape it arrives
+and produces a normalized, per-nova, long-format table ready for the adapter. Layers 1
+and 2 are the foundational data-model layers that must be designed before any
+implementation above them. The remainder of this document focuses primarily on the
+design questions in Layers 0–3, which are the most novel and the least addressed by
+prior work.
+
+### UnpackSource — Source File Unpacking
+
+`UnpackSource` is the entry point for all photometry ingestion. Its sole responsibility
+is to determine whether a staged source file is a zip archive, and if so, to unpack it
+and fan out each valid file entry as an independent ingestion event. It is a
+fire-and-forget dispatcher: once all events are published, the workflow exits without
+waiting for downstream results.
+
+**Decision tree:**
+
+1. **Not a zip:** Publish a single `IngestPhotometryEvent` for the staged file and exit.
+2. **Is a zip, contains at least one file of acceptable format:** Unpack the archive.
+   For each entry whose extension is in the accepted format allowlist, publish one
+   independent `IngestPhotometryEvent`. Skip (log, do not quarantine) any entries with
+   unrecognized extensions. Exit after all events are published.
+3. **Is a zip, all entries are themselves zip files:** Quarantine with reason code
+   `nested_zip_archive`. Recursive zip handling is explicitly out of scope; the operator
+   must manually flatten the archive.
+4. **Is a zip, no entries of acceptable format remain after filtering:** Quarantine with
+   reason code `no_processable_entries`.
+
+**Accepted format allowlist:** `.csv`, `.ecsv`, `.fits`, `.fts`, `.vot`, `.xml`, `.json`.
+This list is the authoritative gate; additions require an explicit allowlist update.
+`.json` entries are treated as sidecar candidates and routed accordingly.
+
+**Fan-out mechanics:** Each `IngestPhotometryEvent` published by `UnpackSource` is
+independent. `UnpackSource` does not track downstream execution status. This means a
+zip containing five files produces five fully independent ingestion executions, each
+with its own idempotency key, quarantine scope, and failure surface. Failures in one
+file do not affect the others.
+
+**What `UnpackSource` does not do:** It does not parse file contents, resolve nova
+identity, validate column structure, or make any data model decisions. It is a
+structural gate only. All content decisions belong to Layer 0 and above.
 
 ### Layer 1 — Band Registry
 
@@ -668,6 +709,7 @@ The following questions are explicitly open. Each will be resolved in a dedicate
 | 11 | How does the wide-to-long pivot handle files that mix `PhotometryRow` and `ColorRow` columns in the same table? | DESIGN-002 / Layer 0 spec |
 | 12 | What is the sidecar contract schema, and how is a sidecar associated with its primary file at upload time? | DESIGN-002 |
 | 13 | How does multi-nova object resolution interact with the Step Functions Express 5-minute execution budget? | Layer 0 spec / ADR-021 |
+| 14 | What fan-out mechanism does `UnpackSource` use to publish per-file events (EventBridge, SQS, direct SFN execution)? | ADR-021 |
 
 ---
 
@@ -675,6 +717,21 @@ The following questions are explicitly open. Each will be resolved in a dedicate
 
 The following epics are proposed in dependency order. Each epic is expected to produce
 one or more ADRs, updated contracts, and implementation artifacts.
+
+### Epic A-00 — UnpackSource Design and Implementation
+
+**Output:** `UnpackSource` Lambda handler, accepted format allowlist, new quarantine
+reason codes (`nested_zip_archive`, `no_processable_entries`), fan-out mechanism
+decision, ADR-021 (shared with Epic A-0).
+
+**Dependency:** None. `UnpackSource` has no dependency on the band registry, table
+model, or adapter — it is a pure routing component.
+
+**Scope:** Implement zip detection and unpacking; define and enforce the accepted format
+allowlist; implement the four-case decision tree; choose and implement the fan-out
+mechanism for publishing independent `IngestPhotometryEvent`s; add the two new
+quarantine reason codes to `PhotometryQuarantineReasonCode`; write unit tests covering
+all four decision tree cases including the nested-zip quarantine path.
 
 ### Epic A-0 — Pre-Ingestion Normalization Design *(design-only; no implementation)*
 
