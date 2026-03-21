@@ -1,0 +1,46 @@
+{
+  "threshold": 0.65,
+  "total_outliers": 20,
+  "bands": {
+    "B": [
+      "SOFIA/HAWC.B"
+    ],
+    "R": [
+      "Paranal/SPHERE.ZIMPOL_N_R"
+    ],
+    "I": [
+      "CTIO/MosaicII.V_old",
+      "Keck/LRIS.I"
+    ],
+    "J": [
+      "IRSF/Sirius.Ks",
+      "CAHA/PlanetCam2.SWIR_J_filter"
+    ],
+    "H": [
+      "GTC/CIRCE.J",
+      "GTC/CIRCE.Ks"
+    ],
+    "K": [
+      "Gemini/Flamingos2.K-blue_filter"
+    ],
+    "g": [
+      "WIYN/NESSI.z_filter",
+      "CAHA/CAHA.496_10"
+    ],
+    "r": [
+      "OAO/MuSCAT.zs2"
+    ],
+    "i": [
+      "CSTAR/CSTAR2.g",
+      "CSTAR/CSTAR4.r",
+      "LCO/CCD3x3.LC-3016"
+    ],
+    "z": [
+      "Subaru/CIAO.z",
+      "Subaru/OHS.z",
+      "INT/WFC.RGO_z",
+      "ING/ING.024",
+      "SLOAN/SDSS.zprime_filter"
+    ]
+  }
+}
