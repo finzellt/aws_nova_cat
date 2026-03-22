@@ -24,6 +24,9 @@ SUBSTRING_IGNORE = {"cache", "compressed", "engineering", "diagrams"}
 # Files ignored by exact name (not applied to directories)
 FILE_NAME_IGNORE = {".DS_Store"}
 
+# Directories that get one extra level of depth beyond the global max
+DEEPER_DIRS: set[str] = {}
+
 
 def should_ignore(abs_path: str, root: str) -> bool:
     """Return True if this path should be excluded from the tree."""
@@ -52,8 +55,8 @@ def build_tree(root: str, max_depth: int = 3) -> list[str]:
     root = os.path.abspath(root)
     lines.append(os.path.basename(root) + "/")
 
-    def _walk(current: str, prefix: str, depth: int) -> None:
-        if depth > max_depth:
+    def _walk(current: str, prefix: str, depth: int, local_max: int) -> None:
+        if depth > local_max:
             return
 
         try:
@@ -76,10 +79,12 @@ def build_tree(root: str, max_depth: int = 3) -> list[str]:
             label = entry.name + ("/" if entry.is_dir() else "")
             lines.append(f"{prefix}{connector}{label}")
 
-            if entry.is_dir() and depth < max_depth:
-                _walk(entry.path, prefix + extension, depth + 1)
+            if entry.is_dir() and depth < local_max:
+                # Grant one extra level if this directory is in DEEPER_DIRS
+                child_max = local_max + 1 if entry.name in DEEPER_DIRS else local_max
+                _walk(entry.path, prefix + extension, depth + 1, child_max)
 
-    _walk(root, "", 1)
+    _walk(root, "", 1, max_depth)
     return lines
 
 
@@ -112,6 +117,7 @@ def main() -> None:
         f.write(f"#   exact name     : {sorted(EXACT_NAME_IGNORE)}\n")
         f.write(f"#   substring match: {sorted(SUBSTRING_IGNORE)}\n")
         f.write(f"#   exact filenames : {sorted(FILE_NAME_IGNORE)}\n")
+        f.write(f"#   deeper dirs     : {sorted(DEEPER_DIRS)}\n")
         f.write("#\n\n")
         f.write(output)
 
