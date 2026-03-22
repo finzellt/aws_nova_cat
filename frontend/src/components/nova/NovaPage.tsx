@@ -191,6 +191,8 @@ export default function NovaPage({ identifier }: NovaPageProps) {
           spectraData={spectraState.status === 'success' ? spectraState.data : null}
           spectraLoading={spectraState.status === 'loading'}
           spectraError={spectraState.status === 'error'}
+          hasPhotometry={nova !== null && nova.photometry_count > 0}
+          basePath={basePath}
         />
 
         {/* ── Right: metadata region ──────────────────────────────── */}
