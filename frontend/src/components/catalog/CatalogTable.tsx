@@ -194,7 +194,7 @@ export function CatalogTable({
           return (
             <div className="flex flex-col py-1" style={{ gap: '2px' }}>
               <Link
-                href={`/nova/${encodeURIComponent(primary_name)}`}
+                href={`/nova/${primary_name.replace(/\s+/g, '-')}`}
                 className={[
                   'font-medium text-[var(--color-interactive)]',
                   'no-underline hover:underline',

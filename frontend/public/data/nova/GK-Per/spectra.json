@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-03-22T00:00:00Z",
+  "nova_id": "3f2a1b4c-8d5e-4f6a-9b2c-1d7e3a8f5c2b",
+  "outburst_mjd": 14613.0,
+  "wavelength_unit": "nm",
+  "spectra": [
+    {
+      "spectrum_id": "7a3c9e21-1f4b-4d88-b2e0-3c5a9f1d7b20",
+      "epoch_mjd": 14628.5120,
+      "days_since_outburst": 15.5,
+      "instrument": "Mills Spectrograph",
+      "telescope": "Lick 36-inch Crossley",
+      "provider": "Lick Observatory",
+      "wavelength_min": 390.0,
+      "wavelength_max": 680.0,
+      "flux_unit": "arbitrary",
+      "normalization_scale": 1.0,
+      "wavelengths": [390.0, 440.0, 500.0, 590.0, 656.3, 680.0],
+      "flux_normalized": [0.62, 1.10, 0.91, 0.85, 2.45, 0.78]
+    },
+    {
+      "spectrum_id": "b2f1d834-6e7c-4a90-95d3-8a0c2e4f1b67",
+      "epoch_mjd": 14643.4890,
+      "days_since_outburst": 30.5,
+      "instrument": "Mills Spectrograph",
+      "telescope": "Lick 36-inch Crossley",
+      "provider": "Lick Observatory",
+      "wavelength_min": 390.0,
+      "wavelength_max": 680.0,
+      "flux_unit": "arbitrary",
+      "normalization_scale": 1.0,
+      "wavelengths": [390.0, 440.0, 500.0, 590.0, 656.3, 680.0],
+      "flux_normalized": [0.55, 0.88, 0.72, 0.69, 3.10, 0.61]
+    },
+    {
+      "spectrum_id": "e4a7c019-3b5d-4f12-a8e6-9d2b5c7f3e10",
+      "epoch_mjd": 14733.3140,
+      "days_since_outburst": 120.3,
+      "instrument": "Boller & Chivens Spectrograph",
+      "telescope": "Lick 3m Shane",
+      "provider": "Lick Observatory",
+      "wavelength_min": 370.0,
+      "wavelength_max": 720.0,
+      "flux_unit": "erg/cm2/s/A",
+      "normalization_scale": 4.21e-14,
+      "wavelengths": [370.0, 450.0, 501.0, 590.0, 656.3, 720.0],
+      "flux_normalized": [0.41, 0.60, 0.52, 2.80, 4.90, 1.20]
+    },
+    {
+      "spectrum_id": "c9d2b145-7f8e-4c23-b1a4-5e6f0a2d8c91",
+      "epoch_mjd": 14793.2070,
+      "days_since_outburst": 180.2,
+      "instrument": "FAST",
+      "telescope": "FLWO 1.5m",
+      "provider": "CfA",
+      "wavelength_min": 370.0,
+      "wavelength_max": 750.0,
+      "flux_unit": "erg/cm2/s/A",
+      "normalization_scale": 1.87e-14,
+      "wavelengths": [370.0, 486.1, 501.0, 630.0, 656.3, 750.0],
+      "flux_normalized": [0.38, 1.85, 0.44, 2.10, 5.80, 0.90]
+    }
+  ]
+}
