@@ -361,7 +361,157 @@ No idempotency keys exposed in boundary schemas.
 
 ---
 
-# 8. Observability Model
+# 8. Frontend
+
+## 8.1 Overview
+
+The Open Nova Catalog website is a React/Next.js application that provides catalog
+browsing, nova detail pages, and interactive scientific visualizations. It consumes
+pre-built static JSON artifacts and performs no backend communication at runtime.
+
+The frontend is a pure presentation layer. All scientific computation — normalization,
+subsampling, offset calculation, outburst date resolution — is the backend's
+responsibility and is embedded in the artifacts at generation time. The frontend applies
+visual styling, layout, and client-side interaction only.
+
+This architecture is defined in ADR-009 (published artifact architecture) and the
+contracts are specified in ADR-014 (artifact schemas).
+
+## 8.2 Technology Stack
+
+- **Framework:** React with Next.js (App Router, TypeScript)
+- **Visualization:** Plotly.js via react-plotly.js
+- **Data table:** TanStack Table (@tanstack/react-table)
+- **Styling:** Tailwind CSS v4, semantic CSS design tokens
+- **Typography:** DM Sans (UI) + DM Mono (scientific data)
+- **Icons:** Lucide React
+
+Design decisions are captured in ADR-011 (architecture and tech stack) and ADR-012
+(visual design system).
+
+## 8.3 Design System
+
+All colors are mediated through a two-layer CSS custom property system: primitive tokens
+(raw color values) map to semantic tokens (intent-based names like `--color-interactive`
+or `--color-surface-primary`). Components reference only semantic tokens. This
+architecture enables dark mode without touching component code.
+
+The token definitions live in `frontend/src/styles/tokens.css`. Tailwind utility class
+mappings are defined in `frontend/src/app/globals.css` via the Tailwind v4 `@theme inline`
+block.
+
+Full specification: ADR-012.
+
+## 8.4 Site Structure
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | Homepage | Stats bar, hero explainer, 10-row catalog preview |
+| `/catalog` | Catalog | Full paginated table of all novae, sortable, searchable |
+| `/search` | Search | Search-focused variant of the catalog table |
+| `/nova/[identifier]` | Nova detail | Two-column layout: visualizations (left) + metadata (right) |
+| `/docs` | Documentation | Placeholder (content TBD) |
+| `/about` | About | Placeholder (content TBD) |
+
+Nova pages are accessible by both UUID (`/nova/<uuid>`) and primary name
+(`/nova/<primary-name>`). Navigation model defined in ADR-010.
+
+## 8.5 Component Architecture
+
+**Catalog layer:**
+- `CatalogTable` — TanStack Table component with sorting, pagination (25 rows),
+  client-side name/alias search, and ADR-012-compliant visual treatment.
+
+**Nova page layer:**
+- `VisualizationRegion` — Container for the two visualization components; handles
+  loading, error, and empty states independently for each.
+- `SpectraViewer` — Plotly.js waterfall plot. Vertically offsets spectra by epoch.
+  Supports three epoch label formats (DPO/MJD/Calendar Date), log/linear temporal
+  scale, single-spectrum isolation mode, and spectral feature marker overlays
+  (Fe II / He-N / Nebular). Full spec: ADR-013.
+- `LightCurvePanel` — Tabbed Plotly.js scatter plot. One tab per wavelength regime
+  (optical/X-ray/gamma/radio). Per-regime axis configuration. Multi-band color
+  scheme with toggleable legend. Upper limit markers. Error bar toggle. Full spec:
+  ADR-013.
+
+**Shared utilities** (`src/lib/`):
+- Epoch format conversion (MJD ↔ DPO ↔ Calendar Date)
+- Catalog data loading (server-side filesystem read for SSG)
+
+## 8.6 Artifact Consumption
+
+The frontend fetches static JSON artifacts at page load time. During development, these
+are mock fixtures served from `frontend/public/data/`. In production, they will be served
+from an S3 bucket via CloudFront (hosting architecture not yet formalized — see §8.7).
+
+| Artifact | Path | Consumer |
+|----------|------|----------|
+| `catalog.json` | Root | Homepage, catalog table, search |
+| `nova/<id>/nova.json` | Per-nova | Nova page metadata region |
+| `nova/<id>/references.json` | Per-nova | Nova page references table |
+| `nova/<id>/spectra.json` | Per-nova | Spectra viewer |
+| `nova/<id>/photometry.json` | Per-nova | Light curve panel |
+| `nova/<id>/sparkline.svg` | Per-nova | Catalog table light curve column |
+
+Schemas: ADR-014.
+
+## 8.7 Open Architecture Gaps (Frontend)
+
+The following are identified but not yet designed:
+
+- **Hosting and deployment:** How Vercel (app hosting) connects to S3/CloudFront
+  (data artifact serving). URL patterns, environment variables, CORS, cache headers.
+  Flagged as ADR-011 Open Question 3.
+- **Artifact generation pipeline:** The `generate_site_data` pipeline that transforms
+  internal DynamoDB/S3 data into the published ADR-014 JSON artifacts. Not yet designed.
+- **Publication gate:** The trigger mechanism for artifact regeneration (automatic on
+  ingestion vs. operator-initiated vs. scheduled). Not yet designed.
+
+---
+
+# 9. Photometry Pipeline (Design Phase)
+
+The photometry ingestion pipeline is in active design. The spectra pipeline (§5) is
+operational; the photometry pipeline follows the same architectural patterns but
+introduces additional complexity from multi-regime, multi-band data.
+
+## 9.1 Layer Architecture
+
+The photometry system is organized into seven layers, each a coherent unit of design
+and implementation. Layers 0–2 are foundational data-model layers; Layers 3–6 build
+on them.
+
+| Layer | Name | Status |
+|-------|------|--------|
+| UnpackSource | Source file unpacking | Designed (ADR-021) |
+| 0 | Pre-ingestion normalization | Designed (ADR-021) |
+| 1 | Band registry | In design (ADR-017) |
+| 2 | Band resolution/disambiguation | Pending (ADR-018) |
+| 3 | Photometry table model revision | Pending (ADR-019) |
+| 4 | Column mapping and adapter | Contracts merged; implementation paused |
+| 5 | Ingestion workflow handlers | Pending |
+| 6 | Persistence and query | Designed (ADR-020) |
+
+## 9.2 Key Design Decisions Made
+
+- **Row-level DynamoDB storage** (ADR-020) rather than canonical Parquet files
+- **Separate photometry and color tables** with independent schema versioning
+- **Band registry as a versioned data artifact** seeded from SVO FPS
+- **Row-level failure persistence** to S3 diagnostics for operator review
+- **AI-assisted adapter registration** at development time only; no runtime dependency
+- **Conservative photometric system defaults** and case-sensitive filter matching (ADR-016)
+
+## 9.3 Active Design Chain
+
+ADR-017 (band registry) → ADR-018 (disambiguation) → ADR-019 (table model) → Epic D
+(implementation). The `CanonicalCsvAdapter` implementation is paused pending completion
+of this chain.
+
+Full design context: DESIGN-001, DESIGN-002.
+
+---
+
+# 9. Observability Model
 
 Structured logs include:
 
@@ -383,7 +533,7 @@ Metrics:
 
 ---
 
-# 9. Architectural Invariants
+# 10. Architectural Invariants
 
 The following must remain true:
 
@@ -403,7 +553,7 @@ The following must remain true:
 
 ---
 
-# 10. Deferred / Non-MVP
+# 11. Deferred / Non-MVP
 
 - Global multi-nova sweeps
 - Spatial indexing
@@ -413,7 +563,7 @@ The following must remain true:
 
 ---
 
-# 11. Deployment Model
+# 12. Deployment Model
 
 Nova Cat is deployed as two independent CDK stacks in the same AWS account and region:
 
