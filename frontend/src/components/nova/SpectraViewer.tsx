@@ -1,0 +1,943 @@
+'use client';
+
+/**
+ * SpectraViewer — waterfall spectra plot for the nova page.
+ *
+ * Design spec: ADR-013 | Data contract: ADR-014 | Visual tokens: ADR-012
+ *
+ * Layer A: basic waterfall rendering, color, hover, empty/error states.
+ * Layer B: epoch format toggle, temporal scale toggle.
+ * Layer C: legend strip, spectrum isolation, single-spectrum mode.
+ * Layer D (this version) adds:
+ *   - Three toggle button groups: Fe II, He/N, Nebular
+ *   - Full-height vertical dashed lines at spectral feature wavelengths
+ *   - Line labels above the plot area
+ *   - Curated subset of Williams nova line list (~20 prominent lines)
+ *   - Blended lines at mean wavelength with blend noted in label
+ */
+
+import { useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { LineChart, CircleAlert } from 'lucide-react';
+import type { SpectraArtifact, SpectrumRecord } from '@/types/nova';
+
+// ── Dynamic Plotly import ─────────────────────────────────────────────────────
+
+const Plot = dynamic(() => import('react-plotly.js'), {
+  ssr: false,
+  loading: () => <PlotSkeleton />,
+});
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface SpectraViewerProps {
+  data: SpectraArtifact;
+  onRetry?: () => void;
+}
+
+type EpochFormat = 'dpo' | 'mjd' | 'calendar';
+type TemporalScale = 'log' | 'linear';
+
+/** The three spectral feature groups from ADR-013. */
+type FeatureGroup = 'fe2' | 'hen' | 'nebular';
+
+interface PreparedSpectrum {
+  record: SpectrumRecord;
+  color: string;
+  epochLabel: string;
+  displayIndex: number;
+}
+
+// ── Spectral feature line list ────────────────────────────────────────────────
+//
+// A curated subset of the Williams nova line list, trimmed to the most
+// prominent features seen in classical nova spectra. ADR-013 target:
+// fewer than 10% of the original line count.
+//
+// Wavelengths are in nanometres (Williams list is in Ångströms; divided by 10).
+// Blended lines are plotted at the mean wavelength with the blend noted.
+//
+// Each entry belongs to one of three groups:
+//   - fe2: Fe II emission lines, characteristic of Fe II-type novae
+//   - hen: Hydrogen, helium, and nitrogen lines, characteristic of He/N-type novae
+//   - nebular: Forbidden and coronal lines from the nebular phase
+//
+// This list is an implementation detail (ADR-013 Open Question 2) and can
+// be refined based on real data.
+
+interface SpectralLine {
+  /** Wavelength in nm (mean for blends). */
+  wavelength_nm: number;
+  /** Display label (shown above the plot). */
+  label: string;
+  /** Which toggle group this line belongs to. */
+  group: FeatureGroup;
+}
+
+const SPECTRAL_LINES: SpectralLine[] = [
+  // ── Fe II group ─────────────────────────────────────────────────────────
+  // Multiplet 42 — the strongest Fe II features in nova spectra
+  { wavelength_nm: 492.4, label: 'Fe II 4924',      group: 'fe2' },
+  { wavelength_nm: 501.8, label: 'Fe II 5018',      group: 'fe2' },
+  { wavelength_nm: 516.9, label: 'Fe II 5169',      group: 'fe2' },
+  // Multiplet 49
+  { wavelength_nm: 527.6, label: 'Fe II 5276',      group: 'fe2' },
+  { wavelength_nm: 531.6, label: 'Fe II 5316',      group: 'fe2' },
+  // Multiplet 27
+  { wavelength_nm: 423.3, label: 'Fe II 4233',      group: 'fe2' },
+
+  // ── He/N group ──────────────────────────────────────────────────────────
+  // Balmer series
+  { wavelength_nm: 656.3, label: 'Hα',              group: 'hen' },
+  { wavelength_nm: 486.1, label: 'Hβ',              group: 'hen' },
+  { wavelength_nm: 434.0, label: 'Hγ',              group: 'hen' },
+  // Helium
+  { wavelength_nm: 587.6, label: 'He I 5876',       group: 'hen' },
+  { wavelength_nm: 706.5, label: 'He I 7065',       group: 'hen' },
+  { wavelength_nm: 468.6, label: 'He II 4686',      group: 'hen' },
+  // Nitrogen — Bowen blend (N III 4634/4641/4642 → mean 4639 Å)
+  { wavelength_nm: 463.9, label: 'N III 4634–42 (blend)', group: 'hen' },
+  // Nitrogen — N II blend (5676/5680)
+  { wavelength_nm: 567.8, label: 'N II 5676/80 (blend)',  group: 'hen' },
+
+  // ── Nebular group ───────────────────────────────────────────────────────
+  // Forbidden oxygen
+  { wavelength_nm: 500.7, label: '[O III] 5007',    group: 'nebular' },
+  { wavelength_nm: 495.9, label: '[O III] 4959',    group: 'nebular' },
+  { wavelength_nm: 630.0, label: '[O I] 6300',      group: 'nebular' },
+  // Forbidden nitrogen
+  { wavelength_nm: 658.3, label: '[N II] 6583',     group: 'nebular' },
+  { wavelength_nm: 654.8, label: '[N II] 6548',     group: 'nebular' },
+  // Neon
+  { wavelength_nm: 386.9, label: '[Ne III] 3869',   group: 'nebular' },
+  // Coronal iron
+  { wavelength_nm: 608.7, label: '[Fe VII] 6087',   group: 'nebular' },
+];
+
+/** Colors for each feature group. Muted so they don't compete with spectra. */
+const FEATURE_GROUP_COLORS: Record<FeatureGroup, string> = {
+  fe2:     '#B07D2B',  // warm brown — evokes iron
+  hen:     '#7B68A0',  // muted purple — distinct from blue/amber spectra ramp
+  nebular: '#5A8F6E',  // sage green — associated with emission nebulae
+};
+
+const FEATURE_GROUP_LABELS: Record<FeatureGroup, string> = {
+  fe2:     'Fe II',
+  hen:     'He / N',
+  nebular: 'Nebular',
+};
+
+// ── Color palettes ────────────────────────────────────────────────────────────
+
+const SPARSE_RAMP = [
+  '#0072B2', '#2E91C4', '#56B4E9', '#5EBD98',
+  '#009E73', '#8DB535', '#E69F00', '#D55E00',
+];
+
+const DENSE_PALETTE = [
+  '#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9',
+  '#D55E00', '#F0E442', '#000000', '#88CCEE', '#AA4499',
+];
+
+function assignColor(sortIndex: number, totalCount: number, isDense: boolean): string {
+  if (isDense) {
+    const GOLDEN_RATIO = 0.6180339887;
+    const paletteIndex = Math.floor(
+      ((sortIndex * GOLDEN_RATIO) % 1) * DENSE_PALETTE.length
+    );
+    return DENSE_PALETTE[paletteIndex];
+  }
+  if (totalCount === 1) return SPARSE_RAMP[0];
+  const t = sortIndex / (totalCount - 1);
+  const scaledIndex = t * (SPARSE_RAMP.length - 1);
+  const lo = Math.floor(scaledIndex);
+  const hi = Math.min(lo + 1, SPARSE_RAMP.length - 1);
+  return scaledIndex - lo < 0.5 ? SPARSE_RAMP[lo] : SPARSE_RAMP[hi];
+}
+
+// ── Helpers: temporal ─────────────────────────────────────────────────────────
+
+function computeDefaultScale(epochValues: number[]): TemporalScale {
+  if (epochValues.length < 2) return 'linear';
+  const sorted = [...epochValues].sort((a, b) => a - b);
+  const totalSpan = sorted[sorted.length - 1] - sorted[0];
+  if (totalSpan === 0) return 'linear';
+  let maxGap = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    maxGap = Math.max(maxGap, sorted[i] - sorted[i - 1]);
+  }
+  if (maxGap / totalSpan > 0.5) return 'log';
+  return epochValues.length > 8 ? 'log' : 'linear';
+}
+
+function selectRepresentativeSubset(
+  spectra: SpectrumRecord[],
+  epochKey: (s: SpectrumRecord) => number,
+  targetCount: number = 10,
+): SpectrumRecord[] {
+  if (spectra.length <= targetCount) return spectra;
+  const sorted = [...spectra].sort((a, b) => epochKey(a) - epochKey(b));
+  const minEpoch = epochKey(sorted[0]);
+  const maxEpoch = epochKey(sorted[sorted.length - 1]);
+  const logMin = Math.log10(1);
+  const logMax = Math.log10(maxEpoch - minEpoch + 1);
+  const targets: number[] = [];
+  for (let i = 0; i < targetCount; i++) {
+    const logVal = logMin + (i / (targetCount - 1)) * (logMax - logMin);
+    targets.push(Math.pow(10, logVal) + minEpoch - 1);
+  }
+  const selected = new Set<number>();
+  for (const target of targets) {
+    let bestIdx = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < sorted.length; i++) {
+      if (selected.has(i)) continue;
+      const dist = Math.abs(epochKey(sorted[i]) - target);
+      if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+    }
+    if (bestIdx >= 0) selected.add(bestIdx);
+  }
+  selected.add(0);
+  selected.add(sorted.length - 1);
+  return [...selected].sort((a, b) => a - b).map((i) => sorted[i]);
+}
+
+// ── Helpers: epoch formatting ─────────────────────────────────────────────────
+
+const MONTH_ABBR = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+function mjdToCalendarDate(mjd: number): string {
+  const MJD_UNIX_EPOCH = 40587;
+  const MS_PER_DAY = 86_400_000;
+  const date = new Date((mjd - MJD_UNIX_EPOCH) * MS_PER_DAY);
+  return `${date.getUTCFullYear()} ${MONTH_ABBR[date.getUTCMonth()]} ${date.getUTCDate()}`;
+}
+
+function formatEpochLabel(spectrum: SpectrumRecord, format: EpochFormat): string {
+  switch (format) {
+    case 'dpo': return `Day ${Math.round(spectrum.days_since_outburst!)}`;
+    case 'mjd': return Math.round(spectrum.epoch_mjd).toString();
+    case 'calendar': return mjdToCalendarDate(spectrum.epoch_mjd);
+  }
+}
+
+function getEpochValue(spectrum: SpectrumRecord, format: EpochFormat): number {
+  if (format === 'dpo' && spectrum.days_since_outburst !== null) {
+    return spectrum.days_since_outburst;
+  }
+  return spectrum.epoch_mjd;
+}
+
+// ── Presentational sub-components ─────────────────────────────────────────────
+
+function PlotSkeleton() {
+  return (
+    <div
+      className="animate-pulse rounded-md bg-[var(--color-surface-tertiary)] w-full"
+      style={{ height: 480 }}
+      aria-busy="true"
+      aria-label="Loading spectra viewer"
+    />
+  );
+}
+
+function EmptyState() {
+  return (
+    <div
+      className={[
+        'flex flex-col items-center justify-center gap-3 py-24',
+        'rounded-md border border-[var(--color-border-subtle)]',
+        'bg-[var(--color-surface-secondary)]',
+      ].join(' ')}
+      aria-label="No spectra available"
+    >
+      <LineChart size={32} className="text-[var(--color-text-tertiary)]" aria-hidden="true" />
+      <div className="text-center px-4">
+        <p className="text-base font-medium text-[var(--color-text-secondary)]">No spectra available</p>
+        <p className="text-sm text-[var(--color-text-tertiary)] mt-1">
+          No validated spectra have been ingested for this nova yet.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ErrorState({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div
+      className={[
+        'flex flex-col items-center justify-center gap-3 py-24',
+        'rounded-md border border-[var(--color-border-subtle)]',
+        'bg-[var(--color-surface-secondary)]',
+      ].join(' ')}
+      aria-label="Spectra viewer error"
+    >
+      <CircleAlert size={32} className="text-[var(--color-status-error-fg)]" aria-hidden="true" />
+      <p className="text-sm font-medium text-[var(--color-text-primary)]">Failed to render spectra</p>
+      <p className="text-sm text-[var(--color-text-secondary)]">
+        An error occurred while building the waterfall plot.
+      </p>
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          className={[
+            'text-sm font-medium text-[var(--color-text-secondary)]',
+            'hover:text-[var(--color-interactive)] transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]',
+          ].join(' ')}
+        >
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── ToggleGroup ───────────────────────────────────────────────────────────────
+
+interface ToggleOption<T extends string> {
+  value: T;
+  label: string;
+  disabled?: boolean;
+  disabledTooltip?: string;
+}
+
+interface ToggleGroupProps<T extends string> {
+  options: ToggleOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+  ariaLabel: string;
+}
+
+function ToggleGroup<T extends string>({
+  options, value, onChange, ariaLabel,
+}: ToggleGroupProps<T>) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className="inline-flex rounded-md overflow-hidden border border-[var(--color-border-default)]"
+    >
+      {options.map((opt) => {
+        const isActive = opt.value === value;
+        const isDisabled = opt.disabled === true;
+        return (
+          <button
+            key={opt.value}
+            role="radio"
+            aria-checked={isActive}
+            aria-disabled={isDisabled}
+            title={isDisabled ? opt.disabledTooltip : undefined}
+            disabled={isDisabled}
+            onClick={() => onChange(opt.value)}
+            className={[
+              'px-3 py-1.5 text-xs font-medium transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-focus-ring)]',
+              isActive
+                ? 'bg-[var(--color-interactive)] text-[var(--color-text-inverse)]'
+                : isDisabled
+                  ? 'bg-[var(--color-surface-secondary)] text-[var(--color-text-disabled)] cursor-not-allowed'
+                  : 'bg-[var(--color-surface-primary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)]',
+            ].join(' ')}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Feature group toggle buttons ──────────────────────────────────────────────
+//
+// ADR-013: "A row of toggle buttons grouped by nova spectral type / phase:
+// Fe II, He / N, Nebular."
+//
+// These are independent on/off toggles (not a radio group — multiple can be
+// active at once). Each button uses the feature group's color as its active
+// background so the user can associate lines on the plot with their toggle.
+
+interface FeatureTogglesProps {
+  activeGroups: Set<FeatureGroup>;
+  onToggle: (group: FeatureGroup) => void;
+}
+
+function FeatureToggles({ activeGroups, onToggle }: FeatureTogglesProps) {
+  const groups: FeatureGroup[] = ['fe2', 'hen', 'nebular'];
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Lines</span>
+      <div className="inline-flex rounded-md overflow-hidden border border-[var(--color-border-default)]">
+        {groups.map((group) => {
+          const isActive = activeGroups.has(group);
+          return (
+            <button
+              key={group}
+              aria-pressed={isActive}
+              onClick={() => onToggle(group)}
+              className={[
+                'px-3 py-1.5 text-xs font-medium transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-focus-ring)]',
+                isActive
+                  ? 'text-white'
+                  : 'bg-[var(--color-surface-primary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)]',
+              ].join(' ')}
+              style={isActive ? { backgroundColor: FEATURE_GROUP_COLORS[group] } : undefined}
+            >
+              {FEATURE_GROUP_LABELS[group]}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Legend strip ───────────────────────────────────────────────────────────────
+
+interface LegendStripProps {
+  spectra: PreparedSpectrum[];
+  selectedId: string | null;
+  onSelect: (spectrumId: string | null) => void;
+}
+
+function LegendStrip({ spectra, selectedId, onSelect }: LegendStripProps) {
+  return (
+    <div
+      className={[
+        'flex flex-wrap gap-1.5 px-4 py-3',
+        'border-t border-[var(--color-border-subtle)]',
+        'bg-[var(--color-surface-secondary)]',
+      ].join(' ')}
+      role="listbox"
+      aria-label="Spectrum selection"
+    >
+      {spectra.map((ps) => {
+        const isSelected = ps.record.spectrum_id === selectedId;
+        const isDimmed = selectedId !== null && !isSelected;
+        return (
+          <button
+            key={ps.record.spectrum_id}
+            role="option"
+            aria-selected={isSelected}
+            onClick={() => onSelect(isSelected ? null : ps.record.spectrum_id)}
+            className={[
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full',
+              'text-xs font-medium transition-all',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]',
+              isSelected
+                ? 'ring-1 ring-[var(--color-border-strong)] bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]'
+                : isDimmed
+                  ? 'text-[var(--color-text-disabled)] opacity-60 hover:opacity-100'
+                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]',
+            ].join(' ')}
+          >
+            <span
+              className="w-2.5 h-2.5 rounded-full shrink-0"
+              style={{ backgroundColor: ps.color, opacity: isDimmed ? 0.3 : 1 }}
+              aria-hidden="true"
+            />
+            {ps.epochLabel}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
+  const [renderError, setRenderError] = useState(false);
+  const hasDpo = data.outburst_mjd !== null;
+
+  const autoDefaults = useMemo(() => {
+    const sorted = [...data.spectra].sort((a, b) => a.epoch_mjd - b.epoch_mjd);
+    const epochValues = sorted.map((s) =>
+      hasDpo && s.days_since_outburst !== null ? s.days_since_outburst : s.epoch_mjd
+    );
+    return { scale: computeDefaultScale(epochValues) };
+  }, [data, hasDpo]);
+
+  const [epochFormat, setEpochFormat] = useState<EpochFormat>(hasDpo ? 'dpo' : 'mjd');
+  const [temporalScale, setTemporalScale] = useState<TemporalScale>(autoDefaults.scale);
+  const [selectedSpectrumId, setSelectedSpectrumId] = useState<string | null>(null);
+  const [logFluxY, setLogFluxY] = useState(false);
+
+  // ── Feature marker state ──────────────────────────────────────────────────
+  //
+  // A Set of active feature groups. Multiple can be active simultaneously
+  // (they're independent toggles, not radio buttons). We use a Set because
+  // it makes the toggle logic clean: has() / add() / delete().
+  //
+  // Why useState with Set?
+  //   React doesn't detect mutations to objects — you must create a new
+  //   reference to trigger a re-render. So the toggle handler creates a
+  //   new Set each time, which React sees as a changed value.
+
+  const [activeFeatureGroups, setActiveFeatureGroups] = useState<Set<FeatureGroup>>(
+    new Set()
+  );
+
+  const handleFeatureToggle = (group: FeatureGroup) => {
+    setActiveFeatureGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) {
+        next.delete(group);
+      } else {
+        next.add(group);
+      }
+      return next;
+    });
+  };
+
+  const isSingleMode = selectedSpectrumId !== null;
+
+  if (data.spectra.length === 0) {
+    return <EmptyState />;
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const plotData = useMemo(() => {
+    try {
+      return buildPlotData(
+        data, epochFormat, temporalScale,
+        selectedSpectrumId, logFluxY, activeFeatureGroups,
+      );
+    } catch {
+      setRenderError(true);
+      return null;
+    }
+  }, [data, epochFormat, temporalScale, selectedSpectrumId, logFluxY, activeFeatureGroups]);
+
+  if (renderError || plotData === null) {
+    return <ErrorState onRetry={onRetry} />;
+  }
+
+  const { traces, layout, config, preparedSpectra } = plotData;
+
+  return (
+    <div className="rounded-md border border-[var(--color-border-subtle)] overflow-hidden bg-[var(--color-surface-primary)]">
+
+      {/* ── Viewer header ──────────────────────────────────────────────── */}
+      <div
+        className={[
+          'flex flex-wrap items-center gap-4 px-4 py-2.5',
+          'border-b border-[var(--color-border-subtle)]',
+          'bg-[var(--color-surface-secondary)]',
+        ].join(' ')}
+      >
+        {/* Epoch format */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Epoch</span>
+          <ToggleGroup<EpochFormat>
+            ariaLabel="Epoch label format"
+            value={epochFormat}
+            onChange={setEpochFormat}
+            options={[
+              {
+                value: 'dpo', label: 'DPO',
+                disabled: !hasDpo,
+                disabledTooltip: 'Days Post-Outburst unavailable: outburst date not resolved',
+              },
+              { value: 'mjd', label: 'MJD' },
+              { value: 'calendar', label: 'Calendar' },
+            ]}
+          />
+        </div>
+
+        {/* Temporal scale */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Scale</span>
+          <ToggleGroup<TemporalScale>
+            ariaLabel="Temporal scale"
+            value={temporalScale}
+            onChange={setTemporalScale}
+            options={[
+              { value: 'linear', label: 'Linear' },
+              { value: 'log', label: 'Log' },
+            ]}
+          />
+        </div>
+
+        {/* Log Y toggle — single-spectrum mode only */}
+        {isSingleMode && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Y Axis</span>
+            <ToggleGroup<'linear' | 'log'>
+              ariaLabel="Flux Y axis scale"
+              value={logFluxY ? 'log' : 'linear'}
+              onChange={(v) => setLogFluxY(v === 'log')}
+              options={[
+                { value: 'linear', label: 'Linear' },
+                { value: 'log', label: 'Log' },
+              ]}
+            />
+          </div>
+        )}
+
+        {/* ── Feature marker toggles ──────────────────────────────────── */}
+        <FeatureToggles
+          activeGroups={activeFeatureGroups}
+          onToggle={handleFeatureToggle}
+        />
+      </div>
+
+      {/* ── Plot ──────────────────────────────────────────────────────── */}
+      <Plot
+        data={traces}
+        layout={layout}
+        config={config}
+        useResizeHandler
+        style={{ width: '100%', height: 480 }}
+      />
+
+      {/* ── Legend strip ───────────────────────────────────────────────── */}
+      <LegendStrip
+        spectra={preparedSpectra}
+        selectedId={selectedSpectrumId}
+        onSelect={setSelectedSpectrumId}
+      />
+    </div>
+  );
+}
+
+// ── Plot data builder ─────────────────────────────────────────────────────────
+
+function buildPlotData(
+  data: SpectraArtifact,
+  epochFormat: EpochFormat,
+  temporalScale: TemporalScale,
+  selectedSpectrumId: string | null,
+  logFluxY: boolean,
+  activeFeatureGroups: Set<FeatureGroup>,
+) {
+  const { spectra, outburst_mjd } = data;
+  const hasDpo = outburst_mjd !== null;
+  const sorted = [...spectra].sort((a, b) => a.epoch_mjd - b.epoch_mjd);
+
+  const effectiveFormat: EpochFormat =
+    epochFormat === 'dpo' && !hasDpo ? 'mjd' : epochFormat;
+  const epochKey = (s: SpectrumRecord) => getEpochValue(s, effectiveFormat);
+
+  const isDense = sorted.length > 8;
+  const displaySpectra = isDense
+    ? selectRepresentativeSubset(sorted, epochKey, 10)
+    : sorted;
+
+  const isSingleMode = selectedSpectrumId !== null;
+
+  const preparedSpectra: PreparedSpectrum[] = displaySpectra.map((rec, idx) => ({
+    record: rec,
+    color: assignColor(idx, displaySpectra.length, isDense),
+    epochLabel: formatEpochLabel(rec, effectiveFormat),
+    displayIndex: idx,
+  }));
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const traces: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allAnnotations: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const shapes: any[] = [];
+
+  let globalWlMin = Infinity;
+  let globalWlMax = -Infinity;
+
+  // ── Compute wavelength range first (needed for feature marker filtering) ─
+  for (const ps of preparedSpectra) {
+    globalWlMin = Math.min(globalWlMin, ps.record.wavelength_min);
+    globalWlMax = Math.max(globalWlMax, ps.record.wavelength_max);
+  }
+
+  if (isSingleMode) {
+    // ── Single-spectrum mode ──────────────────────────────────────────
+    const selectedPs = preparedSpectra.find(
+      (ps) => ps.record.spectrum_id === selectedSpectrumId
+    );
+
+    if (selectedPs) {
+      const spectrum = selectedPs.record;
+      const customdata = spectrum.wavelengths.map((_, i) => [
+        spectrum.flux_normalized[i].toFixed(3),
+        selectedPs.epochLabel,
+        spectrum.instrument,
+      ]);
+
+      traces.push({
+        x: spectrum.wavelengths,
+        y: spectrum.flux_normalized,
+        type: 'scatter' as const,
+        mode: 'lines' as const,
+        name: selectedPs.epochLabel,
+        line: { color: selectedPs.color, width: 1.5 },
+        hovertemplate:
+          '<b>%{x:.1f} nm</b><br>' +
+          'Flux: %{customdata[0]}<br>' +
+          'Epoch: %{customdata[1]}<br>' +
+          'Instrument: %{customdata[2]}' +
+          '<extra></extra>',
+        customdata,
+        showlegend: false,
+      });
+    }
+
+    const selectedFlux = selectedPs?.record.flux_normalized ?? [0, 1];
+    const fluxMin = Math.min(...selectedFlux);
+    const fluxMax = Math.max(...selectedFlux);
+    const fluxPadding = (fluxMax - fluxMin) * 0.08;
+    const wlPadding = (globalWlMax - globalWlMin) * 0.02;
+
+    // ── Feature markers (single-spectrum mode) ──────────────────────
+    addFeatureMarkers(
+      activeFeatureGroups, shapes, allAnnotations,
+      globalWlMin, globalWlMax,
+    );
+
+    const layout = {
+      xaxis: {
+        title: { text: 'Wavelength (nm)', font: { size: 12, color: 'var(--color-text-secondary)', family: 'DM Sans, sans-serif' } },
+        range: [globalWlMin - wlPadding, globalWlMax + wlPadding],
+        gridcolor: 'var(--color-border-subtle)',
+        zerolinecolor: 'var(--color-border-subtle)',
+        tickfont: { size: 10, color: 'var(--color-text-tertiary)', family: 'DM Mono, monospace' },
+      },
+      yaxis: {
+        title: { text: 'Normalized Flux', font: { size: 12, color: 'var(--color-text-secondary)', family: 'DM Sans, sans-serif' } },
+        showticklabels: true,
+        type: logFluxY ? 'log' as const : 'linear' as const,
+        gridcolor: 'var(--color-border-subtle)',
+        zerolinecolor: 'var(--color-border-subtle)',
+        tickfont: { size: 10, color: 'var(--color-text-tertiary)', family: 'DM Mono, monospace' },
+        range: logFluxY
+          ? [Math.log10(Math.max(fluxMin, 0.001)), Math.log10(fluxMax * 1.1)]
+          : [fluxMin - fluxPadding, fluxMax + fluxPadding],
+      },
+      annotations: allAnnotations,
+      shapes,
+      margin: { l: 60, r: 20, t: 30, b: 50 },
+      plot_bgcolor: 'transparent',
+      paper_bgcolor: 'transparent',
+      hovermode: 'closest' as const,
+      showlegend: false,
+    };
+
+    const config = {
+      displayModeBar: 'hover' as const,
+      responsive: true,
+      modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d', 'toImage'] as const,
+      displaylogo: false,
+    };
+
+    return { traces, layout, config, preparedSpectra };
+  }
+
+  // ── Waterfall mode ──────────────────────────────────────────────────────
+
+  const displayEpochs = displaySpectra.map(epochKey);
+  const minEpoch = Math.min(...displayEpochs);
+  const baselines = displayEpochs.map((e) => {
+    const rel = effectiveFormat === 'dpo' ? e : e - minEpoch + 1;
+    return temporalScale === 'log' ? Math.log10(Math.max(rel, 0.1)) : rel;
+  });
+
+  let minGap = Infinity;
+  const sortedBaselines = [...baselines].sort((a, b) => a - b);
+  for (let i = 1; i < sortedBaselines.length; i++) {
+    const gap = sortedBaselines[i] - sortedBaselines[i - 1];
+    if (gap > 0) minGap = Math.min(minGap, gap);
+  }
+  if (!isFinite(minGap) || minGap === 0) minGap = 1;
+  const amp = minGap * 0.78;
+
+  preparedSpectra.forEach((ps) => {
+    const spectrum = ps.record;
+    const baseline = baselines[ps.displayIndex];
+    const maxFlux = Math.max(...spectrum.flux_normalized);
+    const scale = maxFlux > 0 ? amp / maxFlux : amp;
+    const yValues = spectrum.flux_normalized.map((f) => baseline + f * scale);
+
+    const customdata = spectrum.wavelengths.map((_, i) => [
+      spectrum.flux_normalized[i].toFixed(3),
+      ps.epochLabel,
+      spectrum.instrument,
+    ]);
+
+    traces.push({
+      x: spectrum.wavelengths,
+      y: yValues,
+      type: 'scatter' as const,
+      mode: 'lines' as const,
+      name: ps.epochLabel,
+      line: { color: ps.color, width: 1.2 },
+      hovertemplate:
+        '<b>%{x:.1f} nm</b><br>' +
+        'Flux: %{customdata[0]}<br>' +
+        'Epoch: %{customdata[1]}<br>' +
+        'Instrument: %{customdata[2]}' +
+        '<extra></extra>',
+      customdata,
+      showlegend: false,
+    });
+
+    allAnnotations.push({
+      x: 1.0, y: baseline,
+      text: ps.epochLabel,
+      xanchor: 'left', yanchor: 'middle',
+      showarrow: false,
+      font: { size: 10, color: 'var(--color-text-secondary)', family: 'DM Mono, monospace' },
+      xref: 'paper', yref: 'y',
+    });
+  });
+
+  // ── Feature markers (waterfall mode) ──────────────────────────────────
+  addFeatureMarkers(
+    activeFeatureGroups, shapes, allAnnotations,
+    globalWlMin, globalWlMax,
+  );
+
+  const wlPadding = (globalWlMax - globalWlMin) * 0.02;
+  const rightMargin = effectiveFormat === 'calendar' ? 110 : 80;
+
+  const layout = {
+    xaxis: {
+      title: { text: 'Wavelength (nm)', font: { size: 12, color: 'var(--color-text-secondary)', family: 'DM Sans, sans-serif' } },
+      range: [globalWlMin - wlPadding, globalWlMax + wlPadding],
+      gridcolor: 'var(--color-border-subtle)',
+      zerolinecolor: 'var(--color-border-subtle)',
+      tickfont: { size: 10, color: 'var(--color-text-tertiary)', family: 'DM Mono, monospace' },
+    },
+    yaxis: {
+      showticklabels: false,
+      gridcolor: 'var(--color-border-subtle)',
+      zerolinecolor: 'var(--color-border-subtle)',
+      range: [
+        Math.min(...baselines) - amp * 0.5,
+        Math.max(...baselines) + amp * 1.5,
+      ],
+    },
+    annotations: allAnnotations,
+    shapes,
+    // Extra top margin to make room for feature line labels above the plot
+    margin: { l: 40, r: rightMargin, t: activeFeatureGroups.size > 0 ? 30 : 20, b: 50 },
+    plot_bgcolor: 'transparent',
+    paper_bgcolor: 'transparent',
+    hovermode: 'closest' as const,
+    showlegend: false,
+  };
+
+  const config = {
+    displayModeBar: 'hover' as const,
+    responsive: true,
+    modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d', 'toImage'] as const,
+    displaylogo: false,
+  };
+
+  return { traces, layout, config, preparedSpectra };
+}
+
+// ── Feature marker builder ────────────────────────────────────────────────────
+//
+// ADR-013: "When a group is toggled on, full-height vertical dashed lines are
+// drawn at each line's wavelength, colored by group. Line wavelength labels
+// appear above the plot area."
+//
+// We use Plotly "shapes" for the vertical lines (they support dashed styling
+// and span the full Y range) and "annotations" for the labels above the plot.
+//
+// Lines whose wavelength falls outside the displayed wavelength range are
+// filtered out — no point drawing markers for invisible regions.
+
+function addFeatureMarkers(
+  activeGroups: Set<FeatureGroup>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  shapes: any[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  annotations: any[],
+  wlMin: number,
+  wlMax: number,
+) {
+  if (activeGroups.size === 0) return;
+
+  // Filter to active groups and visible wavelength range
+  const activeLines = SPECTRAL_LINES.filter(
+    (line) =>
+      activeGroups.has(line.group) &&
+      line.wavelength_nm >= wlMin &&
+      line.wavelength_nm <= wlMax
+  );
+
+  // Sort by wavelength to help with label staggering
+  activeLines.sort((a, b) => a.wavelength_nm - b.wavelength_nm);
+
+  // Track label positions to stagger overlapping labels.
+  // If two labels would be within MIN_LABEL_GAP nm of each other, we
+  // alternate their vertical position to avoid overlap.
+  const MIN_LABEL_GAP = 15; // nm
+  let lastLabelWl = -Infinity;
+  let stagger = false;
+
+  for (const line of activeLines) {
+    const color = FEATURE_GROUP_COLORS[line.group];
+
+    // ── Vertical dashed line (Plotly shape) ───────────────────────────
+    //
+    // type: 'line' draws a straight line between (x0,y0) and (x1,y1).
+    // yref: 'paper' means y0=0 is the bottom of the plot and y1=1 is
+    // the top, so the line spans the full height regardless of the
+    // Y axis range. xref: 'x' means x0/x1 are in data coordinates (nm).
+
+    shapes.push({
+      type: 'line',
+      x0: line.wavelength_nm,
+      x1: line.wavelength_nm,
+      y0: 0,
+      y1: 1,
+      xref: 'x',
+      yref: 'paper',
+      line: {
+        color,
+        width: 1,
+        dash: 'dash',
+      },
+      opacity: 0.6,
+    });
+
+    // ── Label above the plot area (annotation) ────────────────────────
+    //
+    // yref: 'paper', y: 1.0 places the label at the top of the plot.
+    // yanchor: 'bottom' ensures the text sits above the top edge.
+    //
+    // Labels for lines that are close together are staggered: one at
+    // y=1.0, the next at y=1.06, to prevent overlap.
+
+    if (line.wavelength_nm - lastLabelWl < MIN_LABEL_GAP) {
+      stagger = !stagger;
+    } else {
+      stagger = false;
+    }
+    lastLabelWl = line.wavelength_nm;
+
+    annotations.push({
+      x: line.wavelength_nm,
+      y: stagger ? 1.06 : 1.0,
+      text: line.label,
+      xref: 'x',
+      yref: 'paper',
+      showarrow: false,
+      font: {
+        size: 9,
+        color,
+        family: 'DM Mono, monospace',
+      },
+      xanchor: 'center',
+      yanchor: 'bottom',
+      // textangle rotates the label slightly for dense regions
+      textangle: activeLines.length > 12 ? -45 : 0,
+    });
+  }
+}

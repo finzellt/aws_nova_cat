@@ -1,36 +1,45 @@
 /**
  * VisualizationRegion — left column of the nova page.
  *
- * In the MVP, this contains placeholder boxes for:
- *   - Spectra viewer (Chunk 5)
- *   - Light curve panel (Chunk 6)
+ * Contains:
+ *   - Spectra viewer (renders when spectra.json is loaded and has data)
+ *   - Light curve panel placeholder (Chunk 6)
  *
- * Each placeholder follows the ADR-012 empty-state pattern:
- * a dashed-border box with a centred icon and descriptive text.
- * The dashed border signals "this slot is intentionally empty" rather
- * than a data error (which would use a solid border + error colour).
+ * State handling follows a priority chain:
+ *   1. Loading → skeleton placeholder
+ *   2. Error   → error state (scoped; does not affect other sections)
+ *   3. Empty   → ADR-012 empty state (LineChart icon + message)
+ *   4. Data    → SpectraViewer component
  */
 
 import type { ReactNode } from 'react';
-import { LineChart, TrendingDown } from 'lucide-react';
+import { TrendingDown, CircleAlert } from 'lucide-react';
+import type { SpectraArtifact } from '@/types/nova';
+import SpectraViewer from './SpectraViewer';
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface VisualizationRegionProps {
-  /** True while nova.json is still loading — determines subtitle text. */
-  loading: boolean;
-  /** Whether the nova has validated spectra (from nova.spectra_count > 0). */
-  hasSpectra: boolean;
+  /** The full spectra artifact, or null while loading / on error. */
+  spectraData: SpectraArtifact | null;
+  /** True while spectra.json is still being fetched. */
+  spectraLoading: boolean;
+  /** True if the spectra.json fetch failed. */
+  spectraError: boolean;
+  /** Called when the user clicks "Try again" after a spectra fetch error. */
+  onSpectraRetry?: () => void;
 }
 
-// ── PlaceholderBox ─────────────────────────────────────────────────────────────
+// ── PlaceholderBox ────────────────────────────────────────────────────────────
+//
+// Reusable placeholder for visualization slots that aren't implemented yet.
+// Uses a dashed border to signal "intentionally empty" (vs. solid + error color
+// for a data error). Per ADR-012 empty state pattern.
 
 interface PlaceholderBoxProps {
-  /** Lucide icon element (or any ReactNode) centred in the box. */
   icon: ReactNode;
-  /** Short label — names the component that will replace this placeholder. */
   label: string;
-  /** Secondary line — current status or "coming in Chunk N" notice. */
   sublabel: string;
-  /** Controls height of the box via Tailwind class. Default: py-20. */
   heightClass?: string;
 }
 
@@ -63,37 +72,74 @@ function PlaceholderBox({
   );
 }
 
+// ── Spectra loading skeleton ──────────────────────────────────────────────────
+
+function SpectraLoadingSkeleton() {
+  return (
+    <div
+      className="animate-pulse rounded-md bg-[var(--color-surface-tertiary)] w-full"
+      style={{ height: 480 }}
+      aria-busy="true"
+      aria-label="Loading spectra viewer"
+    />
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function VisualizationRegion({
-  loading,
-  hasSpectra,
+  spectraData,
+  spectraLoading,
+  spectraError,
+  onSpectraRetry,
 }: VisualizationRegionProps) {
-  // Determine the spectra placeholder subtitle based on data state.
-  let spectraSublabel: string;
-  if (loading) {
-    spectraSublabel = 'Loading…';
-  } else if (!hasSpectra) {
-    spectraSublabel = 'No validated spectra available for this nova.';
-  } else {
-    spectraSublabel = 'Spectra viewer coming in Chunk 5.';
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      {/*
-       * Spectra viewer slot.
-       * Taller than the light curve slot because it is the primary
-       * visualisation element (ADR-011).
-       */}
-      <PlaceholderBox
-        icon={<LineChart size={32} aria-hidden="true" />}
-        label="Spectra viewer"
-        sublabel={spectraSublabel}
-        heightClass="py-24"
-      />
+      {/* ── Spectra viewer ─────────────────────────────────────────── */}
+      {spectraLoading ? (
+        <SpectraLoadingSkeleton />
+      ) : spectraData !== null ? (
+        // SpectraViewer handles its own empty state (no spectra in array)
+        // and its own render error state internally.
+        <SpectraViewer data={spectraData} onRetry={onSpectraRetry} />
+      ) : spectraError ? (
+        // Fetch-level error: spectra.json could not be loaded.
+        <div
+          className={[
+            'flex flex-col items-center justify-center gap-3 py-24',
+            'rounded-md border border-[var(--color-border-subtle)]',
+            'bg-[var(--color-surface-secondary)]',
+          ].join(' ')}
+          aria-label="Spectra viewer error"
+        >
+          <CircleAlert
+            size={32}
+            className="text-[var(--color-status-error-fg)]"
+            aria-hidden="true"
+          />
+          <p className="text-sm font-medium text-[var(--color-text-primary)]">
+            Could not load spectra
+          </p>
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            The spectra data file could not be retrieved.
+          </p>
+          {onSpectraRetry && (
+            <button
+              onClick={onSpectraRetry}
+              className={[
+                'text-sm font-medium',
+                'text-[var(--color-text-secondary)]',
+                'hover:text-[var(--color-interactive)]',
+                'transition-colors',
+              ].join(' ')}
+            >
+              Try again
+            </button>
+          )}
+        </div>
+      ) : null}
 
-      {/* Light curve panel slot */}
+      {/* ── Light curve panel placeholder ──────────────────────────── */}
       <PlaceholderBox
         icon={<TrendingDown size={32} aria-hidden="true" />}
         label="Light curve panel"
