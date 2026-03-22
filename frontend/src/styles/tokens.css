@@ -1,0 +1,88 @@
+:root {
+  /* ── Primitive tokens (never used directly in components) ── */
+
+  /* Neutrals — warm stone */
+  --primitive-stone-50:  #F8F7F4;
+  --primitive-stone-100: #F0EEE9;
+  --primitive-stone-200: #E2DED6;
+  --primitive-stone-300: #C9C3B8;
+  --primitive-stone-400: #A09890;
+  --primitive-stone-500: #78726A;
+  --primitive-stone-600: #5A554F;
+  --primitive-stone-700: #3D3A35;
+  --primitive-stone-800: #2A2722;
+  --primitive-stone-900: #1A1816;
+
+  /* Teal — primary accent */
+  --primitive-teal-100: #D4EEEC;
+  --primitive-teal-200: #A8DDD9;
+  --primitive-teal-400: #4FA8A5;
+  --primitive-teal-500: #2A7D7B;
+  --primitive-teal-600: #1F5E5C;
+  --primitive-teal-700: #164342;
+
+  /* Status */
+  --primitive-amber-100: #FEF3C7;
+  --primitive-amber-500: #D97706;
+  --primitive-red-100:   #FEE2E2;
+  --primitive-red-500:   #DC2626;
+  --primitive-green-100: #DCFCE7;
+  --primitive-green-500: #16A34A;
+
+  /* ── Semantic tokens (these are what components use) ── */
+
+  /* Surfaces */
+  --color-surface-primary:   var(--primitive-stone-50);
+  --color-surface-secondary: var(--primitive-stone-100);
+  --color-surface-tertiary:  var(--primitive-stone-200);
+
+  /* Borders */
+  --color-border-subtle:  var(--primitive-stone-200);
+  --color-border-default: var(--primitive-stone-300);
+  --color-border-strong:  var(--primitive-stone-400);
+
+  /* Text */
+  --color-text-primary:   var(--primitive-stone-900);
+  --color-text-secondary: var(--primitive-stone-600);
+  --color-text-tertiary:  var(--primitive-stone-400);
+  --color-text-disabled:  var(--primitive-stone-300);
+  --color-text-inverse:   var(--primitive-stone-50);
+
+  /* Interactive */
+  --color-interactive:         var(--primitive-teal-500);
+  --color-interactive-hover:   var(--primitive-teal-600);
+  --color-interactive-active:  var(--primitive-teal-700);
+  --color-interactive-subtle:  var(--primitive-teal-100);
+  --color-interactive-muted:   var(--primitive-teal-200);
+  --color-focus-ring:          var(--primitive-teal-400);
+
+  /* Status */
+  --color-status-warning-bg:  var(--primitive-amber-100);
+  --color-status-warning-fg:  var(--primitive-amber-500);
+  --color-status-error-bg:    var(--primitive-red-100);
+  --color-status-error-fg:    var(--primitive-red-500);
+  --color-status-success-bg:  var(--primitive-green-100);
+  --color-status-success-fg:  var(--primitive-green-500);
+
+  /* ── Typography ── */
+  --font-sans:  'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono:  'DM Mono', ui-monospace, monospace;
+
+  --text-xs:   0.75rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.25rem;
+  --text-2xl:  1.5rem;
+  --text-3xl:  1.875rem;
+  --text-4xl:  2.25rem;
+
+  --font-normal:   400;
+  --font-medium:   500;
+  --font-semibold: 600;
+
+  --leading-tight:   1.25;
+  --leading-snug:    1.375;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.625;
+}
