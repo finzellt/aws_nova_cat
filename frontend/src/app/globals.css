@@ -1,0 +1,48 @@
+@import '../styles/tokens.css';
+
+@import "tailwindcss";
+
+@theme inline {
+  /* ── Surface colors ── */
+  --color-surface-primary:   var(--color-surface-primary);
+  --color-surface-secondary: var(--color-surface-secondary);
+  --color-surface-tertiary:  var(--color-surface-tertiary);
+
+  /* ── Border colors ── */
+  --color-border-subtle:  var(--color-border-subtle);
+  --color-border-default: var(--color-border-default);
+  --color-border-strong:  var(--color-border-strong);
+
+  /* ── Text colors ── */
+  --color-text-primary:   var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-tertiary:  var(--color-text-tertiary);
+  --color-text-disabled:  var(--color-text-disabled);
+  --color-text-inverse:   var(--color-text-inverse);
+
+  /* ── Interactive colors ── */
+  --color-interactive:         var(--color-interactive);
+  --color-interactive-hover:   var(--color-interactive-hover);
+  --color-interactive-active:  var(--color-interactive-active);
+  --color-interactive-subtle:  var(--color-interactive-subtle);
+  --color-interactive-muted:   var(--color-interactive-muted);
+  --color-focus-ring:          var(--color-focus-ring);
+
+  /* ── Status colors ── */
+  --color-status-warning-bg: var(--color-status-warning-bg);
+  --color-status-warning-fg: var(--color-status-warning-fg);
+  --color-status-error-bg:   var(--color-status-error-bg);
+  --color-status-error-fg:   var(--color-status-error-fg);
+  --color-status-success-bg: var(--color-status-success-bg);
+  --color-status-success-fg: var(--color-status-success-fg);
+
+  /* ── Typography ── */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background-color: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
