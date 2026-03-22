@@ -4,12 +4,14 @@
 #
 # Exclusions applied:
 #   top-level dirs : ['lambdas']
-#   exact name     : ['.git', '.github', '.venv', 'cdk.out']
+#   exact name     : ['.git', '.github', '.venv', 'cdk.out', 'node_modules']
 #   substring match: ['cache', 'compressed', 'diagrams', 'engineering']
 #   exact filenames : ['.DS_Store']
 #
 
 aws_nova_cat/
+├── .claude/
+│   └── worktrees/
 ├── .vscode/
 │   ├── extensions.json
 │   └── settings.json
@@ -40,16 +42,28 @@ aws_nova_cat/
 │   │   ├── ADR-013-visualization-design-spectra_and_photometry.md
 │   │   ├── ADR-014-artifact-schemas.md
 │   │   ├── ADR-015-photometry-ingestion-and-column-mapping.md
+│   │   ├── ADR-016-band-filter-resolution.md
+│   │   ├── ADR-017-band-registry-design.md
+│   │   ├── ADR-020-photometry-storage-format.md
+│   │   ├── ADR-021-layer-0-pre-ingestion-normalization.md
 │   │   └── README.md
 │   ├── architecture/
 │   │   ├── catalog-ontology.md
 │   │   ├── current-architecture.md
 │   │   ├── frontend-artifact-architecture.md
 │   │   └── frontend-artifact-architecture.pdf
+│   ├── design/
+│   │   ├── DESIGN-001-photometry-ingestion-redesign.md
+│   │   └── DESIGN-002-data-provenance-and-derived-quantities.md
 │   ├── execution/
 │   │   ├── execution-governance.md
 │   │   └── observability-plan.md
+│   ├── research/
+│   │   ├── filter_analysis/
+│   │   ├── astro_software_report.tex
+│   │   └── nova-cat-exisiting-software-report.md
 │   ├── specs/
+│   │   ├── band_grouping_rules.md
 │   │   ├── photometry_table_model.md
 │   │   ├── spectra-fits-profiles.md
 │   │   └── williams_line_list.csv
@@ -67,6 +81,52 @@ aws_nova_cat/
 │       ├── initialize-nova.md
 │       ├── name-check-and-reconcile.md
 │       └── refresh-references.md
+├── frontend/
+│   ├── .next/
+│   │   ├── build/
+│   │   ├── dev/
+│   │   ├── diagnostics/
+│   │   ├── server/
+│   │   ├── static/
+│   │   ├── types/
+│   │   ├── app-path-routes-manifest.json
+│   │   ├── build-manifest.json
+│   │   ├── BUILD_ID
+│   │   ├── export-marker.json
+│   │   ├── fallback-build-manifest.json
+│   │   ├── images-manifest.json
+│   │   ├── next-minimal-server.js.nft.json
+│   │   ├── next-server.js.nft.json
+│   │   ├── package.json
+│   │   ├── prerender-manifest.json
+│   │   ├── required-server-files.js
+│   │   ├── required-server-files.json
+│   │   ├── routes-manifest.json
+│   │   ├── trace
+│   │   ├── trace-build
+│   │   └── turbopack
+│   ├── public/
+│   │   ├── data/
+│   │   ├── file.svg
+│   │   ├── globe.svg
+│   │   ├── next.svg
+│   │   ├── vercel.svg
+│   │   └── window.svg
+│   ├── src/
+│   │   ├── app/
+│   │   ├── components/
+│   │   └── styles/
+│   ├── .gitignore
+│   ├── AGENTS.md
+│   ├── CLAUDE.md
+│   ├── eslint.config.mjs
+│   ├── next-env.d.ts
+│   ├── next.config.ts
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.mjs
+│   ├── README.md
+│   └── tsconfig.json
 ├── infra/
 │   ├── nova_cat/
 │   │   ├── __init__.py
@@ -130,6 +190,7 @@ aws_nova_cat/
 │   │   ├── handler.py
 │   │   └── requirements.txt
 │   ├── photometry_ingestor/
+│   │   ├── adapters/
 │   │   ├── handler.py
 │   │   └── requirements.txt
 │   ├── quarantine_handler/
@@ -192,9 +253,25 @@ aws_nova_cat/
 │   │   ├── tools/
 │   │   ├── README.md
 │   │   └── requirements.txt
-│   └── repo_tree_diagram/
-│       ├── repo_tree.py
-│       └── repo_tree_structure.txt
+│   ├── repo_tree_diagram/
+│   │   ├── repo_tree.py
+│   │   └── repo_tree_structure.txt
+│   ├── scripts/
+│   │   └── run_adapter.py
+│   └── svo-filter-analysis/
+│       ├── analysis_output/
+│       ├── checkpoints/
+│       ├── custom_filters/
+│       ├── amateur_comparison.py
+│       ├── digitize_curve.py
+│       ├── README.md
+│       ├── svo_analysis.py
+│       ├── svo_band_diagnostic.py
+│       ├── svo_diagnostic.py
+│       ├── svo_fps.db
+│       ├── svo_harvest.py
+│       ├── svo_query.py
+│       └── transform_OD_curves.py
 ├── .gitignore
 ├── .pre-commit-config.yaml
 ├── __init__.py
