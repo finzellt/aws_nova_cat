@@ -158,11 +158,13 @@ export interface CatalogTableProps {
    * The caller is responsible for slicing `novae` to the desired row count.
    */
   preview?: boolean;
+  autoFocusSearch?: boolean;
 }
 
 export function CatalogTable({
   novae,
   preview = false,
+  autoFocusSearch = false,
 }: CatalogTableProps): React.ReactElement {
   const [globalFilter, setGlobalFilter] = useState('');
   const [sorting, setSorting] = useState<SortingState>([
@@ -367,6 +369,7 @@ export function CatalogTable({
             />
             <input
               type="search"
+              autoFocus={autoFocusSearch}
               value={globalFilter}
               onChange={handleSearchChange}
               placeholder="Search by name or alias…"
