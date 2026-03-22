@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "generated_at": "2026-03-22T00:00:00Z",
   "stats": {
-    "nova_count": 5,
-    "spectra_count": 87,
+    "nova_count": 6,
+    "spectra_count": 91,
     "photometry_count": 3420
   },
   "novae": [
@@ -58,13 +58,25 @@
     {
       "nova_id": "e5f6a7b8-c9d0-1234-ef56-ab78cd901234",
       "primary_name": "V838 Her",
-      "aliases": ["Nova Her 1991", "GK Per (Her 1991)"],
+      "aliases": ["Nova Her 1991"],
       "ra": "18:46:31.58",
       "dec": "+12:35:41.0",
       "discovery_year": 1991,
       "spectra_count": 5,
       "photometry_count": 120,
       "references_count": 3,
+      "has_sparkline": false
+    },
+    {
+      "nova_id": "3f2a1b4c-8d5e-4f6a-9b2c-1d7e3a8f5c2b",
+      "primary_name": "GK Per",
+      "aliases": ["Nova Per 1901", "V650 Per"],
+      "ra": "03:31:11.82",
+      "dec": "+43:54:16.8",
+      "discovery_year": 1901,
+      "spectra_count": 4,
+      "photometry_count": 0,
+      "references_count": 4,
       "has_sparkline": false
     }
   ]
