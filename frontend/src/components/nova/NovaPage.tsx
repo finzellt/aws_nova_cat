@@ -188,8 +188,9 @@ export default function NovaPage({ identifier }: NovaPageProps) {
 
         {/* ── Left: visualization region ──────────────────────────── */}
         <VisualizationRegion
-          loading={novaState.status === 'loading'}
-          hasSpectra={nova !== null && nova.spectra_count > 0}
+          spectraData={spectraState.status === 'success' ? spectraState.data : null}
+          spectraLoading={spectraState.status === 'loading'}
+          spectraError={spectraState.status === 'error'}
         />
 
         {/* ── Right: metadata region ──────────────────────────────── */}
