@@ -7,26 +7,40 @@ on:
     branches: ["**"]
 
 jobs:
-  test-lint-synth:
+  backend:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for backend changes
+        id: changes
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -qvE '^frontend/'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Python
+        if: steps.changes.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install Node (for CDK CLI)
+        if: steps.changes.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Install CDK CLI
+        if: steps.changes.outputs.run == 'true'
         run: npm i -g aws-cdk@2
 
       - name: Install Python deps
+        if: steps.changes.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install \
@@ -40,22 +54,60 @@ jobs:
             -r tools/novacat-tools/requirements.txt
 
       - name: Lint (ruff)
+        if: steps.changes.outputs.run == 'true'
         run: python -m ruff check .
 
       - name: Format check (ruff)
+        if: steps.changes.outputs.run == 'true'
         run: python -m ruff format --check .
 
       - name: Type check (mypy)
+        if: steps.changes.outputs.run == 'true'
         run: python -m mypy .
 
       - name: CDK pre-synth lint
+        if: steps.changes.outputs.run == 'true'
         run: python infra/lint_stack.py
 
       - name: Tests (pytest)
+        if: steps.changes.outputs.run == 'true'
         run: pytest --ignore=tests/smoke -q
         env:
           PYTHONPATH: .
 
       - name: CDK synth
+        if: steps.changes.outputs.run == 'true'
         working-directory: infra
         run: cdk synth --no-staging --context account=000000000000
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for frontend changes
+        id: changes
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -q '^frontend/'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node
+        if: steps.changes.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        if: steps.changes.outputs.run == 'true'
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        if: steps.changes.outputs.run == 'true'
+        working-directory: frontend
+        run: npm run build
