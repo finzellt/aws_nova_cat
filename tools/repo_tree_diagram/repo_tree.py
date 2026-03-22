@@ -16,7 +16,7 @@ import sys
 TOP_LEVEL_IGNORE = {"lambdas"}
 
 # Ignored if this exact name appears ANYWHERE in the path segments
-EXACT_NAME_IGNORE = {"cdk.out", ".git", ".venv", ".github"}
+EXACT_NAME_IGNORE = {"cdk.out", ".git", ".venv", ".github", "node_modules"}
 
 # Ignored if ANY path segment contains one of these substrings
 SUBSTRING_IGNORE = {"cache", "compressed", "engineering", "diagrams"}
