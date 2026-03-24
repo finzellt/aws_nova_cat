@@ -1,0 +1,182 @@
+{
+  "_comment": "Detection registry for votable_census.py. Governs UCD pattern matching, description keyword fallbacks, AAVSO signal detection, and wide-format band suffix stripping. Intended to be supplemented with additional synonyms by the operator. Keys under ucd_patterns are prefix-matched (case-insensitive) against field UCDs.",
+  "_registry_version": "0.1",
+  "ucd_patterns": {
+    "data_type": {
+      "PHOT_MAG": "photometry",
+      "PHOT_FLUX_VALUE": "photometry",
+      "PHOT_FLUX_RADIO": "photometry",
+      "PHOT_IR": "photometry",
+      "PHOT_FLUX_RATIO": "color",
+      "SPECT_FLUX": "spectra",
+      "SPECT_WAVELENGTH": "spectra"
+    },
+    "wavelength_regime": {
+      "em.opt": "optical",
+      "em.IR.NIR": "nir",
+      "em.IR.MIR": "mir",
+      "em.UV": "uv",
+      "em.radio": "radio",
+      "em.X-ray": "xray",
+      "em.gamma": "gamma",
+      "em.mm": "sub_millimeter",
+      "PHOT_JHN": "optical",
+      "PHOT_COUS": "optical",
+      "PHOT_GUNN": "optical",
+      "PHOT_FLUX_RADIO": "radio",
+      "PHOT_IR": "mir"
+    },
+    "column_roles": {
+      "INST_FILTER_CODE": "filter_name",
+      "OBS_BAND": "filter_name",
+      "TEL_ID": "telescope",
+      "INST_ID": "instrument",
+      "TIME_DATE": "time",
+      "TIME_MJD": "time",
+      "PHOT_MAG_UNDEF": "magnitude",
+      "ID_HUMAN": "observer"
+    }
+  },
+  "description_keywords": {
+    "data_type": {
+      "photometry": [
+        "photometric",
+        "light curve",
+        "photometry",
+        "magnitude"
+      ],
+      "spectra": [
+        "spectroscopic",
+        "spectral",
+        "spectrum",
+        "spectra",
+        "fluxes"
+      ],
+      "color": [
+        "color",
+        "colour"
+      ],
+      "metadata": [
+        "journal of observations",
+        "log of",
+        "summary",
+        "catalogue",
+        "catalog"
+      ]
+    },
+    "wavelength_regime": {
+      "optical": [
+        "optical",
+        "BVRI",
+        "BVR"
+      ],
+      "nir": [
+        "NIR",
+        "near-infrared",
+        "JHK",
+        "infrared",
+        "ANDICAM"
+      ],
+      "mir": [
+        "Spitzer",
+        "IRAC",
+        "mid-infrared"
+      ],
+      "uv": [
+        "UV",
+        "ultraviolet",
+        "Swift",
+        "UVOT"
+      ],
+      "radio": [
+        "VLA",
+        "radio",
+        "GHz",
+        "MeerKAT"
+      ],
+      "xray": [
+        "X-ray",
+        "Chandra",
+        "XMM"
+      ],
+      "gamma": [
+        "gamma",
+        "Fermi",
+        "LAT"
+      ],
+      "sub_millimeter": [
+        "submillimeter",
+        "sub-mm",
+        "ALMA"
+      ]
+    }
+  },
+  "aavso_signals": {
+    "column_names": [
+      "Obs",
+      "Observer",
+      "ObsCode"
+    ],
+    "observer_code_pattern": "^[A-Z]{2,6}$",
+    "known_strings": [
+      "AAVSO",
+      "aavso"
+    ]
+  },
+  "wide_format_suffixes": [
+    "mag",
+    "_mag",
+    "Johnson",
+    "_Johnson",
+    "Cousins",
+    "_Cousins"
+  ],
+  "wide_format_error_prefixes": [
+    "e_",
+    "E_",
+    "err_",
+    "Err_",
+    "sigma_",
+    "Sigma_"
+  ],
+  "column_name_patterns": {
+    "wavelength_regime": [
+      {
+        "pattern": "\\d+(?:\\.\\d+)?\\s?GHz\\b",
+        "regime": "radio",
+        "role": "magnitude",
+        "comment": "e.g. F27.5GHz, F4.5GHz"
+      },
+      {
+        "pattern": "\\d+(?:\\.\\d+)?\\s?MHz\\b",
+        "regime": "radio",
+        "role": "magnitude",
+        "comment": "e.g. F408MHz"
+      },
+      {
+        "pattern": "\\d+(?:\\.\\d+)?\\s?[Kk]e[Vv]\\b",
+        "regime": "xray",
+        "role": "magnitude",
+        "comment": "e.g. F0.5KeV, F2.4keV"
+      },
+      {
+        "pattern": "\\d+(?:\\.\\d+)?\\s?um\\b",
+        "regime": "mir",
+        "role": "magnitude",
+        "comment": "e.g. 3.6um, 4.5um"
+      },
+      {
+        "pattern": "^[BVRI]mag$",
+        "regime": "optical",
+        "role": "magnitude",
+        "comment": "e.g. Bmag, Vmag, Rmag, Imag"
+      },
+      {
+        "pattern": "^[JHK]mag$",
+        "regime": "nir",
+        "role": "magnitude",
+        "comment": "e.g. Jmag, Hmag, Kmag"
+      }
+    ]
+  }
+}
