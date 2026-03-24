@@ -1,0 +1,2610 @@
+{
+  "tables": [
+    {
+      "source_file": "J_ApJ_835_274__0.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/835/274/table3",
+      "description": "Reddening-corrected fluxes for April and early May observations",
+      "table_format": null,
+      "classification": {
+        "data_type": "spectra",
+        "wavelength_regime": null,
+        "instrument_provenance_status": null,
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "SPECT_WAVELENGTH_MISC"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": null
+        }
+      },
+      "filters": []
+    },
+    {
+      "source_file": "J_ApJ_835_274__1.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/835/274/table4",
+      "description": "Reddening-corrected fluxes for late May to mid June 2012",
+      "table_format": null,
+      "classification": {
+        "data_type": "spectra",
+        "wavelength_regime": "gamma",
+        "instrument_provenance_status": null,
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "SPECT_WAVELENGTH_MISC"
+          },
+          "wavelength_regime": {
+            "description_keyword": "LAT"
+          },
+          "instrument_provenance_status": null
+        }
+      },
+      "filters": []
+    },
+    {
+      "source_file": "J_ApJ_835_274__2.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/835/274/table5",
+      "description": "Reddening-corrected fluxes for late June 2012 and May 2015",
+      "table_format": null,
+      "classification": {
+        "data_type": "spectra",
+        "wavelength_regime": "gamma",
+        "instrument_provenance_status": null,
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "SPECT_WAVELENGTH_MISC"
+          },
+          "wavelength_regime": {
+            "description_keyword": "LAT"
+          },
+          "instrument_provenance_status": null
+        }
+      },
+      "filters": []
+    },
+    {
+      "source_file": "J_ApJ_852_108__0.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/852/108/table1",
+      "description": "Table of photometric data",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Tel"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "I",
+          "telescope": "MJUO-Ibroad",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-Ibroad"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "V",
+          "telescope": "MJUO-V",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-V"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "B",
+          "telescope": "MJUO-B",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-B"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "R",
+          "telescope": null,
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": ""
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "J",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "K",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "H",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "UVM2",
+          "telescope": null,
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": ""
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_852_108__0.vot.xml",
+      "source_format": "xml",
+      "table_name": "J_ApJ_852_108__0.vot",
+      "description": "",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Tel"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "I",
+          "telescope": "MJUO-Ibroad",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-Ibroad"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "V",
+          "telescope": "MJUO-V",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-V"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "B",
+          "telescope": "MJUO-B",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-B"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "R",
+          "telescope": null,
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": ""
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "J",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "K",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "H",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "UVM2",
+          "telescope": null,
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": ""
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_852_108__0_trimmed.vot",
+      "source_format": "vot",
+      "table_name": "J_ApJ_852_108__0_trimmed",
+      "description": "",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Tel"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "B",
+          "telescope": "MJUO-B",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-B"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "H",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "I",
+          "telescope": "MJUO-Ibroad",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-Ibroad"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "J",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "K",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "R",
+          "telescope": null,
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": ""
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "UVM2",
+          "telescope": null,
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": ""
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "V",
+          "telescope": "MJUO-V",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-V"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_852_108__0_trimmed.vot.xml",
+      "source_format": "xml",
+      "table_name": "J_ApJ_852_108__0_trimmed.vot",
+      "description": "",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Tel"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "B",
+          "telescope": "MJUO-B",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-B"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "H",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "I",
+          "telescope": "MJUO-Ibroad",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-Ibroad"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "J",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "K",
+          "telescope": "SMARTS",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "SMARTS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "R",
+          "telescope": null,
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": ""
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "UVM2",
+          "telescope": null,
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": ""
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "V",
+          "telescope": "MJUO-V",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": {
+              "column_value": "MJUO-V"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_852_108__2.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/852/108/table3",
+      "description": "Optical spectroscopic observations",
+      "table_format": null,
+      "classification": {
+        "data_type": "spectra",
+        "wavelength_regime": "optical",
+        "instrument_provenance_status": null,
+        "detection_provenance": {
+          "data_type": {
+            "description_keyword": "spectroscopic"
+          },
+          "wavelength_regime": {
+            "description_keyword": "optical"
+          },
+          "instrument_provenance_status": null
+        }
+      },
+      "filters": []
+    },
+    {
+      "source_file": "J_ApJ_907_70__0.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/907/70/figure2",
+      "description": "Combined table from original tables",
+      "table_format": null,
+      "classification": {
+        "data_type": "spectra",
+        "wavelength_regime": null,
+        "instrument_provenance_status": null,
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "SPECT_WAVELENGTH_MISC"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": null
+        }
+      },
+      "filters": []
+    },
+    {
+      "source_file": "J_ApJ_916_44__0.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/916/44/table2",
+      "description": "Journal of observations of V5669 Sgr by Subaru/HDS",
+      "table_format": null,
+      "classification": {
+        "data_type": "metadata",
+        "wavelength_regime": null,
+        "instrument_provenance_status": null,
+        "detection_provenance": {
+          "data_type": {
+            "description_keyword": "journal of observations"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": null
+        }
+      },
+      "filters": []
+    },
+    {
+      "source_file": "J_ApJ_918_63__1.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/918/63/fig347",
+      "description": "Forced PSF photometry light curves of the 5 fast transients (from Figures 3, 4 and 7)",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Inst"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "g",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "r",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "i",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "J",
+          "telescope": null,
+          "instrument": "WIRC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "WIRC"
+            },
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_918_63__1.vot.xml",
+      "source_format": "xml",
+      "table_name": "J_ApJ_918_63__1.vot",
+      "description": "",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Inst"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "g",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "r",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "i",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "J",
+          "telescope": null,
+          "instrument": "WIRC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "WIRC"
+            },
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_918_63__1_trimmed.vot",
+      "source_format": "vot",
+      "table_name": "J_ApJ_918_63__1_trimmed",
+      "description": "",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Inst"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "J",
+          "telescope": null,
+          "instrument": "WIRC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "WIRC"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "g",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "i",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "r",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_918_63__1_trimmed.vot.xml",
+      "source_format": "xml",
+      "table_name": "J_ApJ_918_63__1_trimmed.vot",
+      "description": "",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Inst"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "J",
+          "telescope": null,
+          "instrument": "WIRC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "WIRC"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "g",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "i",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "r",
+          "telescope": null,
+          "instrument": "ZTF",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "INST_FILTER_CODE"
+            },
+            "telescope": null,
+            "instrument": {
+              "column_value": "ZTF"
+            },
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_920_127__0.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/920/127/table1",
+      "description": "Photometry from follow-up observations",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Tel"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "Open",
+          "telescope": "DLT40",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "DLT40"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "rp",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "up",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "gp",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "ip",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "i",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "r",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "g",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "u",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "V",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "U",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "B",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvw1",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvm2",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvw2",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "[4.5]",
+          "telescope": "Spitzer",
+          "instrument": "IRAC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Spitzer/IRAC"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "[3.6]",
+          "telescope": "Spitzer",
+          "instrument": "IRAC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Spitzer/IRAC"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "z_s",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "F555W",
+          "telescope": "HST_WFC3",
+          "instrument": "UVIS",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "HST_WFC3/UVIS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_920_127__0.vot.xml",
+      "source_format": "xml",
+      "table_name": "J_ApJ_920_127__0.vot",
+      "description": "",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Tel"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "Open",
+          "telescope": "DLT40",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "DLT40"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "rp",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "up",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "gp",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "ip",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "i",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "r",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "g",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "u",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "V",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "U",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "B",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvw1",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvm2",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvw2",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "[4.5]",
+          "telescope": "Spitzer",
+          "instrument": "IRAC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Spitzer/IRAC"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "[3.6]",
+          "telescope": "Spitzer",
+          "instrument": "IRAC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Spitzer/IRAC"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "z_s",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "F555W",
+          "telescope": "HST_WFC3",
+          "instrument": "UVIS",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "HST_WFC3/UVIS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_920_127__0_trimmed.vot",
+      "source_format": "vot",
+      "table_name": "J_ApJ_920_127__0_trimmed",
+      "description": "",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Tel"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "B",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "F555W",
+          "telescope": "HST_WFC3",
+          "instrument": "UVIS",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "HST_WFC3/UVIS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "Open",
+          "telescope": "DLT40",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "DLT40"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "U",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "V",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "[3.6]",
+          "telescope": "Spitzer",
+          "instrument": "IRAC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Spitzer/IRAC"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "[4.5]",
+          "telescope": "Spitzer",
+          "instrument": "IRAC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Spitzer/IRAC"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "g",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "gp",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "i",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "ip",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "r",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "rp",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "u",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "up",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvm2",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvw1",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvw2",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "z_s",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_920_127__0_trimmed.vot.xml",
+      "source_format": "xml",
+      "table_name": "J_ApJ_920_127__0_trimmed.vot",
+      "description": "",
+      "table_format": "long",
+      "classification": {
+        "data_type": "photometry",
+        "wavelength_regime": null,
+        "instrument_provenance_status": "resolved",
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "PHOT_MAG_UNDEF"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": {
+            "column_name": "Tel"
+          }
+        }
+      },
+      "filters": [
+        {
+          "filter_string": "B",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "F555W",
+          "telescope": "HST_WFC3",
+          "instrument": "UVIS",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "HST_WFC3/UVIS"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "Open",
+          "telescope": "DLT40",
+          "instrument": null,
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "DLT40"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "U",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "V",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "[3.6]",
+          "telescope": "Spitzer",
+          "instrument": "IRAC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Spitzer/IRAC"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "[4.5]",
+          "telescope": "Spitzer",
+          "instrument": "IRAC",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Spitzer/IRAC"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "g",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "gp",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "i",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "ip",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "r",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "rp",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "u",
+          "telescope": "Swope",
+          "instrument": "4Kx4K",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swope/4Kx4K"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "up",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvm2",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvw1",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "uvw2",
+          "telescope": "Swift",
+          "instrument": "UVOT",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "Swift/UVOT"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        },
+        {
+          "filter_string": "z_s",
+          "telescope": "LasCumbres1m",
+          "instrument": "Sinistro",
+          "wavelength_regime": null,
+          "svo_query_hint": null,
+          "detection_provenance": {
+            "filter_string": {
+              "ucd1": "OBS_BAND"
+            },
+            "telescope": {
+              "column_value": "LasCumbres1m/Sinistro"
+            },
+            "instrument": null,
+            "wavelength_regime": null
+          }
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_920_127__1.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/920/127/table2",
+      "description": "Log of spectroscopic observations",
+      "table_format": null,
+      "classification": {
+        "data_type": "spectra",
+        "wavelength_regime": null,
+        "instrument_provenance_status": null,
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "SPECT_WAVELENGTH_MISC"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": null
+        }
+      },
+      "filters": []
+    },
+    {
+      "source_file": "J_ApJ_920_127__4.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/920/127/fig3",
+      "description": "Optical and late-time NIR spectroscopic sequence of AT2019qyl",
+      "table_format": null,
+      "classification": {
+        "data_type": "spectra",
+        "wavelength_regime": "optical",
+        "instrument_provenance_status": null,
+        "detection_provenance": {
+          "data_type": {
+            "ucd1": "SPECT_WAVELENGTH_MISC"
+          },
+          "wavelength_regime": {
+            "description_keyword": "optical"
+          },
+          "instrument_provenance_status": null
+        }
+      },
+      "filters": []
+    },
+    {
+      "source_file": "catalog_manifest.csv",
+      "source_format": "csv",
+      "table_name": "catalog_manifest",
+      "description": "",
+      "table_format": null,
+      "classification": {
+        "data_type": "unknown",
+        "wavelength_regime": null,
+        "instrument_provenance_status": null,
+        "detection_provenance": {
+          "data_type": {
+            "default": "no_signals_detected"
+          },
+          "wavelength_regime": {
+            "default": "no_signals_detected"
+          },
+          "instrument_provenance_status": null
+        }
+      },
+      "filters": []
+    }
+  ]
+}

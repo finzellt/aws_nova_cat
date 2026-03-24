@@ -1,7 +1,7 @@
 # ADR-017: Band Registry Design
 
-**Status:** Draft (incomplete — see Open Items §4)
-**Date:** 2026-03-21
+**Status:** Accepted
+**Date:** 2026-03-21 (accepted 2026-03-24)
 **Author:** TF
 **Supersedes:** ADR-016 (Band and Filter Resolution Strategy) — fully superseded
 **Superseded by:** —
@@ -92,8 +92,6 @@ then verified against SVO. The order of operations is:
 SVO is the definitional authority for all bands it covers. Any entry outside SVO scope
 must have a documented rationale.
 
-**SVO sync pattern.** *(Deferred — see Open Items §4.)*
-
 ---
 
 ### Decision 2 — Canonical Band ID Naming Convention
@@ -136,11 +134,15 @@ is the meaningful identifier (e.g. `UVOT` not `Swift`).
 For MVP, community-standard naming is TF's judgment call. Post-launch, registry naming
 conventions are open to community feedback through a documented process.
 
-**Physical similarity thresholds.** *(Partially deferred — see Open Items §4.)* Two
-filters belong to the same class if their central wavelengths are within X% and their
-bandwidths are within Y% of each other. X and Y are empirical thresholds to be
-determined from analysis of the full SVO dataset. Both are currently open parameters
-pending TF's analysis.
+**Physical similarity thresholds.** Two filters belong to the same class if their
+central wavelengths and bandwidths are sufficiently similar that combining them on a
+single light curve introduces no scientifically meaningful systematic error. At MVP
+scale (23 entries), filter class membership is determined by the operator's domain
+expertise during the seed process, not by a numerical threshold. Formal X%/Y%
+thresholds on central wavelength and bandwidth similarity are deferred to post-MVP; if
+the registry grows to a scale where class membership decisions become frequent or
+contentious, empirical thresholds can be established from analysis of the full SVO
+dataset without changing any other aspect of this ADR.
 
 **Generic entries.** `Generic_<BandLabel>` entries (e.g. `Generic_V`) are a first-class
 concept in the registry. They represent cases where the band identity is known but the
@@ -321,60 +323,199 @@ the introduction of `band_registry.json` are the same commit.
 
 ---
 
-### Decision 6 — SVO Sync Pattern
+### Decision 6 — SVO Sync Pattern: One-Shot Seed, No Recurring Infrastructure
 
-*(Deferred — blocked on SVO SQLite database infrastructure currently under development.
-See Open Items §4.)*
+The registry is populated via a one-shot operator script (`scripts/seed_band_registry.py`)
+that queries the SVO Filter Profile Service via `astroquery.svo_fps`, retrieves the
+spectral fields for each target filter, and writes `band_registry.json`. This script is
+development-time tooling — it is not deployed, not invoked at runtime, and carries no
+Lambda dependency.
 
----
+There is no automated sync mechanism. When a new band is needed that requires SVO data,
+the operator updates the script's target list, reruns the script, and commits the
+resulting `band_registry.json` via a normal PR. The script is the sole authoring path
+for SVO-sourced entries.
 
-### Decision 7 — Operator Maintenance Mechanisms
-
-*(Deferred — see Open Items §4.)*
-
----
-
-### Decision 8 — Python Interface Contract
-
-*(Deferred — see Open Items §4.)*
-
----
-
-### Decision 9 — Versioning Strategy
-
-*(Deferred — see Open Items §4.)*
+**Rationale:** At MVP scale (tens of entries, not thousands), automated sync
+infrastructure — polling for SVO updates, diffing against the local registry, handling
+SVO downtime — solves a problem that doesn't exist yet. If the registry grows past ~100
+entries or SVO data drift becomes a concern, a periodic sync script can be introduced
+without changing the registry's physical form or consumer interface.
 
 ---
 
-### Decision 10 — Initial Population Scope
+### Decision 7 — Operator Maintenance: Hand-Edit JSON + Validation Script
 
-*(Deferred — see Open Items §4.)*
+The registry is maintained through two paths, depending on entry type:
+
+**SVO-sourced entries** (non-excluded bands with spectral data): Update the seed script
+target list and rerun, per Decision 6. The script is the single source of truth for
+SVO-derived field values — operators do not hand-edit spectral fields on SVO-sourced
+entries.
+
+**Excluded entries and non-SVO entries** (e.g. `AAVSO_Vis`, `Generic_K`): Hand-edit
+`band_registry.json` directly. These entries have mostly-null spectral fields and
+require no SVO query. This is the "fast path for excluded entry addition" called out in
+§5 Note A.
+
+**Validation script** (`scripts/validate_band_registry.py`): A standalone script that
+checks structural invariants on the committed JSON. It runs in CI and can be invoked
+locally before committing. Checks include: unique `band_id` values, `band_id` appears
+as first alias, no duplicate aliases across entries, required fields present, excluded
+entries have `exclusion_reason`, non-excluded entries have `regime`, and schema shape
+conformance.
+
+There is no interactive CLI framework, no `add_excluded_band.py` helper, and no registry
+editor. The JSON file is small enough that direct editing with validation-on-save is the
+appropriate tool.
+
+**Rationale:** A CLI framework for registry edits is premature at MVP scale. The
+validation script catches the mistakes that matter (duplicate aliases, missing fields,
+schema violations). If maintenance burden grows, a CLI can be layered on without changing
+the registry format.
+
+---
+
+### Decision 8 — Python Interface Contract: Minimal Read-Only API
+
+The registry's Python interface is a single module (`band_registry/registry.py`)
+exposing a small read-only API. It is the only code path that reads
+`band_registry.json` — no other module parses the file directly.
+
+**Load behavior:** The registry is loaded once at module import time (module-level
+initialization). The JSON is parsed into a list of entry dicts, and a case-sensitive
+alias index (`dict[str, str]`) mapping every alias to its owning `band_id` is built in
+the same pass. Both structures are module-level singletons.
+
+**Public API (four functions):**
+
+```python
+def lookup_band_id(alias: str) -> str | None:
+    """Return the band_id for an exact alias match, or None."""
+
+def get_entry(band_id: str) -> BandRegistryEntry | None:
+    """Return the full registry entry for a band_id, or None."""
+
+def is_excluded(band_id: str) -> bool:
+    """Return True if the band_id exists and is excluded."""
+
+def list_all_entries() -> list[BandRegistryEntry]:
+    """Return all registry entries. The returned list is a shallow copy."""
+```
+
+`BandRegistryEntry` is a frozen Pydantic model mirroring the JSON schema from
+Decision 3. It is the only public type exported by the module.
+
+**What this API deliberately does not include:**
+
+- No fuzzy matching, substring search, or case-folded lookup — that's ADR-018's domain.
+- No write/mutation methods — the registry is immutable at runtime.
+- No dedicated filter methods (by regime, system, or wavelength range). At 23 entries,
+  any caller that needs filtering can trivially comprehend over `list_all_entries()`.
+  More importantly, we do not yet know what filtering signatures ADR-018's
+  disambiguation funnel will need — adding named methods now risks committing to an API
+  shape that the actual consumer wants differently. If a recurring filter pattern
+  emerges during ADR-018 or Epic D implementation, it can be promoted to a named method
+  at that point.
+
+**Rationale:** The adapter's hot path is `lookup_band_id(filter_string)` followed by
+`get_entry(band_id)` for the resolved entry's metadata. `is_excluded` is a convenience
+that avoids requiring callers to fetch the full entry just to check the flag.
+`list_all_entries()` provides iteration without forcing consumers to parse the JSON
+directly. This four-function surface is the minimum that satisfies ADR-018's
+disambiguation algorithm (which wraps `lookup_band_id` with contextual narrowing logic)
+and Epic D's `_resolve_band()` wiring.
+
+---
+
+### Decision 9 — Versioning: Schema Version Field + Git History
+
+The registry carries a top-level `_schema_version` field (already present in the seed
+output) using semver:
+
+- **Patch** (1.0.0 → 1.0.1): Adding entries, updating aliases, correcting SVO-derived
+  field values. No consumer code changes required.
+- **Minor** (1.0.x → 1.1.0): Adding new fields to the entry schema (with defaults/nulls
+  so existing entries remain valid). `BandRegistryEntry` Pydantic model updated;
+  consumers may optionally use the new fields.
+- **Major** (1.x.y → 2.0.0): Removing or renaming fields, changing `band_id` values,
+  altering the alias matching contract. Requires coordinated consumer updates.
+
+The `_schema_version` field is checked at load time by `registry.py`. On a major version
+mismatch the module raises immediately rather than silently operating against an
+incompatible schema. Minor and patch mismatches are accepted without error.
+
+There is no separate changelog file. The registry is a Git-tracked artifact —
+`git log --follow band_registry.json` is the changelog, and PR descriptions (per the
+project's conventional commit discipline) document the rationale for each change. The
+`_schema_version` bump is part of the same commit as the schema change it describes.
+
+**Rationale:** At MVP scale with a single operator, a dedicated changelog or migration
+framework is overhead without benefit. The schema version field is the minimum mechanism
+that protects against silent incompatibility after a breaking change. Git history
+provides full auditability. If multi-contributor workflows emerge, a `CHANGELOG.md`
+section can be added without changing the versioning scheme.
+
+---
+
+### Decision 10 — Initial Population: 23 Entries Derived from VizieR Census
+
+The initial registry population is the 23 entries present in the seed
+`band_registry.json` produced by the scan-then-seed process described in Decision 6.
+These entries cover every filter string that appears in the current VizieR catalog
+manifest (the four tables in `catalog_manifest.csv` that contain photometric data).
+
+**Coverage by regime:**
+
+- **Optical (14):** Johnson U, B, V; Cousins R, I; Sloan u, g, r, i, z; Sloan u', g',
+  r', i'
+- **NIR (4):** 2MASS J, H, Ks; Generic K (K-band disambiguation fallback per ADR-016)
+- **UV (3):** Swift/UVOT UVW1, UVW2, UVM2
+- **MIR (2):** Spitzer/IRAC [3.6], [4.5]
+- **HST (1):** F555W (WFC3)
+- **Excluded (1):** Open (unfiltered observation)
+
+There is one HST entry (F555W) included because it appeared in the scanned data. No
+Generic fallback entries beyond `Generic_K` are included at this time — Generic entries
+for other ambiguous single-letter aliases (e.g. `Generic_V`, `Generic_B`) are an
+ADR-018 concern and will be added when the disambiguation algorithm defines which bands
+require them.
+
+**Completeness claim:** This population covers 100% of the filter strings observed in
+the current catalog manifest. It does not claim coverage of filter strings that will
+appear in future donated data. New entries are added via the mechanisms in Decisions 6
+and 7 as new data arrives.
+
+**Rationale:** The registry is data-driven, not speculative. We populated exactly the
+entries the real data requires, seeded from SVO where coverage exists, and hand-authored
+for the excluded and Generic cases where it doesn't. This avoids carrying hundreds of
+SVO entries that no ingested file references.
 
 ---
 
 ## 4. Open Items
 
-The following items must be resolved before this ADR can be marked `Accepted`.
+All items resolved. This section retained for historical reference.
 
-| # | Item | Notes |
-|---|------|-------|
-| 1 | SVO sync pattern (Decision 6) | Blocked on SVO SQLite database infrastructure currently under development |
-| 2 | Physical similarity threshold X% (Decision 2) | Pending TF's analysis of full SVO dataset |
-| 3 | Physical similarity threshold Y% (Decision 2) | Pending TF's analysis of full SVO dataset |
-| 4 | Operator maintenance mechanisms (Decision 7) | To be designed in next session |
-| 5 | Python interface contract (Decision 8) | To be designed in next session |
-| 6 | Versioning strategy (Decision 9) | To be designed in next session |
-| 7 | Initial population scope (Decision 10) | To be designed in next session |
-| 8 | Confirm SVO `photometric_system` field is reliably populated and maps cleanly to `SystemAbbrev` | Pending TF's exploration of the harvested SVO dataset |
+| # | Item | Resolution |
+|---|------|------------|
+| 1 | SVO sync pattern (Decision 6) | Resolved: one-shot seed script, no recurring infrastructure. See Decision 6. |
+| 2 | Physical similarity threshold X% (Decision 2) | Resolved: deferred post-MVP. At MVP scale, filter class membership is determined by operator domain expertise during the seed process. See Decision 2. |
+| 3 | Physical similarity threshold Y% (Decision 2) | Resolved: deferred post-MVP. Same resolution as item 2. |
+| 4 | Operator maintenance mechanisms (Decision 7) | Resolved: hand-edit JSON + validation script. See Decision 7. |
+| 5 | Python interface contract (Decision 8) | Resolved: four-function read-only API. See Decision 8. |
+| 6 | Versioning strategy (Decision 9) | Resolved: `_schema_version` semver field + Git history. See Decision 9. |
+| 7 | Initial population scope (Decision 10) | Resolved: 23 entries from VizieR census. See Decision 10. |
+| 8 | Confirm SVO `photometric_system` field maps cleanly to `SystemAbbrev` | Resolved: confirmed by the seed script execution. All 22 non-excluded entries successfully mapped `photometric_system` to `SystemAbbrev` with operator review. |
 
 ---
 
 ## 5. Notes
 
-**Note A — Fast path for excluded entry addition.** The operator maintenance mechanism
-(Decision 7) must include a fast, low-friction path for adding new excluded entries by
-hand, without requiring SVO queries or schema expertise. This is expected to be a
-frequent operation as new non-photometric observation modes are encountered in real data.
+**Note A — Fast path for excluded entry addition.** Decision 7 satisfies this
+requirement. Excluded entries are hand-edited directly into `band_registry.json` — no
+SVO queries, no schema expertise beyond following the existing excluded entry pattern,
+no tooling beyond a text editor and the validation script.
 
 **Note B — Unique filter string pre-resolution.** At ingestion time, the adapter should
 identify the unique filter strings present in a file (typically tens, not thousands) and
@@ -393,9 +534,8 @@ registry design must not preclude it.
   - `services/photometry_ingestor/band_registry/band_registry.json`
   - `services/photometry_ingestor/band_registry/__init__.py`
   - `services/photometry_ingestor/band_registry/registry.py`
-  - `scripts/sync_band_registry_svo.py` *(implementation deferred pending Decision 6)*
-  - `scripts/add_excluded_band.py` *(implementation deferred pending Decision 7)*
-  - `scripts/validate_band_registry.py` *(implementation deferred pending Decision 7)*
+  - `scripts/seed_band_registry.py`
+  - `scripts/validate_band_registry.py`
 - `_COMBINED_BAND_LOOKUP`, `_DEFAULT_PHOT_SYSTEM`, `_PHOT_SYSTEM_SPECTRAL_META` in
   `canonical_csv.py` are removed in Epic D (not Epic A).
 
