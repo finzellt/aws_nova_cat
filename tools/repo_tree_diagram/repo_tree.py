@@ -25,7 +25,8 @@ SUBSTRING_IGNORE = {"cache", "compressed", "engineering", "diagrams"}
 FILE_NAME_IGNORE = {".DS_Store"}
 
 # Directories that get one extra level of depth beyond the global max
-DEEPER_DIRS: set[str] = {"None"}
+
+DEEPER_DIRS: set[str] = {"Empty"}
 
 
 def should_ignore(abs_path: str, root: str) -> bool:

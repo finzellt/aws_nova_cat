@@ -7,7 +7,7 @@
 #   exact name     : ['.git', '.github', '.venv', 'cdk.out', 'node_modules']
 #   substring match: ['cache', 'compressed', 'diagrams', 'engineering']
 #   exact filenames : ['.DS_Store']
-#   deeper dirs     : []
+#   deeper dirs     : ['Empty']
 #
 
 aws_nova_cat/
@@ -84,28 +84,7 @@ aws_nova_cat/
 │       └── refresh-references.md
 ├── frontend/
 │   ├── .next/
-│   │   ├── build/
-│   │   ├── dev/
-│   │   ├── diagnostics/
-│   │   ├── server/
-│   │   ├── static/
-│   │   ├── types/
-│   │   ├── app-path-routes-manifest.json
-│   │   ├── build-manifest.json
-│   │   ├── BUILD_ID
-│   │   ├── export-marker.json
-│   │   ├── fallback-build-manifest.json
-│   │   ├── images-manifest.json
-│   │   ├── next-minimal-server.js.nft.json
-│   │   ├── next-server.js.nft.json
-│   │   ├── package.json
-│   │   ├── prerender-manifest.json
-│   │   ├── required-server-files.js
-│   │   ├── required-server-files.json
-│   │   ├── routes-manifest.json
-│   │   ├── trace
-│   │   ├── trace-build
-│   │   └── turbopack
+│   │   └── dev/
 │   ├── public/
 │   │   ├── data/
 │   │   ├── file.svg
@@ -123,7 +102,6 @@ aws_nova_cat/
 │   ├── AGENTS.md
 │   ├── CLAUDE.md
 │   ├── eslint.config.mjs
-│   ├── next-env.d.ts
 │   ├── next.config.ts
 │   ├── package-lock.json
 │   ├── package.json
