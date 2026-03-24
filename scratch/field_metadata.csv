@@ -1,0 +1,189 @@
+vot_file,table_name,table_rows,col_index,field_name,datatype,unit,ucd,utype,description
+J_ApJ_835_274__0.vot,J/ApJ/835/274/table3,45,0,lambda1,short,0.1 nm,SPECT_WAVELENGTH_MISC,,"[3934/8446] Wavelength (or lower range of wavelength); in
+     Angstroms units"
+J_ApJ_835_274__0.vot,J/ApJ/835/274/table3,45,1,lambda2,short,0.1 nm,SPECT_WAVELENGTH_MISC,,? Upper range of Wavelength; Angstroms
+J_ApJ_835_274__0.vot,J/ApJ/835/274/table3,45,2,Species,char,,AT_SPECIES,,Species identifier
+J_ApJ_835_274__0.vot,J/ApJ/835/274/table3,45,3,F-Apr20,float,mW / m2,SPECT_FLUX_VALUE,,"? The April 20, 2012 line flux (G1)"
+J_ApJ_835_274__0.vot,J/ApJ/835/274/table3,45,4,F-Apr22,float,mW / m2,SPECT_FLUX_VALUE,,"? The April 22, 2012 line flux (G1)"
+J_ApJ_835_274__0.vot,J/ApJ/835/274/table3,45,5,F-Apr28,float,mW / m2,SPECT_FLUX_VALUE,,"? The April 28, 2012 line flux (G1)"
+J_ApJ_835_274__0.vot,J/ApJ/835/274/table3,45,6,F-Apr30,float,mW / m2,SPECT_FLUX_VALUE,,"? The April 30, 2012 line flux (G1)"
+J_ApJ_835_274__0.vot,J/ApJ/835/274/table3,45,7,F-May04,float,mW / m2,SPECT_FLUX_VALUE,,"? The May 4, 2012 line flux (G1)"
+J_ApJ_835_274__0.vot,J/ApJ/835/274/table3,45,8,F-May09,float,mW / m2,SPECT_FLUX_VALUE,,"? The May 9, 2012 line flux (G1)"
+J_ApJ_835_274__0.vot,J/ApJ/835/274/table3,45,9,F-May10,float,mW / m2,SPECT_FLUX_VALUE,,"? The May 10, 2012 line flux (G1)"
+J_ApJ_835_274__1.vot,J/ApJ/835/274/table4,43,0,lambda1,short,0.1 nm,SPECT_WAVELENGTH_MISC,,"[3934/7477] Wavelength (or lower range of wavelength); in
+     Angstroms units"
+J_ApJ_835_274__1.vot,J/ApJ/835/274/table4,43,1,lambda2,short,0.1 nm,SPECT_WAVELENGTH_MISC,,? Upper range of Wavelength; Angstroms
+J_ApJ_835_274__1.vot,J/ApJ/835/274/table4,43,2,Species,char,,AT_SPECIES,,Species identifier
+J_ApJ_835_274__1.vot,J/ApJ/835/274/table4,43,3,F-May17,float,mW / m2,SPECT_FLUX_VALUE,,"? The May 17, 2012 line flux (G1)"
+J_ApJ_835_274__1.vot,J/ApJ/835/274/table4,43,4,F-May27,float,mW / m2,SPECT_FLUX_VALUE,,"? The May 27, 2012 line flux (G1)"
+J_ApJ_835_274__1.vot,J/ApJ/835/274/table4,43,5,F-May29,float,mW / m2,SPECT_FLUX_VALUE,,"? The May 29, 2012 line flux (G1)"
+J_ApJ_835_274__1.vot,J/ApJ/835/274/table4,43,6,F-May30,float,mW / m2,SPECT_FLUX_VALUE,,"? The May 30, 2012 line flux (G1)"
+J_ApJ_835_274__1.vot,J/ApJ/835/274/table4,43,7,F-May31,float,mW / m2,SPECT_FLUX_VALUE,,"? The May 31, 2012 line flux (G1)"
+J_ApJ_835_274__1.vot,J/ApJ/835/274/table4,43,8,F-Jun09,float,mW / m2,SPECT_FLUX_VALUE,,"? The June 9, 2012 line flux (G1)"
+J_ApJ_835_274__1.vot,J/ApJ/835/274/table4,43,9,F-Jun10,float,mW / m2,SPECT_FLUX_VALUE,,"? The June 10, 2012 line flux (G1)"
+J_ApJ_835_274__2.vot,J/ApJ/835/274/table5,45,0,lambda1,short,0.1 nm,SPECT_WAVELENGTH_MISC,,"[3934/10126] Wavelength (or lower range of wavelength); in
+     Angstroms units"
+J_ApJ_835_274__2.vot,J/ApJ/835/274/table5,45,1,lambda2,short,0.1 nm,SPECT_WAVELENGTH_MISC,,? Upper range of Wavelength; Angstroms
+J_ApJ_835_274__2.vot,J/ApJ/835/274/table5,45,2,Species,char,,AT_SPECIES,,Species identifier
+J_ApJ_835_274__2.vot,J/ApJ/835/274/table5,45,3,F-Jun20,float,mW / m2,SPECT_FLUX_VALUE,,"? The June 20, 2012 line flux (G1)"
+J_ApJ_835_274__2.vot,J/ApJ/835/274/table5,45,4,F-Jun22,float,mW / m2,SPECT_FLUX_VALUE,,"? The June 22, 2012 line flux (G1)"
+J_ApJ_835_274__2.vot,J/ApJ/835/274/table5,45,5,F-Jun24,float,mW / m2,SPECT_FLUX_VALUE,,"? The June 24, 2012 line flux (G1)"
+J_ApJ_835_274__2.vot,J/ApJ/835/274/table5,45,6,F-May08,float,mW / m2,SPECT_FLUX_VALUE,,"? The May 8, 2015 line flux (G1)"
+J_ApJ_852_108__0.vot,J/ApJ/852/108/table1,13132,0,Date,char,,TIME_DATE,,UT date of the observation
+J_ApJ_852_108__0.vot,J/ApJ/852/108/table1,13132,1,JD,double,d,TIME_DATE,,Julian Date of the observation
+J_ApJ_852_108__0.vot,J/ApJ/852/108/table1,13132,2,t-t0,double,d,TIME_INTERVAL,,[-2413.2/446] Days relative to 2012 June 1
+J_ApJ_852_108__0.vot,J/ApJ/852/108/table1,13132,3,Filt,char,,INST_FILTER_CODE,,"Filter used (I, V, B, R, J, K, H or UVM2)"
+J_ApJ_852_108__0.vot,J/ApJ/852/108/table1,13132,4,mag,float,mag,PHOT_MAG_UNDEF,,[4.6/25.2] Observed magnitude in Filter
+J_ApJ_852_108__0.vot,J/ApJ/852/108/table1,13132,5,e_mag,float,mag,ERROR,,[0/5] Uncertainty in mag
+J_ApJ_852_108__0.vot,J/ApJ/852/108/table1,13132,6,Obs,char,,ID_HUMAN,,Observer/Group identifier (1)
+J_ApJ_852_108__0.vot,J/ApJ/852/108/table1,13132,7,Tel,char,,TEL_ID,,Telescope information (2)
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,0,JD,float,d,TIME_DATE,,Julian date; JD-2450000
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,1,Date,char,,TIME_DATE,,UT date of observation
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,2,t-t0,float,d,TIME_INTERVAL,,[25/930] Days since t_0_ (= 2012 June 1)
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,3,Conf,char,,INST_SETUP,,VLA configuration
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,4,l_F4.5GHz,char,,CODE_LIMIT,,Limit flag on F4.5GHz (1)
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,5,F4.5GHz,float,mJy,PHOT_FLUX_RADIO_5G,,[0.1/1.4]? VLA 4.5GHz flux
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,6,e_F4.5GHz,float,mJy,ERROR,,[0.02/0.3]? F4.5GHz uncertainty
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,7,F7.8GHz,float,mJy,PHOT_FLUX_RADIO_7.5G,,[0.1/3]? VLA 7.8GHz flux
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,8,e_F7.8GHz,float,mJy,ERROR,,[0.02/0.2]? F7.8GHz uncertainty
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,9,F13.3GHz,float,mJy,PHOT_FLUX_RADIO_15G,,[0.2/3]? VLA 13.3GHz flux
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,10,e_F13.3GHz,float,mJy,ERROR,,[0.04/0.4]? F13.3GHz uncertainty
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,11,F17.4GHz,float,mJy,PHOT_FLUX_RADIO_15G,,[0.2/4.1]? VLA 17.4GHz flux
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,12,e_F17.4GHz,float,mJy,ERROR,,[0.04/0.5]? F17.4GHz uncertainty
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,13,l_F27.5GHz,char,,CODE_LIMIT,,Limit flag on F27.5GHz (1)
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,14,F27.5GHz,float,mJy,PHOT_FLUX_RADIO_22G,,[0.2/5.7]? VLA 27.5GHz flux
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,15,e_F27.5GHz,float,mJy,ERROR,,[0.1/0.8]? F27.5GHz uncertainty
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,16,l_F36.5GHz,char,,CODE_LIMIT,,Limit flag on F36.5GHz (1)
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,17,F36.5GHz,float,mJy,PHOT_FLUX_RADIO_36G,,[0.3/7]? VLA 36.5GHz flux
+J_ApJ_852_108__1.vot,J/ApJ/852/108/table2,21,18,e_F36.5GHz,float,mJy,ERROR,,[0.1/1]? F36.5GHz uncertainty
+J_ApJ_852_108__2.vot,J/ApJ/852/108/table3,17,0,Date,char,,TIME_DATE,,UT date of observation
+J_ApJ_852_108__2.vot,J/ApJ/852/108/table3,17,1,t-t0,float,d,TIME_INTERVAL,,[3/450] Days since t_0_ (= 2012 June 1)
+J_ApJ_852_108__2.vot,J/ApJ/852/108/table3,17,2,Obs,char,,ID_HUMAN,,Observer
+J_ApJ_852_108__2.vot,J/ApJ/852/108/table3,17,3,Tel,char,,TEL_ID,,Telescope
+J_ApJ_852_108__2.vot,J/ApJ/852/108/table3,17,4,Inst,char,,INST_ID,,Instrument
+J_ApJ_852_108__2.vot,J/ApJ/852/108/table3,17,5,u_Disp,char,,CODE_ERROR,,[~] Uncertainty flag on Disp
+J_ApJ_852_108__2.vot,J/ApJ/852/108/table3,17,6,Disp,float,0.1 nm,INST_DISPERSION,,Dispersion in Angstroms
+J_ApJ_852_108__2.vot,J/ApJ/852/108/table3,17,7,lam1,short,0.1 nm,INST_WAVELENGTH_COVERAGE,,[3000/5620] Minimum wavelength range in Angstroms
+J_ApJ_852_108__2.vot,J/ApJ/852/108/table3,17,8,lam2,short,0.1 nm,INST_WAVELENGTH_COVERAGE,,[5420/10000] Maximum wavelength range in Angstroms
+J_ApJ_899_162__0.vot,J/ApJ/899/162/fig3a,36,0,MJD,double,d,TIME_DATE,,[58204/58329] Modified Julian Date; JD-2400000.5
+J_ApJ_899_162__0.vot,J/ApJ/899/162/fig3a,36,1,Jmag,float,mag,PHOT_MAG_J,,[3.92/6.83] J band ANDICAM/1.3m magnitude
+J_ApJ_899_162__0.vot,J/ApJ/899/162/fig3a,36,2,e_Jmag,float,mag,ERROR,,[0.03/0.2] Uncertainty in Jmag
+J_ApJ_899_162__0.vot,J/ApJ/899/162/fig3a,36,3,Hmag,float,mag,PHOT_MAG_H,,[3.59/5.97] H band ANDICAM/1.3m magnitude
+J_ApJ_899_162__0.vot,J/ApJ/899/162/fig3a,36,4,e_Hmag,float,mag,ERROR,,[0.04/0.4] Uncertainty in Hmag
+J_ApJ_899_162__0.vot,J/ApJ/899/162/fig3a,36,5,Kmag,float,mag,PHOT_MAG_K,,[3.31/4.26] K band ANDICAM/1.3m magnitude
+J_ApJ_899_162__0.vot,J/ApJ/899/162/fig3a,36,6,e_Kmag,float,mag,ERROR,,[0.05/0.2] Uncertainty in Kmag
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,0,MJD,double,d,TIME_DATE,,[58203/58329] Modified Julian Date; JD-2400000.5
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,1,Bmag,float,mag,PHOT_JHN_B,,[6.34/10.2] Johnson B band ANDICAM/1.3m magnitude
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,2,E_Bmag,float,mag,ERROR,,[0.06/0.09] Upper uncertainty in Bmag
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,3,e_Bmag,float,mag,ERROR,,[0.06/0.09] Lower uncertainty in Bmag
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,4,Vmag,float,mag,PHOT_JHN_V,,[5.78/9.77] Johnson V band ANDICAM/1.3m magnitude
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,5,E_Vmag,float,mag,ERROR,,[0.04/0.06] Upper uncertainty in Vmag
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,6,e_Vmag,float,mag,ERROR,,[0.04/0.06] Lower uncertainty in Vmag
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,7,Rmag,float,mag,PHOT_COUS_R,,[4.9/7.8] Cousins R band ANDICAM/1.3m magnitude
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,8,E_Rmag,float,mag,ERROR,,[0.05/0.06] Upper uncertainty in Rmag
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,9,e_Rmag,float,mag,ERROR,,[0.05/0.06] Lower uncertainty in Rmag
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,10,Imag,float,mag,PHOT_COUS_I,,[4.36/7.92] Cousins I band ANDICAM/1.3m magnitude
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,11,E_Imag,float,mag,ERROR,,[0.06/0.08] Upper uncertainty in Imag
+J_ApJ_899_162__1.vot,J/ApJ/899/162/fig3b,36,12,e_Imag,float,mag,ERROR,,[0.06/0.08] Lower uncertainty in Imag
+J_ApJ_899_162__2.vot,J/ApJ/899/162/fig4,71,0,MJD,double,d,TIME_DATE,,"[58192/58199] Modified Julian Date, JD-2400000.5"
+J_ApJ_899_162__2.vot,J/ApJ/899/162/fig4,71,1,gmag,float,mag,PHOT_GUNN_G,,[9.22/13.6] g'-band Evryscope magnitude
+J_ApJ_899_162__2.vot,J/ApJ/899/162/fig4,71,2,e_gmag,float,mag,ERROR,,[0/0.97] Uncertainty in g'mag
+J_ApJ_907_70__0.vot,J/ApJ/907/70/figure2,16191,0,Date,char,,TIME_DATE,,Date of observation (AAAAMMDD)
+J_ApJ_907_70__0.vot,J/ApJ/907/70/figure2,16191,1,Wave,short,0.1 nm,SPECT_WAVELENGTH_MISC,,[4500/9000] Wavelength (Angstrom)
+J_ApJ_907_70__0.vot,J/ApJ/907/70/figure2,16191,2,Flux,double,,PHOT_FLUX_REL,,[1e-15/1e-11] Normalized flux
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,0,PGIR,char,,ID_MAIN,,PGIR name
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,1,Name,char,,ID_CROSSID,,Name of the nova
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,2,RAJ2000,char,,POS_EQ_RA_MAIN,,Hour of right ascension (J2000)
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,3,DEJ2000,char,,POS_EQ_DEC_MAIN,,Degree of declination (J2000)
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,4,MJD,double,d,TIME_DATE,,"[58685.2/59180.3] Modified Julian Date, first detection (1)"
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,5,Jmag,float,mag,PHOT_MAG_J,,[6.22/12.07] Peak J-band Vega magnitude (2)
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,6,e_Jmag,float,mag,ERROR,,[0.01/0.03] Uncertainty on the Jmag
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,7,phCl,char,,PHOT_CLASS,,"Photometric class of the nova based on classification schemes of
+     Strope+ 2010, J/AJ/140/34"
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,8,spCl,char,,SPECT_TYPE_GENERAL,,"Spectroscopic class of the nova based on classification schemes
+     of Williams+ 1992AJ....104..725W"
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,9,phAv,float,,PHOT_EXTINCTION_ISM,,"[1/9.4]? Estimated extinction toward the nova using the
+     photometric color, A_V,c_"
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,10,spAv,char,,PHOT_EXTINCTION_ISM,,"Estimated extinction toward the nova using the spectroscopic
+     method, A_V,s_ (3)"
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,11,Av,float,,PHOT_EXTINCTION_TOTAL,,"[1.5/12.1] The total Galactic extinction along this direction
+     estimated in Schlafly & Finkbeiner (2011ApJ...737..103S)"
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,12,File1,char,,ID_FILE,,"Name of the spectrum in ASCII format in subdirectory ""sp"""
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,13,Sp1,char,,DATA_LINK,,Interactive plot of the spectrum
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,14,File2,char,,ID_FILE,,"Name of a second spectrum (if any) in ASCII format in
+     subdirectory ""sp"""
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,15,Sp2,char,,DATA_LINK,,Interactive plot of the spectrum
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,16,LC,char,,DATA_LINK,,Interactive plot of PGIR light curve
+J_ApJ_912_19__0.vot,J/ApJ/912/19/table1,12,17,Simbad,char,,DATA_LINK,,Simbad column added by the CDS
+J_ApJ_916_44__0.vot,J/ApJ/916/44/table2,4,0,Date,char,,TIME_DATE,,Date of observation (UT)
+J_ApJ_916_44__0.vot,J/ApJ/916/44/table2,4,1,MJD,double,d,TIME_DATE,,[57318.19/57322.22] Modified Julian Date
+J_ApJ_916_44__0.vot,J/ApJ/916/44/table2,4,2,t,float,d,TIME_INTERVAL,,[24.09/28.12] Days after t_max_ (2015 Sep 29.1; MJD57294.1)
+J_ApJ_916_44__0.vot,J/ApJ/916/44/table2,4,3,Setup,char,,SPECT_RANGE,,"Setup (""Ub"" or ""Yb"") (1)"
+J_ApJ_916_44__0.vot,J/ApJ/916/44/table2,4,4,Exp,short,s,TIME_EXPTIME,,[1800/3000] Exposure time
+J_ApJ_916_44__0.vot,J/ApJ/916/44/table2,4,5,Airmass,float,,PHOT_ATM_AIRMASS,,[1.88/2.59] Airmass
+J_ApJ_916_44__0.vot,J/ApJ/916/44/table2,4,6,File,char,,ID_FILE,,"Name of the FITS file in subdirectory ""sp""; column added by CDS"
+J_ApJ_916_44__0.vot,J/ApJ/916/44/table2,4,7,fits,char,,DATA_LINK,,Download the FITS file
+J_ApJ_916_44__0.vot,J/ApJ/916/44/table2,4,8,Sp,char,,DATA_LINK,,Interactive spectrum spectrum plot
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,0,Name,char,,ID_MAIN,,ZTF name of the source
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,1,f_Name,char,,CODE_MISC,,Flag(s) on Name (1)
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,2,TNS,char,,ID_ALTERNATIVE,,Transient Name Server denomination
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,3,RAJ2000,char,,POS_EQ_RA_MAIN,,Hour of right ascension (J2000)
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,4,DEJ2000,char,,POS_EQ_DEC_MAIN,,Degree of declination (J2000)
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,5,GLAT,float,deg,POS_GAL_LAT,,[-41.5/71.9] Galactic latitude
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,6,Class,char,,CLASS_OBJECT,,"Classification, or associated GRB when known"
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,7,z,float,,REDSHIFT_HC,,[0.03/2.9]? Redshift
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,8,TW,char,,REFER_CODE,,Discovery reference (This work)
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,9,Ref,char,,REFER_CODE,,Other discovery reference(s) (2)
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,10,gFade,float,,PHOT_FLUX_RATIO,,[0.29/2.01]? Fade rate at the time of discovery in the g band (3)
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,11,rFade,float,,PHOT_FLUX_RATIO,,"[0.28/17.56]? Fade rate at the time of discovery in the r band
+     (3)"
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,12,Np,short,,NUMBER,,"Number of photometric measurements for this source (link to
+     Fig3+4+7)"
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,13,LC,char,,DATA_LINK,,Interactive Plot
+J_ApJ_918_63__0.vot,J/ApJ/918/63/table1,13,14,Simbad,char,,DATA_LINK,,Simbad column added by the CDS
+J_ApJ_918_63__1.vot,J/ApJ/918/63/fig347,239,0,Name,char,,ID_MAIN,,ZTF name of the source
+J_ApJ_918_63__1.vot,J/ApJ/918/63/fig347,239,1,Inst,char,,INST_ID,,Instrument used (1)
+J_ApJ_918_63__1.vot,J/ApJ/918/63/fig347,239,2,Obs,char,s,TIME_DATE,,"Observed UTC date, ISO 8601 (2)"
+J_ApJ_918_63__1.vot,J/ApJ/918/63/fig347,239,3,JD,char,d,TIME_DATE,,Julian date
+J_ApJ_918_63__1.vot,J/ApJ/918/63/fig347,239,4,omag,float,mag,PHOT_MAG_UNDEF,,[17.16/23.95]? Observed AB magnitude in Filt
+J_ApJ_918_63__1.vot,J/ApJ/918/63/fig347,239,5,e_omag,float,mag,ERROR,,[0.03/0.4]? Uncertainty in omag
+J_ApJ_918_63__1.vot,J/ApJ/918/63/fig347,239,6,LimOmag,float,mag,PHOT_MAG_LIMIT,,"[17.3/25.6]? Limiting magnitude, AB system"
+J_ApJ_918_63__1.vot,J/ApJ/918/63/fig347,239,7,Filt,char,,INST_FILTER_CODE,,[griJ] Filter
+J_ApJ_920_127__0.vot,J/ApJ/920/127/table1,453,0,MJD,double,d,TIME_DATE,,[58752.2/58879.1] Modified Julian date (JD-2400000.5)
+J_ApJ_920_127__0.vot,J/ApJ/920/127/table1,453,1,Phase,float,d,TIME_PHASE,,[0.09/127] Time since MJD 58752.12
+J_ApJ_920_127__0.vot,J/ApJ/920/127/table1,453,2,Tel,char,,TEL_ID,,Telescope and instrument used (1)
+J_ApJ_920_127__0.vot,J/ApJ/920/127/table1,453,3,Band,char,,OBS_BAND,,Photometric band
+J_ApJ_920_127__0.vot,J/ApJ/920/127/table1,453,4,l_mag,char,,CODE_LIMIT,,5-sigma limit flag on mag for a non-detection
+J_ApJ_920_127__0.vot,J/ApJ/920/127/table1,453,5,mag,float,mag,PHOT_MAG_UNDEF,,[16.07/22.52] Apparent magnitude in Band (2)
+J_ApJ_920_127__0.vot,J/ApJ/920/127/table1,453,6,e_mag,float,mag,ERROR,,[0.01/0.6]? 1-sigma uncertainty on mag
+J_ApJ_920_127__1.vot,J/ApJ/920/127/table2,6,0,Obs,char,s,TIME_DATE,,[2019] Year of observation (UT)
+J_ApJ_920_127__1.vot,J/ApJ/920/127/table2,6,1,MJD,double,d,TIME_DATE,,[58752.25/58821.3] Modified Julian Date
+J_ApJ_920_127__1.vot,J/ApJ/920/127/table2,6,2,Phase,float,d,TIME_PHASE,,[0.17/69.13] Phase
+J_ApJ_920_127__1.vot,J/ApJ/920/127/table2,6,3,Tel,char,,TEL_ID,,Telescope/instrument as in Figure 3 (G1)
+J_ApJ_920_127__1.vot,J/ApJ/920/127/table2,6,4,Range,char,0.1 nm,SPECT_WAVELENGTH_MISC,,Wavelength range in Angstroms
+J_ApJ_920_127__1.vot,J/ApJ/920/127/table2,6,5,Res,char,,INST_ANG_RESOL,,Resolution ({lambda}/{delta}{lambda})
+J_ApJ_920_127__1.vot,J/ApJ/920/127/table2,6,6,HaRes,short,km / s,SPECT_RESOLUTION,,[210/900]? H{alpha} resolution
+J_ApJ_920_127__1.vot,J/ApJ/920/127/table2,6,7,sp,char,,DATA_LINK,,Interactive spectrum plot
+J_ApJ_920_127__2.vot,J/ApJ/920/127/table5,12,0,MJD,double,d,TIME_DATE,,[55813.38/57015.1] Modified Julian date (JD-2400000.5)
+J_ApJ_920_127__2.vot,J/ApJ/920/127/table5,12,1,Phase,double,d,TIME_PHASE,,[-2939/-1737] Time since MJD 58752.12
+J_ApJ_920_127__2.vot,J/ApJ/920/127/table5,12,2,Band,char,,OBS_BAND,,[ HJKs] Photometric band (2MASS system)
+J_ApJ_920_127__2.vot,J/ApJ/920/127/table5,12,3,mag,float,mag,PHOT_MAG_UNDEF,,[18.6/20.2] Apparent Vega magnitude in Band
+J_ApJ_920_127__2.vot,J/ApJ/920/127/table5,12,4,e_mag,float,mag,ERROR,,[0.06/0.1] 1-sigma uncertainty on mag
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,0,MJD,double,d,TIME_DATE,,[52964.06/58593.6] Modified Julian date (JD-2400000.5)
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,1,Phase,double,d,TIME_PHASE,,[-5789/-158] Time since MJD 58752.12
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,2,d3.6Fnu,float,mJy,PHOT_IR_3.4,,[-1.5/8.3] Flux in IRAC 3.6um difference images
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,3,e_d3.6Fnu,float,mJy,ERROR,,[1.1/5] Uncertainty in d3.6Fnu
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,4,3.6Fnu,float,mJy,PHOT_IR_3.4,,[7.3/17.1] Total Flux in IRAC 3.6um (1)
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,5,e_3.6Fnu,float,mJy,ERROR,,[1.3/5] Uncertainty in 3.6Fnu
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,6,3.6mag,float,mag,PHOT_IR_3.4,,[18/19] IRAC 3.6um magnitude
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,7,e_3.6mag,float,mag,ERROR,,[0.09/0.4] Uncertainty in 3.6mag
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,8,d4.5Fnu,float,mJy,PHOT_IR_4.2,,[-4.8/5.4]? Flux in IRAC 4.5um difference images
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,9,e_d4.5Fnu,float,mJy,ERROR,,[0.9/5.7]? Uncertainty in d4.5Fnu
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,10,4.5Fnu,float,mJy,PHOT_IR_4.2,,[3.5/13.7]? Total Flux in IRAC 4.5um (1)
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,11,e_4.5Fnu,float,mJy,ERROR,,[1/5.7]? Uncertainty in 4.5Fnu
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,12,4.5mag,float,mag,PHOT_IR_4.2,,[17.8/19.1]? IRAC 4.5um magnitude
+J_ApJ_920_127__3.vot,J/ApJ/920/127/table6,24,13,e_4.5mag,float,mag,ERROR,,[0.1/1.1]? Uncertainty in 4.5mag
+J_ApJ_920_127__4.vot,J/ApJ/920/127/fig3,22875,0,MJD,double,d,TIME_DATE,,[58752.29/58821.25] Modified Julian Date (JD-2400000.5)
+J_ApJ_920_127__4.vot,J/ApJ/920/127/fig3,22875,1,Tel,char,,TEL_ID,,Telescope and instrument (G1)
+J_ApJ_920_127__4.vot,J/ApJ/920/127/fig3,22875,2,lambda,double,0.1 nm,SPECT_WAVELENGTH_MISC,,[3499.7/24669.2] Observed Wavelength (1)
+J_ApJ_920_127__4.vot,J/ApJ/920/127/fig3,22875,3,Flambda,double,cW / (nm m2),SPECT_FLUX_VALUE,,[-2.5e-14/4.2e-13]? Observed flux density in erg/s/cm^2^/{AA} (1)

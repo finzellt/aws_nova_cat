@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_899_162_fig4" name="J/ApJ/899/162/fig4">
+   <DESCRIPTION>
+    g' band Evryscope light curve
+   </DESCRIPTION>
+   <FIELD ID="MJD" datatype="double" name="MJD" precision="5" ucd="TIME_DATE" unit="d" width="11">
+    <DESCRIPTION>
+     [58192/58199] Modified Julian Date, JD-2400000.5
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="gmag" datatype="float" name="gmag" precision="3" ucd="PHOT_GUNN_G" unit="mag" width="6">
+    <DESCRIPTION>
+     [9.22/13.6] g'-band Evryscope magnitude
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_gmag" datatype="float" name="e_gmag" precision="3" ucd="ERROR" unit="mag" width="6">
+    <DESCRIPTION>
+     [0/0.97] Uncertainty in g'mag
+    </DESCRIPTION>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>58192.00273</TD>
+      <TD>12.838</TD>
+      <TD> 0.090</TD>
+     </TR>
+     <TR>
+      <TD>58192.03082</TD>
+      <TD>12.743</TD>
+      <TD> 0.698</TD>
+     </TR>
+     <TR>
+      <TD>58192.05892</TD>
+      <TD>13.181</TD>
+      <TD> 0.852</TD>
+     </TR>
+     <TR>
+      <TD>58192.08702</TD>
+      <TD>13.578</TD>
+      <TD> 0.238</TD>
+     </TR>
+     <TR>
+      <TD>58192.14321</TD>
+      <TD>13.529</TD>
+      <TD> 0.325</TD>
+     </TR>
+     <TR>
+      <TD>58192.22750</TD>
+      <TD>13.201</TD>
+      <TD> 0.206</TD>
+     </TR>
+     <TR>
+      <TD>58192.25560</TD>
+      <TD>13.259</TD>
+      <TD> 0.253</TD>
+     </TR>
+     <TR>
+      <TD>58192.28370</TD>
+      <TD>13.235</TD>
+      <TD> 0.199</TD>
+     </TR>
+     <TR>
+      <TD>58192.31180</TD>
+      <TD>13.239</TD>
+      <TD> 0.197</TD>
+     </TR>
+     <TR>
+      <TD>58192.98613</TD>
+      <TD>12.771</TD>
+      <TD> 0.087</TD>
+     </TR>
+     <TR>
+      <TD>58193.01422</TD>
+      <TD>12.750</TD>
+      <TD> 0.088</TD>
+     </TR>
+     <TR>
+      <TD>58193.21090</TD>
+      <TD>11.924</TD>
+      <TD> 0.036</TD>
+     </TR>
+     <TR>
+      <TD>58193.23900</TD>
+      <TD>11.918</TD>
+      <TD> 0.061</TD>
+     </TR>
+     <TR>
+      <TD>58193.26710</TD>
+      <TD>11.903</TD>
+      <TD> 0.091</TD>
+     </TR>
+     <TR>
+      <TD>58193.29519</TD>
+      <TD>11.813</TD>
+      <TD> 0.131</TD>
+     </TR>
+     <TR>
+      <TD>58193.32329</TD>
+      <TD>11.754</TD>
+      <TD> 0.038</TD>
+     </TR>
+     <TR>
+      <TD>58193.35139</TD>
+      <TD>11.792</TD>
+      <TD> 0.104</TD>
+     </TR>
+     <TR>
+      <TD>58193.37949</TD>
+      <TD>11.796</TD>
+      <TD> 0.041</TD>
+     </TR>
+     <TR>
+      <TD>58193.99762</TD>
+      <TD>11.909</TD>
+      <TD> 0.055</TD>
+     </TR>
+     <TR>
+      <TD>58194.02572</TD>
+      <TD>11.812</TD>
+      <TD> 0.844</TD>
+     </TR>
+     <TR>
+      <TD>58194.05382</TD>
+      <TD>11.964</TD>
+      <TD> 0.213</TD>
+     </TR>
+     <TR>
+      <TD>58194.08191</TD>
+      <TD>12.104</TD>
+      <TD> 0.038</TD>
+     </TR>
+     <TR>
+      <TD>58194.11001</TD>
+      <TD>12.195</TD>
+      <TD> 0.967</TD>
+     </TR>
+     <TR>
+      <TD>58194.13811</TD>
+      <TD>12.056</TD>
+      <TD> 0.047</TD>
+     </TR>
+     <TR>
+      <TD>58194.22240</TD>
+      <TD>11.931</TD>
+      <TD> 0.075</TD>
+     </TR>
+     <TR>
+      <TD>58194.25050</TD>
+      <TD>11.898</TD>
+      <TD> 0.067</TD>
+     </TR>
+     <TR>
+      <TD>58194.27859</TD>
+      <TD>11.867</TD>
+      <TD> 0.103</TD>
+     </TR>
+     <TR>
+      <TD>58194.30669</TD>
+      <TD>11.828</TD>
+      <TD> 0.044</TD>
+     </TR>
+     <TR>
+      <TD>58194.98102</TD>
+      <TD>11.043</TD>
+      <TD> 0.024</TD>
+     </TR>
+     <TR>
+      <TD>58195.00912</TD>
+      <TD>10.997</TD>
+      <TD> 0.276</TD>
+     </TR>
+     <TR>
+      <TD>58195.03721</TD>
+      <TD>10.994</TD>
+      <TD> 0.026</TD>
+     </TR>
+     <TR>
+      <TD>58195.06531</TD>
+      <TD>11.021</TD>
+      <TD> 0.054</TD>
+     </TR>
+     <TR>
+      <TD>58195.09341</TD>
+      <TD>11.029</TD>
+      <TD> 0.126</TD>
+     </TR>
+     <TR>
+      <TD>58195.12151</TD>
+      <TD>10.992</TD>
+      <TD> 0.042</TD>
+     </TR>
+     <TR>
+      <TD>58195.14960</TD>
+      <TD>10.967</TD>
+      <TD> 0.011</TD>
+     </TR>
+     <TR>
+      <TD>58195.23389</TD>
+      <TD>11.087</TD>
+      <TD> 0.114</TD>
+     </TR>
+     <TR>
+      <TD>58195.26199</TD>
+      <TD>11.083</TD>
+      <TD> 0.132</TD>
+     </TR>
+     <TR>
+      <TD>58195.29009</TD>
+      <TD>11.013</TD>
+      <TD> 0.115</TD>
+     </TR>
+     <TR>
+      <TD>58195.31819</TD>
+      <TD>11.020</TD>
+      <TD> 0.129</TD>
+     </TR>
+     <TR>
+      <TD>58195.99252</TD>
+      <TD>10.602</TD>
+      <TD> 0.023</TD>
+     </TR>
+     <TR>
+      <TD>58196.02061</TD>
+      <TD>10.574</TD>
+      <TD> 0.185</TD>
+     </TR>
+     <TR>
+      <TD>58196.04871</TD>
+      <TD>10.590</TD>
+      <TD> 0.040</TD>
+     </TR>
+     <TR>
+      <TD>58196.07681</TD>
+      <TD>10.657</TD>
+      <TD> 0.047</TD>
+     </TR>
+     <TR>
+      <TD>58196.10490</TD>
+      <TD>10.660</TD>
+      <TD> 0.052</TD>
+     </TR>
+     <TR>
+      <TD>58196.13300</TD>
+      <TD>10.638</TD>
+      <TD> 0.031</TD>
+     </TR>
+     <TR>
+      <TD>58196.21729</TD>
+      <TD>10.835</TD>
+      <TD> 0.057</TD>
+     </TR>
+     <TR>
+      <TD>58196.24539</TD>
+      <TD>10.849</TD>
+      <TD> 0.072</TD>
+     </TR>
+     <TR>
+      <TD>58196.27349</TD>
+      <TD>10.846</TD>
+      <TD> 0.162</TD>
+     </TR>
+     <TR>
+      <TD>58196.30158</TD>
+      <TD>10.800</TD>
+      <TD> 0.075</TD>
+     </TR>
+     <TR>
+      <TD>58196.97591</TD>
+      <TD>10.472</TD>
+      <TD> 0.020</TD>
+     </TR>
+     <TR>
+      <TD>58197.00401</TD>
+      <TD>10.464</TD>
+      <TD> 0.017</TD>
+     </TR>
+     <TR>
+      <TD>58197.03211</TD>
+      <TD>10.457</TD>
+      <TD> 0.037</TD>
+     </TR>
+     <TR>
+      <TD>58197.06021</TD>
+      <TD>10.485</TD>
+      <TD> 0.051</TD>
+     </TR>
+     <TR>
+      <TD>58197.08830</TD>
+      <TD>10.469</TD>
+      <TD> 0.029</TD>
+     </TR>
+     <TR>
+      <TD>58197.11640</TD>
+      <TD>10.450</TD>
+      <TD> 0.028</TD>
+     </TR>
+     <TR>
+      <TD>58197.14450</TD>
+      <TD>10.470</TD>
+      <TD> 0.026</TD>
+     </TR>
+     <TR>
+      <TD>58197.22879</TD>
+      <TD>10.701</TD>
+      <TD> 0.032</TD>
+     </TR>
+     <TR>
+      <TD>58197.25689</TD>
+      <TD>10.686</TD>
+      <TD> 0.051</TD>
+     </TR>
+     <TR>
+      <TD>58197.28498</TD>
+      <TD>10.614</TD>
+      <TD> 0.107</TD>
+     </TR>
+     <TR>
+      <TD>58197.31308</TD>
+      <TD>10.648</TD>
+      <TD> 0.043</TD>
+     </TR>
+     <TR>
+      <TD>58197.98741</TD>
+      <TD>10.229</TD>
+      <TD> 0.017</TD>
+     </TR>
+     <TR>
+      <TD>58198.01551</TD>
+      <TD>10.202</TD>
+      <TD> 0.146</TD>
+     </TR>
+     <TR>
+      <TD>58198.04360</TD>
+      <TD>10.199</TD>
+      <TD> 0.027</TD>
+     </TR>
+     <TR>
+      <TD>58198.07170</TD>
+      <TD>10.232</TD>
+      <TD> 0.047</TD>
+     </TR>
+     <TR>
+      <TD>58198.09980</TD>
+      <TD>10.212</TD>
+      <TD> 0.061</TD>
+     </TR>
+     <TR>
+      <TD>58198.12790</TD>
+      <TD>10.172</TD>
+      <TD> 0.040</TD>
+     </TR>
+     <TR>
+      <TD>58198.21219</TD>
+      <TD>10.328</TD>
+      <TD> 0.000</TD>
+     </TR>
+     <TR>
+      <TD>58198.24028</TD>
+      <TD>10.306</TD>
+      <TD> 0.076</TD>
+     </TR>
+     <TR>
+      <TD>58198.26838</TD>
+      <TD>10.188</TD>
+      <TD> 0.212</TD>
+     </TR>
+     <TR>
+      <TD>58198.29648</TD>
+      <TD>10.142</TD>
+      <TD> 0.058</TD>
+     </TR>
+     <TR>
+      <TD>58198.97081</TD>
+      <TD> 9.221</TD>
+      <TD> 0.035</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_918_63_table1" name="J/ApJ/918/63/table1">
+   <DESCRIPTION>
+    Afterglows found with ZTFReST during science validation
+   </DESCRIPTION>
+   <FIELD ID="Name" arraysize="12" datatype="char" name="Name" ucd="ID_MAIN">
+    <DESCRIPTION>
+     ZTF name of the source
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="f_Name" arraysize="3" datatype="char" name="f_Name" ucd="CODE_MISC">
+    <DESCRIPTION>
+     Flag(s) on Name (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="TNS" arraysize="10" datatype="char" name="TNS" ucd="ID_ALTERNATIVE">
+    <DESCRIPTION>
+     Transient Name Server denomination
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="RAJ2000" arraysize="11" datatype="char" name="RAJ2000" ucd="POS_EQ_RA_MAIN" xtype="hms">
+    <DESCRIPTION>
+     Hour of right ascension (J2000)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="DEJ2000" arraysize="12" datatype="char" name="DEJ2000" ucd="POS_EQ_DEC_MAIN" xtype="dms">
+    <DESCRIPTION>
+     Degree of declination (J2000)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="GLAT" datatype="float" name="GLAT" precision="1" ucd="POS_GAL_LAT" unit="deg" width="5">
+    <DESCRIPTION>
+     [-41.5/71.9] Galactic latitude
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Class" arraysize="16*" datatype="char" name="Class" ucd="CLASS_OBJECT">
+    <DESCRIPTION>
+     Classification, or associated GRB when known
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="z" datatype="float" name="z" precision="3" ucd="REDSHIFT_HC" width="6">
+    <DESCRIPTION>
+     [0.03/2.9]? Redshift
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="TW" arraysize="2" datatype="char" name="TW" ucd="REFER_CODE">
+    <DESCRIPTION>
+     Discovery reference (This work)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Ref" arraysize="4" datatype="char" name="Ref" ucd="REFER_CODE">
+    <DESCRIPTION>
+     Other discovery reference(s) (2)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="gFade" datatype="float" name="gFade" precision="2" ucd="PHOT_FLUX_RATIO" width="5">
+    <DESCRIPTION>
+     [0.29/2.01]? Fade rate at the time of discovery in the g band (3)
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="rFade" datatype="float" name="rFade" precision="2" ucd="PHOT_FLUX_RATIO" width="5">
+    <DESCRIPTION>
+     [0.28/17.56]? Fade rate at the time of discovery in the r band
+     (3)
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="Np" datatype="short" name="Np" ucd="NUMBER" width="3">
+    <DESCRIPTION>
+     Number of photometric measurements for this source (link to
+     Fig3+4+7)
+    </DESCRIPTION>
+    <VALUES null="-32768"/>
+   </FIELD>
+   <FIELD ID="LC" arraysize="2" datatype="char" name="LC" ucd="DATA_LINK">
+    <DESCRIPTION>
+     Interactive Plot
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Simbad" arraysize="6*" datatype="char" name="Simbad" ucd="DATA_LINK">
+    <DESCRIPTION>
+     Simbad column added by the CDS
+    </DESCRIPTION>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>ZTF20aajnksq</TD>
+      <TD>a</TD>
+      <TD>AT2020blt</TD>
+      <TD>12 47 04.87</TD>
+      <TD>+45 12 02.25</TD>
+      <TD> 71.9</TD>
+      <TD>Afterglow no GRB</TD>
+      <TD> 2.900</TD>
+      <TD/>
+      <TD>1</TD>
+      <TD/>
+      <TD> 1.58</TD>
+      <TD>0</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF20abbiixp</TD>
+      <TD>a</TD>
+      <TD>AT2020kym</TD>
+      <TD>14 12 10.34</TD>
+      <TD>+60 54 19.01</TD>
+      <TD> 53.6</TD>
+      <TD>GRB200524A</TD>
+      <TD> 1.256</TD>
+      <TD/>
+      <TD>2</TD>
+      <TD/>
+      <TD> 3.07</TD>
+      <TD>0</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF20abwysqy</TD>
+      <TD>a</TD>
+      <TD>AT2020scz</TD>
+      <TD>00 27 08.55</TD>
+      <TD>+34 01 38.36</TD>
+      <TD>-28.6</TD>
+      <TD>GRB200826A</TD>
+      <TD> 0.710</TD>
+      <TD/>
+      <TD>3</TD>
+      <TD> 2.01</TD>
+      <TD/>
+      <TD>0</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF20abtxwfx</TD>
+      <TD>a,n</TD>
+      <TD>AT2020sev</TD>
+      <TD>16 41 21.23</TD>
+      <TD>+57 08 20.67</TD>
+      <TD> 40.0</TD>
+      <TD>GRB200817A</TD>
+      <TD/>
+      <TD>TW</TD>
+      <TD>4</TD>
+      <TD> 0.49</TD>
+      <TD> 0.48</TD>
+      <TD>92</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF20acgigfo</TD>
+      <TD>r</TD>
+      <TD>AT2020urd</TD>
+      <TD>00 40 31.10</TD>
+      <TD>+40 35 53.90</TD>
+      <TD>-22.2</TD>
+      <TD>Nova</TD>
+      <TD/>
+      <TD>TW</TD>
+      <TD/>
+      <TD/>
+      <TD> 0.62</TD>
+      <TD>0</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF20acstbfh</TD>
+      <TD>r</TD>
+      <TD>AT2020aapw</TD>
+      <TD>00 40 19.74</TD>
+      <TD>+40 49 35.82</TD>
+      <TD>-22.0</TD>
+      <TD>Nova</TD>
+      <TD/>
+      <TD>TW</TD>
+      <TD>5</TD>
+      <TD> 0.61</TD>
+      <TD/>
+      <TD>0</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF20acozryr</TD>
+      <TD>r,n</TD>
+      <TD>AT2020yxz</TD>
+      <TD>02 48 44.33</TD>
+      <TD>+12 08 14.16</TD>
+      <TD>-41.5</TD>
+      <TD>GRB201103B</TD>
+      <TD> 1.105</TD>
+      <TD>TW</TD>
+      <TD>6</TD>
+      <TD> 0.75</TD>
+      <TD> 0.78</TD>
+      <TD>45</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF21aaarlbp</TD>
+      <TD>r</TD>
+      <TD>AT2021bl</TD>
+      <TD>01 33 21.99</TD>
+      <TD>+30 33 01.27</TD>
+      <TD>-31.5</TD>
+      <TD>Nova</TD>
+      <TD/>
+      <TD>TW</TD>
+      <TD/>
+      <TD> 0.81</TD>
+      <TD> 0.87</TD>
+      <TD>0</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF21aabxjqr</TD>
+      <TD>r</TD>
+      <TD>SN2021pb</TD>
+      <TD>09 44 46.80</TD>
+      <TD>+51 41 14.41</TD>
+      <TD> 47.4</TD>
+      <TD>Shock cooling</TD>
+      <TD> 0.033</TD>
+      <TD>TW</TD>
+      <TD>7,8</TD>
+      <TD> 0.40</TD>
+      <TD> 0.28</TD>
+      <TD>0</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF21aaeyldq</TD>
+      <TD>r</TD>
+      <TD>AT2021any</TD>
+      <TD>08 15 15.34</TD>
+      <TD>-05 52 01.23</TD>
+      <TD> 15.7</TD>
+      <TD>Afterglow no GRB</TD>
+      <TD> 2.514</TD>
+      <TD/>
+      <TD>9</TD>
+      <TD/>
+      <TD>17.56</TD>
+      <TD>0</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF21aagwbjr</TD>
+      <TD>r,n</TD>
+      <TD>AT2021buv</TD>
+      <TD>07 48 19.30</TD>
+      <TD>+11 24 34.32</TD>
+      <TD> 17.7</TD>
+      <TD>GRB210204A</TD>
+      <TD> 0.876</TD>
+      <TD>TW</TD>
+      <TD>10</TD>
+      <TD/>
+      <TD> 2.34</TD>
+      <TD>29</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF21aahifke</TD>
+      <TD>r</TD>
+      <TD>AT2021clk</TD>
+      <TD>02 54 27.54</TD>
+      <TD>+36 31 56.74</TD>
+      <TD>-20.1</TD>
+      <TD>Unknown</TD>
+      <TD/>
+      <TD>TW</TD>
+      <TD>11</TD>
+      <TD/>
+      <TD> 0.96</TD>
+      <TD>61</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>ZTF21aapkbav</TD>
+      <TD>r</TD>
+      <TD>AT2021gca</TD>
+      <TD>14 28 07.33</TD>
+      <TD>+33 29 49.38</TD>
+      <TD> 68.2</TD>
+      <TD>Shock cooling</TD>
+      <TD> 0.036</TD>
+      <TD>TW</TD>
+      <TD>7,12</TD>
+      <TD> 0.29</TD>
+      <TD> 0.31</TD>
+      <TD>12</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

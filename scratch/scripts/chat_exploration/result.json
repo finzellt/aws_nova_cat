@@ -1,0 +1,48 @@
+{
+  "_comment": "File metadata form. One instance per table. Completed by LLM; reviewed by operator before use.",
+  "_form_version": "0.2",
+  "source_file": null,
+  "table_name": "J/ApJ/852/108/table2",
+  "paper_title": null,
+  "bibcode": "2018ApJ...852..108F",
+  "table_context": {
+    "nova_relevance": {
+      "value": null,
+      "confidence": 0.1,
+      "reasoning": "Insufficient information provided about the table content to determine nova relevance."
+    },
+    "data_type": {
+      "value": null,
+      "confidence": 0.1,
+      "reasoning": "The VizieR table structure and columns were not provided; cannot determine data type."
+    },
+    "table_format": {
+      "value": null,
+      "confidence": 0.1,
+      "reasoning": "No column layout available to assess long vs. wide format."
+    },
+    "wavelength_regime": {
+      "value": null,
+      "confidence": 0.1,
+      "reasoning": "No filter/band or spectral information provided."
+    },
+    "telescope": {
+      "value": null,
+      "confidence": 0.1,
+      "reasoning": "No observing facility information provided with the table reference.",
+      "source": null
+    },
+    "instrument": {
+      "value": null,
+      "confidence": 0.1,
+      "reasoning": "No instrument details provided with the table reference.",
+      "source": null
+    },
+    "time_coverage": {
+      "value": null,
+      "confidence": 0.1,
+      "reasoning": "No time or date columns provided to infer coverage."
+    }
+  },
+  "columns": []
+}

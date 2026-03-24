@@ -1,0 +1,20 @@
+catalog,table_index,table_name,description,rows,columns,column_names,vot_file,meta_file
+J/ApJ/835/274,0,J/ApJ/835/274/table3,Reddening-corrected fluxes for April and early May observations,45,10,lambda1;lambda2;Species;F-Apr20;F-Apr22;F-Apr28;F-Apr30;F-May04;F-May09;F-May10,J_ApJ_835_274__0.vot,J_ApJ_835_274__0.meta.json
+J/ApJ/835/274,1,J/ApJ/835/274/table4,Reddening-corrected fluxes for late May to mid June 2012,43,10,lambda1;lambda2;Species;F-May17;F-May27;F-May29;F-May30;F-May31;F-Jun09;F-Jun10,J_ApJ_835_274__1.vot,J_ApJ_835_274__1.meta.json
+J/ApJ/835/274,2,J/ApJ/835/274/table5,Reddening-corrected fluxes for late June 2012 and May 2015,45,7,lambda1;lambda2;Species;F-Jun20;F-Jun22;F-Jun24;F-May08,J_ApJ_835_274__2.vot,J_ApJ_835_274__2.meta.json
+J/ApJ/852/108,0,J/ApJ/852/108/table1,Table of photometric data,13132,8,Date;JD;t-t0;Filt;mag;e_mag;Obs;Tel,J_ApJ_852_108__0.vot,J_ApJ_852_108__0.meta.json
+J/ApJ/852/108,1,J/ApJ/852/108/table2,VLA observations of V1324 Sco,21,19,JD;Date;t-t0;Conf;l_F4.5GHz;F4.5GHz;e_F4.5GHz;F7.8GHz;e_F7.8GHz;F13.3GHz;e_F13.3GHz;F17.4GHz;e_F17.4GHz;l_F27.5GHz;F27.5GHz;e_F27.5GHz;l_F36.5GHz;F36.5GHz;e_F36.5GHz,J_ApJ_852_108__1.vot,J_ApJ_852_108__1.meta.json
+J/ApJ/852/108,2,J/ApJ/852/108/table3,Optical spectroscopic observations,17,9,Date;t-t0;Obs;Tel;Inst;u_Disp;Disp;lam1;lam2,J_ApJ_852_108__2.vot,J_ApJ_852_108__2.meta.json
+J/ApJ/899/162,0,J/ApJ/899/162/fig3a,ANDICAM + CTIO Yale SMARTS 1.3m Telescope IR light curves,36,7,MJD;Jmag;e_Jmag;Hmag;e_Hmag;Kmag;e_Kmag,J_ApJ_899_162__0.vot,J_ApJ_899_162__0.meta.json
+J/ApJ/899/162,1,J/ApJ/899/162/fig3b,ANDICAM + CTIO Yale SMARTS 1.3m Telescope optical light curves,36,13,MJD;Bmag;E_Bmag;e_Bmag;Vmag;E_Vmag;e_Vmag;Rmag;E_Rmag;e_Rmag;Imag;E_Imag;e_Imag,J_ApJ_899_162__1.vot,J_ApJ_899_162__1.meta.json
+J/ApJ/899/162,2,J/ApJ/899/162/fig4,g' band Evryscope light curve,71,3,MJD;gmag;e_gmag,J_ApJ_899_162__2.vot,J_ApJ_899_162__2.meta.json
+J/ApJ/907/70,0,J/ApJ/907/70/figure2,Combined table from original tables,16191,3,Date;Wave;Flux,J_ApJ_907_70__0.vot,J_ApJ_907_70__0.meta.json
+J/ApJ/912/19,0,J/ApJ/912/19/table1,*Summary of novae detected in the first 17 months of the Palomar Gattini-IR (PGIR) survey (see the Appendix section for details),12,18,PGIR;Name;RAJ2000;DEJ2000;MJD;Jmag;e_Jmag;phCl;spCl;phAv;spAv;Av;File1;Sp1;File2;Sp2;LC;Simbad,J_ApJ_912_19__0.vot,J_ApJ_912_19__0.meta.json
+J/ApJ/916/44,0,J/ApJ/916/44/table2,Journal of observations of V5669 Sgr by Subaru/HDS,4,9,Date;MJD;t;Setup;Exp;Airmass;File;fits;Sp,J_ApJ_916_44__0.vot,J_ApJ_916_44__0.meta.json
+J/ApJ/918/63,0,J/ApJ/918/63/table1,Afterglows found with ZTFReST during science validation,13,15,Name;f_Name;TNS;RAJ2000;DEJ2000;GLAT;Class;z;TW;Ref;gFade;rFade;Np;LC;Simbad,J_ApJ_918_63__0.vot,J_ApJ_918_63__0.meta.json
+J/ApJ/918/63,1,J/ApJ/918/63/fig347,"Forced PSF photometry light curves of the 5 fast transients (from Figures 3, 4 and 7)",239,8,Name;Inst;Obs;JD;omag;e_omag;LimOmag;Filt,J_ApJ_918_63__1.vot,J_ApJ_918_63__1.meta.json
+J/ApJ/920/127,0,J/ApJ/920/127/table1,Photometry from follow-up observations,453,7,MJD;Phase;Tel;Band;l_mag;mag;e_mag,J_ApJ_920_127__0.vot,J_ApJ_920_127__0.meta.json
+J/ApJ/920/127,1,J/ApJ/920/127/table2,Log of spectroscopic observations,6,8,Obs;MJD;Phase;Tel;Range;Res;HaRes;sp,J_ApJ_920_127__1.vot,J_ApJ_920_127__1.meta.json
+J/ApJ/920/127,2,J/ApJ/920/127/table5,Pre-eruption NIR photometry from Baade/FourStar,12,5,MJD;Phase;Band;mag;e_mag,J_ApJ_920_127__2.vot,J_ApJ_920_127__2.meta.json
+J/ApJ/920/127,3,J/ApJ/920/127/table6,Pre-eruption IR photometry from Spitzer/IRAC,24,14,MJD;Phase;d3.6Fnu;e_d3.6Fnu;3.6Fnu;e_3.6Fnu;3.6mag;e_3.6mag;d4.5Fnu;e_d4.5Fnu;4.5Fnu;e_4.5Fnu;4.5mag;e_4.5mag,J_ApJ_920_127__3.vot,J_ApJ_920_127__3.meta.json
+J/ApJ/920/127,4,J/ApJ/920/127/fig3,Optical and late-time NIR spectroscopic sequence of AT2019qyl,22875,4,MJD;Tel;lambda;Flambda,J_ApJ_920_127__4.vot,J_ApJ_920_127__4.meta.json

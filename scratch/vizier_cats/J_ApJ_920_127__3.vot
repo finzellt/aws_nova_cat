@@ -1,0 +1,476 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_920_127_table6" name="J/ApJ/920/127/table6">
+   <DESCRIPTION>
+    Pre-eruption IR photometry from Spitzer/IRAC
+   </DESCRIPTION>
+   <FIELD ID="MJD" datatype="double" name="MJD" precision="2" ucd="TIME_DATE" unit="d" width="8">
+    <DESCRIPTION>
+     [52964.06/58593.6] Modified Julian date (JD-2400000.5)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Phase" datatype="double" name="Phase" precision="2" ucd="TIME_PHASE" unit="d" width="8">
+    <DESCRIPTION>
+     [-5789/-158] Time since MJD 58752.12
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="d3.6Fnu" datatype="float" name="d3.6Fnu" precision="1" ucd="PHOT_IR_3.4" unit="mJy" width="4">
+    <DESCRIPTION>
+     [-1.5/8.3] Flux in IRAC 3.6um difference images
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_d3.6Fnu" datatype="float" name="e_d3.6Fnu" precision="1" ucd="ERROR" unit="mJy" width="4">
+    <DESCRIPTION>
+     [1.1/5] Uncertainty in d3.6Fnu
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="_3.6Fnu" datatype="float" name="3.6Fnu" precision="1" ucd="PHOT_IR_3.4" unit="mJy" width="4">
+    <DESCRIPTION>
+     [7.3/17.1] Total Flux in IRAC 3.6um (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_3.6Fnu" datatype="float" name="e_3.6Fnu" precision="1" ucd="ERROR" unit="mJy" width="4">
+    <DESCRIPTION>
+     [1.3/5] Uncertainty in 3.6Fnu
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="_3.6mag" datatype="float" name="3.6mag" precision="2" ucd="PHOT_IR_3.4" unit="mag" width="5">
+    <DESCRIPTION>
+     [18/19] IRAC 3.6um magnitude
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_3.6mag" datatype="float" name="e_3.6mag" precision="2" ucd="ERROR" unit="mag" width="5">
+    <DESCRIPTION>
+     [0.09/0.4] Uncertainty in 3.6mag
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="d4.5Fnu" datatype="float" name="d4.5Fnu" precision="1" ucd="PHOT_IR_4.2" unit="mJy" width="4">
+    <DESCRIPTION>
+     [-4.8/5.4]? Flux in IRAC 4.5um difference images
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="e_d4.5Fnu" datatype="float" name="e_d4.5Fnu" precision="1" ucd="ERROR" unit="mJy" width="4">
+    <DESCRIPTION>
+     [0.9/5.7]? Uncertainty in d4.5Fnu
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="_4.5Fnu" datatype="float" name="4.5Fnu" precision="1" ucd="PHOT_IR_4.2" unit="mJy" width="4">
+    <DESCRIPTION>
+     [3.5/13.7]? Total Flux in IRAC 4.5um (1)
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="e_4.5Fnu" datatype="float" name="e_4.5Fnu" precision="1" ucd="ERROR" unit="mJy" width="4">
+    <DESCRIPTION>
+     [1/5.7]? Uncertainty in 4.5Fnu
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="_4.5mag" datatype="float" name="4.5mag" precision="1" ucd="PHOT_IR_4.2" unit="mag" width="4">
+    <DESCRIPTION>
+     [17.8/19.1]? IRAC 4.5um magnitude
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="e_4.5mag" datatype="float" name="e_4.5mag" precision="1" ucd="ERROR" unit="mag" width="4">
+    <DESCRIPTION>
+     [0.1/1.1]? Uncertainty in 4.5mag
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>52964.06</TD>
+      <TD>-5788.06</TD>
+      <TD>-0.2</TD>
+      <TD> 3.2</TD>
+      <TD> 8.6</TD>
+      <TD> 3.3</TD>
+      <TD>18.80</TD>
+      <TD> 0.40</TD>
+      <TD> 2.2</TD>
+      <TD> 3.3</TD>
+      <TD>10.6</TD>
+      <TD> 3.3</TD>
+      <TD>18.0</TD>
+      <TD> 0.3</TD>
+     </TR>
+     <TR>
+      <TD>54462.88</TD>
+      <TD>-4289.24</TD>
+      <TD>-1.1</TD>
+      <TD> 1.1</TD>
+      <TD> 7.7</TD>
+      <TD> 1.3</TD>
+      <TD>18.90</TD>
+      <TD> 0.20</TD>
+      <TD>-0.7</TD>
+      <TD> 1.9</TD>
+      <TD> 7.6</TD>
+      <TD> 2.0</TD>
+      <TD>18.4</TD>
+      <TD> 0.3</TD>
+     </TR>
+     <TR>
+      <TD>54462.94</TD>
+      <TD>-4289.18</TD>
+      <TD> 1.8</TD>
+      <TD> 1.5</TD>
+      <TD>10.6</TD>
+      <TD> 1.7</TD>
+      <TD>18.60</TD>
+      <TD> 0.20</TD>
+      <TD>-0.2</TD>
+      <TD> 0.9</TD>
+      <TD> 8.2</TD>
+      <TD> 1.0</TD>
+      <TD>18.3</TD>
+      <TD> 0.1</TD>
+     </TR>
+     <TR>
+      <TD>55940.01</TD>
+      <TD>-2812.11</TD>
+      <TD> 5.9</TD>
+      <TD> 3.5</TD>
+      <TD>14.7</TD>
+      <TD> 3.6</TD>
+      <TD>18.20</TD>
+      <TD> 0.30</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>56729.51</TD>
+      <TD>-2022.61</TD>
+      <TD>-1.0</TD>
+      <TD> 2.5</TD>
+      <TD> 7.8</TD>
+      <TD> 2.6</TD>
+      <TD>18.90</TD>
+      <TD> 0.40</TD>
+      <TD>-2.3</TD>
+      <TD> 3.8</TD>
+      <TD> 6.1</TD>
+      <TD> 3.8</TD>
+      <TD>18.6</TD>
+      <TD> 0.6</TD>
+     </TR>
+     <TR>
+      <TD>56905.24</TD>
+      <TD>-1846.88</TD>
+      <TD> 8.3</TD>
+      <TD> 1.8</TD>
+      <TD>17.1</TD>
+      <TD> 2.0</TD>
+      <TD>18.00</TD>
+      <TD> 0.10</TD>
+      <TD> 3.2</TD>
+      <TD> 3.0</TD>
+      <TD>11.6</TD>
+      <TD> 3.0</TD>
+      <TD>17.9</TD>
+      <TD> 0.3</TD>
+     </TR>
+     <TR>
+      <TD>56933.42</TD>
+      <TD>-1818.71</TD>
+      <TD> 7.5</TD>
+      <TD> 1.2</TD>
+      <TD>16.3</TD>
+      <TD> 1.4</TD>
+      <TD>18.09</TD>
+      <TD> 0.09</TD>
+      <TD> 3.0</TD>
+      <TD> 2.6</TD>
+      <TD>11.4</TD>
+      <TD> 2.6</TD>
+      <TD>18.0</TD>
+      <TD> 0.2</TD>
+     </TR>
+     <TR>
+      <TD>56944.76</TD>
+      <TD>-1807.36</TD>
+      <TD> 6.3</TD>
+      <TD> 1.6</TD>
+      <TD>15.1</TD>
+      <TD> 1.8</TD>
+      <TD>18.20</TD>
+      <TD> 0.10</TD>
+      <TD> 1.6</TD>
+      <TD> 2.8</TD>
+      <TD>10.0</TD>
+      <TD> 2.8</TD>
+      <TD>18.1</TD>
+      <TD> 0.3</TD>
+     </TR>
+     <TR>
+      <TD>57279.43</TD>
+      <TD>-1472.69</TD>
+      <TD> 5.3</TD>
+      <TD> 5.0</TD>
+      <TD>14.1</TD>
+      <TD> 5.0</TD>
+      <TD>18.20</TD>
+      <TD> 0.40</TD>
+      <TD> 5.4</TD>
+      <TD> 2.6</TD>
+      <TD>13.7</TD>
+      <TD> 2.6</TD>
+      <TD>17.8</TD>
+      <TD> 0.2</TD>
+     </TR>
+     <TR>
+      <TD>57287.34</TD>
+      <TD>-1464.78</TD>
+      <TD> 4.8</TD>
+      <TD> 2.9</TD>
+      <TD>13.6</TD>
+      <TD> 3.0</TD>
+      <TD>18.30</TD>
+      <TD> 0.20</TD>
+      <TD> 2.2</TD>
+      <TD> 3.8</TD>
+      <TD>10.6</TD>
+      <TD> 3.9</TD>
+      <TD>18.0</TD>
+      <TD> 0.4</TD>
+     </TR>
+     <TR>
+      <TD>57294.71</TD>
+      <TD>-1457.41</TD>
+      <TD> 7.1</TD>
+      <TD> 1.8</TD>
+      <TD>15.9</TD>
+      <TD> 2.0</TD>
+      <TD>18.10</TD>
+      <TD> 0.10</TD>
+      <TD> 1.5</TD>
+      <TD> 3.0</TD>
+      <TD> 9.9</TD>
+      <TD> 3.1</TD>
+      <TD>18.1</TD>
+      <TD> 0.3</TD>
+     </TR>
+     <TR>
+      <TD>57308.56</TD>
+      <TD>-1443.56</TD>
+      <TD> 6.5</TD>
+      <TD> 1.9</TD>
+      <TD>15.3</TD>
+      <TD> 2.1</TD>
+      <TD>18.20</TD>
+      <TD> 0.10</TD>
+      <TD> 0.0</TD>
+      <TD> 2.0</TD>
+      <TD> 8.4</TD>
+      <TD> 2.0</TD>
+      <TD>18.3</TD>
+      <TD> 0.3</TD>
+     </TR>
+     <TR>
+      <TD>57440.10</TD>
+      <TD>-1312.02</TD>
+      <TD> 2.6</TD>
+      <TD> 2.4</TD>
+      <TD>11.4</TD>
+      <TD> 2.5</TD>
+      <TD>18.50</TD>
+      <TD> 0.20</TD>
+      <TD> 0.4</TD>
+      <TD> 2.8</TD>
+      <TD> 8.7</TD>
+      <TD> 2.9</TD>
+      <TD>18.2</TD>
+      <TD> 0.3</TD>
+     </TR>
+     <TR>
+      <TD>57447.58</TD>
+      <TD>-1304.54</TD>
+      <TD> 4.7</TD>
+      <TD> 2.3</TD>
+      <TD>13.5</TD>
+      <TD> 2.4</TD>
+      <TD>18.30</TD>
+      <TD> 0.20</TD>
+      <TD> 1.6</TD>
+      <TD> 3.0</TD>
+      <TD> 9.9</TD>
+      <TD> 3.1</TD>
+      <TD>18.1</TD>
+      <TD> 0.3</TD>
+     </TR>
+     <TR>
+      <TD>57466.94</TD>
+      <TD>-1285.18</TD>
+      <TD> 4.4</TD>
+      <TD> 3.2</TD>
+      <TD>13.2</TD>
+      <TD> 3.3</TD>
+      <TD>18.30</TD>
+      <TD> 0.30</TD>
+      <TD> 1.6</TD>
+      <TD> 3.0</TD>
+      <TD>10.0</TD>
+      <TD> 3.1</TD>
+      <TD>18.1</TD>
+      <TD> 0.3</TD>
+     </TR>
+     <TR>
+      <TD>57650.03</TD>
+      <TD>-1102.09</TD>
+      <TD> 1.0</TD>
+      <TD> 2.6</TD>
+      <TD> 9.8</TD>
+      <TD> 2.7</TD>
+      <TD>18.60</TD>
+      <TD> 0.30</TD>
+      <TD>-2.3</TD>
+      <TD> 3.5</TD>
+      <TD> 6.0</TD>
+      <TD> 3.5</TD>
+      <TD>18.6</TD>
+      <TD> 0.6</TD>
+     </TR>
+     <TR>
+      <TD>57673.69</TD>
+      <TD>-1078.43</TD>
+      <TD>-1.5</TD>
+      <TD> 2.9</TD>
+      <TD> 7.3</TD>
+      <TD> 3.0</TD>
+      <TD>19.00</TD>
+      <TD> 0.40</TD>
+      <TD>-4.8</TD>
+      <TD> 1.1</TD>
+      <TD> 3.5</TD>
+      <TD> 1.2</TD>
+      <TD>19.1</TD>
+      <TD> 0.4</TD>
+     </TR>
+     <TR>
+      <TD>57800.65</TD>
+      <TD> -951.47</TD>
+      <TD> 2.2</TD>
+      <TD> 4.0</TD>
+      <TD>11.1</TD>
+      <TD> 4.1</TD>
+      <TD>18.50</TD>
+      <TD> 0.40</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>57802.85</TD>
+      <TD> -949.27</TD>
+      <TD> 0.6</TD>
+      <TD> 2.4</TD>
+      <TD> 9.4</TD>
+      <TD> 2.5</TD>
+      <TD>18.70</TD>
+      <TD> 0.30</TD>
+      <TD>-2.6</TD>
+      <TD> 3.1</TD>
+      <TD> 5.7</TD>
+      <TD> 3.2</TD>
+      <TD>18.7</TD>
+      <TD> 0.6</TD>
+     </TR>
+     <TR>
+      <TD>58021.82</TD>
+      <TD> -730.30</TD>
+      <TD> 0.6</TD>
+      <TD> 1.9</TD>
+      <TD> 9.4</TD>
+      <TD> 2.0</TD>
+      <TD>18.70</TD>
+      <TD> 0.20</TD>
+      <TD>-3.1</TD>
+      <TD> 5.7</TD>
+      <TD> 5.3</TD>
+      <TD> 5.7</TD>
+      <TD>18.7</TD>
+      <TD> 1.1</TD>
+     </TR>
+     <TR>
+      <TD>58222.20</TD>
+      <TD> -529.92</TD>
+      <TD> 3.3</TD>
+      <TD> 2.4</TD>
+      <TD>12.1</TD>
+      <TD> 2.5</TD>
+      <TD>18.40</TD>
+      <TD> 0.20</TD>
+      <TD> 1.7</TD>
+      <TD> 3.3</TD>
+      <TD>10.1</TD>
+      <TD> 3.4</TD>
+      <TD>18.1</TD>
+      <TD> 0.4</TD>
+     </TR>
+     <TR>
+      <TD>58425.21</TD>
+      <TD> -326.91</TD>
+      <TD> 2.4</TD>
+      <TD> 1.3</TD>
+      <TD>11.2</TD>
+      <TD> 1.5</TD>
+      <TD>18.50</TD>
+      <TD> 0.10</TD>
+      <TD>-1.9</TD>
+      <TD> 3.7</TD>
+      <TD> 6.5</TD>
+      <TD> 3.7</TD>
+      <TD>18.5</TD>
+      <TD> 0.6</TD>
+     </TR>
+     <TR>
+      <TD>58545.83</TD>
+      <TD> -206.29</TD>
+      <TD> 6.7</TD>
+      <TD> 2.6</TD>
+      <TD>15.5</TD>
+      <TD> 2.7</TD>
+      <TD>18.10</TD>
+      <TD> 0.20</TD>
+      <TD> 2.8</TD>
+      <TD> 3.5</TD>
+      <TD>11.2</TD>
+      <TD> 3.6</TD>
+      <TD>18.0</TD>
+      <TD> 0.3</TD>
+     </TR>
+     <TR>
+      <TD>58593.58</TD>
+      <TD> -158.54</TD>
+      <TD> 6.3</TD>
+      <TD> 2.7</TD>
+      <TD>15.1</TD>
+      <TD> 2.8</TD>
+      <TD>18.20</TD>
+      <TD> 0.20</TD>
+      <TD> 2.7</TD>
+      <TD> 3.5</TD>
+      <TD>11.0</TD>
+      <TD> 3.6</TD>
+      <TD>18.0</TD>
+      <TD> 0.3</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

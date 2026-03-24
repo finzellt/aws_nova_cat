@@ -1,0 +1,430 @@
+{
+  "quarantined": [
+    {
+      "source_file": "J_ApJ_852_108__1.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/852/108/table2",
+      "description": "VLA observations of V1324 Sco",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "JD": "TIME_DATE"
+        },
+        {
+          "Date": "TIME_DATE"
+        },
+        {
+          "t-t0": "TIME_INTERVAL"
+        },
+        {
+          "Conf": "INST_SETUP"
+        },
+        {
+          "l_F4.5GHz": "CODE_LIMIT"
+        },
+        {
+          "F4.5GHz": "PHOT_FLUX_RADIO_5G"
+        },
+        {
+          "e_F4.5GHz": "ERROR"
+        },
+        {
+          "F7.8GHz": "PHOT_FLUX_RADIO_7.5G"
+        },
+        {
+          "e_F7.8GHz": "ERROR"
+        },
+        {
+          "F13.3GHz": "PHOT_FLUX_RADIO_15G"
+        },
+        {
+          "e_F13.3GHz": "ERROR"
+        },
+        {
+          "F17.4GHz": "PHOT_FLUX_RADIO_15G"
+        },
+        {
+          "e_F17.4GHz": "ERROR"
+        },
+        {
+          "l_F27.5GHz": "CODE_LIMIT"
+        },
+        {
+          "F27.5GHz": "PHOT_FLUX_RADIO_22G"
+        },
+        {
+          "e_F27.5GHz": "ERROR"
+        },
+        {
+          "l_F36.5GHz": "CODE_LIMIT"
+        },
+        {
+          "F36.5GHz": "PHOT_FLUX_RADIO_36G"
+        },
+        {
+          "e_F36.5GHz": "ERROR"
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_899_162__0.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/899/162/fig3a",
+      "description": "ANDICAM + CTIO Yale SMARTS 1.3m Telescope IR light curves",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "MJD": "TIME_DATE"
+        },
+        {
+          "Jmag": "PHOT_MAG_J"
+        },
+        {
+          "e_Jmag": "ERROR"
+        },
+        {
+          "Hmag": "PHOT_MAG_H"
+        },
+        {
+          "e_Hmag": "ERROR"
+        },
+        {
+          "Kmag": "PHOT_MAG_K"
+        },
+        {
+          "e_Kmag": "ERROR"
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_899_162__1.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/899/162/fig3b",
+      "description": "ANDICAM + CTIO Yale SMARTS 1.3m Telescope optical light curves",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "MJD": "TIME_DATE"
+        },
+        {
+          "Bmag": "PHOT_JHN_B"
+        },
+        {
+          "E_Bmag": "ERROR"
+        },
+        {
+          "e_Bmag": "ERROR"
+        },
+        {
+          "Vmag": "PHOT_JHN_V"
+        },
+        {
+          "E_Vmag": "ERROR"
+        },
+        {
+          "e_Vmag": "ERROR"
+        },
+        {
+          "Rmag": "PHOT_COUS_R"
+        },
+        {
+          "E_Rmag": "ERROR"
+        },
+        {
+          "e_Rmag": "ERROR"
+        },
+        {
+          "Imag": "PHOT_COUS_I"
+        },
+        {
+          "E_Imag": "ERROR"
+        },
+        {
+          "e_Imag": "ERROR"
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_899_162__2.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/899/162/fig4",
+      "description": "g' band Evryscope light curve",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "MJD": "TIME_DATE"
+        },
+        {
+          "gmag": "PHOT_GUNN_G"
+        },
+        {
+          "e_gmag": "ERROR"
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_912_19__0.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/912/19/table1",
+      "description": "*Summary of novae detected in the first 17 months of the Palomar Gattini-IR (PGIR) survey (see the Appendix section for details)",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "PGIR": "ID_MAIN"
+        },
+        {
+          "Name": "ID_CROSSID"
+        },
+        {
+          "RAJ2000": "POS_EQ_RA_MAIN"
+        },
+        {
+          "DEJ2000": "POS_EQ_DEC_MAIN"
+        },
+        {
+          "MJD": "TIME_DATE"
+        },
+        {
+          "Jmag": "PHOT_MAG_J"
+        },
+        {
+          "e_Jmag": "ERROR"
+        },
+        {
+          "phCl": "PHOT_CLASS"
+        },
+        {
+          "spCl": "SPECT_TYPE_GENERAL"
+        },
+        {
+          "phAv": "PHOT_EXTINCTION_ISM"
+        },
+        {
+          "spAv": "PHOT_EXTINCTION_ISM"
+        },
+        {
+          "Av": "PHOT_EXTINCTION_TOTAL"
+        },
+        {
+          "File1": "ID_FILE"
+        },
+        {
+          "Sp1": "DATA_LINK"
+        },
+        {
+          "File2": "ID_FILE"
+        },
+        {
+          "Sp2": "DATA_LINK"
+        },
+        {
+          "LC": "DATA_LINK"
+        },
+        {
+          "Simbad": "DATA_LINK"
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_918_63__0.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/918/63/table1",
+      "description": "Afterglows found with ZTFReST during science validation",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "Name": "ID_MAIN"
+        },
+        {
+          "f_Name": "CODE_MISC"
+        },
+        {
+          "TNS": "ID_ALTERNATIVE"
+        },
+        {
+          "RAJ2000": "POS_EQ_RA_MAIN"
+        },
+        {
+          "DEJ2000": "POS_EQ_DEC_MAIN"
+        },
+        {
+          "GLAT": "POS_GAL_LAT"
+        },
+        {
+          "Class": "CLASS_OBJECT"
+        },
+        {
+          "z": "REDSHIFT_HC"
+        },
+        {
+          "TW": "REFER_CODE"
+        },
+        {
+          "Ref": "REFER_CODE"
+        },
+        {
+          "gFade": "PHOT_FLUX_RATIO"
+        },
+        {
+          "rFade": "PHOT_FLUX_RATIO"
+        },
+        {
+          "Np": "NUMBER"
+        },
+        {
+          "LC": "DATA_LINK"
+        },
+        {
+          "Simbad": "DATA_LINK"
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_920_127__2.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/920/127/table5",
+      "description": "Pre-eruption NIR photometry from Baade/FourStar",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "MJD": "TIME_DATE"
+        },
+        {
+          "Phase": "TIME_PHASE"
+        },
+        {
+          "Band": "OBS_BAND"
+        },
+        {
+          "mag": "PHOT_MAG_UNDEF"
+        },
+        {
+          "e_mag": "ERROR"
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_920_127__2.vot.xml",
+      "source_format": "xml",
+      "table_name": "J_ApJ_920_127__2.vot",
+      "description": "",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "MJD": "TIME_DATE"
+        },
+        {
+          "Phase": "TIME_PHASE"
+        },
+        {
+          "Band": "OBS_BAND"
+        },
+        {
+          "mag": "PHOT_MAG_UNDEF"
+        },
+        {
+          "e_mag": "ERROR"
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_920_127__2_trimmed.vot",
+      "source_format": "vot",
+      "table_name": "J_ApJ_920_127__2_trimmed",
+      "description": "",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "MJD": "TIME_DATE"
+        },
+        {
+          "Phase": "TIME_PHASE"
+        },
+        {
+          "Band": "OBS_BAND"
+        },
+        {
+          "mag": "PHOT_MAG_UNDEF"
+        },
+        {
+          "e_mag": "ERROR"
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_920_127__2_trimmed.vot.xml",
+      "source_format": "xml",
+      "table_name": "J_ApJ_920_127__2_trimmed.vot",
+      "description": "",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "MJD": "TIME_DATE"
+        },
+        {
+          "Phase": "TIME_PHASE"
+        },
+        {
+          "Band": "OBS_BAND"
+        },
+        {
+          "mag": "PHOT_MAG_UNDEF"
+        },
+        {
+          "e_mag": "ERROR"
+        }
+      ]
+    },
+    {
+      "source_file": "J_ApJ_920_127__3.vot",
+      "source_format": "vot",
+      "table_name": "J/ApJ/920/127/table6",
+      "description": "Pre-eruption IR photometry from Spitzer/IRAC",
+      "quarantine_reason": "instrument_provenance_unresolvable",
+      "detected_columns": [
+        {
+          "MJD": "TIME_DATE"
+        },
+        {
+          "Phase": "TIME_PHASE"
+        },
+        {
+          "d3.6Fnu": "PHOT_IR_3.4"
+        },
+        {
+          "e_d3.6Fnu": "ERROR"
+        },
+        {
+          "3.6Fnu": "PHOT_IR_3.4"
+        },
+        {
+          "e_3.6Fnu": "ERROR"
+        },
+        {
+          "3.6mag": "PHOT_IR_3.4"
+        },
+        {
+          "e_3.6mag": "ERROR"
+        },
+        {
+          "d4.5Fnu": "PHOT_IR_4.2"
+        },
+        {
+          "e_d4.5Fnu": "ERROR"
+        },
+        {
+          "4.5Fnu": "PHOT_IR_4.2"
+        },
+        {
+          "e_4.5Fnu": "ERROR"
+        },
+        {
+          "4.5mag": "PHOT_IR_4.2"
+        },
+        {
+          "e_4.5mag": "ERROR"
+        }
+      ]
+    }
+  ]
+}

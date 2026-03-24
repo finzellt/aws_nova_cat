@@ -1,0 +1,621 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_899_162_fig3b" name="J/ApJ/899/162/fig3b">
+   <DESCRIPTION>
+    ANDICAM + CTIO Yale SMARTS 1.3m Telescope optical light curves
+   </DESCRIPTION>
+   <FIELD ID="MJD" datatype="double" name="MJD" precision="3" ucd="TIME_DATE" unit="d" width="9">
+    <DESCRIPTION>
+     [58203/58329] Modified Julian Date; JD-2400000.5
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Bmag" datatype="float" name="Bmag" precision="3" ucd="PHOT_JHN_B" unit="mag" width="6">
+    <DESCRIPTION>
+     [6.34/10.2] Johnson B band ANDICAM/1.3m magnitude
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="E_Bmag" datatype="float" name="E_Bmag" precision="3" ucd="ERROR" unit="mag" width="6">
+    <DESCRIPTION>
+     [0.06/0.09] Upper uncertainty in Bmag
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_Bmag" datatype="float" name="e_Bmag" precision="3" ucd="ERROR" unit="mag" width="6">
+    <DESCRIPTION>
+     [0.06/0.09] Lower uncertainty in Bmag
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Vmag" datatype="float" name="Vmag" precision="3" ucd="PHOT_JHN_V" unit="mag" width="6">
+    <DESCRIPTION>
+     [5.78/9.77] Johnson V band ANDICAM/1.3m magnitude
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="E_Vmag" datatype="float" name="E_Vmag" precision="3" ucd="ERROR" unit="mag" width="6">
+    <DESCRIPTION>
+     [0.04/0.06] Upper uncertainty in Vmag
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_Vmag" datatype="float" name="e_Vmag" precision="3" ucd="ERROR" unit="mag" width="6">
+    <DESCRIPTION>
+     [0.04/0.06] Lower uncertainty in Vmag
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Rmag" datatype="float" name="Rmag" precision="3" ucd="PHOT_COUS_R" unit="mag" width="6">
+    <DESCRIPTION>
+     [4.9/7.8] Cousins R band ANDICAM/1.3m magnitude
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="E_Rmag" datatype="float" name="E_Rmag" precision="3" ucd="ERROR" unit="mag" width="6">
+    <DESCRIPTION>
+     [0.05/0.06] Upper uncertainty in Rmag
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_Rmag" datatype="float" name="e_Rmag" precision="3" ucd="ERROR" unit="mag" width="6">
+    <DESCRIPTION>
+     [0.05/0.06] Lower uncertainty in Rmag
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Imag" datatype="float" name="Imag" precision="3" ucd="PHOT_COUS_I" unit="mag" width="6">
+    <DESCRIPTION>
+     [4.36/7.92] Cousins I band ANDICAM/1.3m magnitude
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="E_Imag" datatype="float" name="E_Imag" precision="3" ucd="ERROR" unit="mag" width="6">
+    <DESCRIPTION>
+     [0.06/0.08] Upper uncertainty in Imag
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_Imag" datatype="float" name="e_Imag" precision="3" ucd="ERROR" unit="mag" width="6">
+    <DESCRIPTION>
+     [0.06/0.08] Lower uncertainty in Imag
+    </DESCRIPTION>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>58203.100</TD>
+      <TD> 6.600</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 5.788</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.265</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.020</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58205.136</TD>
+      <TD> 6.995</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.004</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.290</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.832</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58206.112</TD>
+      <TD> 7.189</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.285</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.612</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.140</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58207.087</TD>
+      <TD> 7.117</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.257</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.538</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.000</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58208.119</TD>
+      <TD> 6.992</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.230</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.522</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.023</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58209.128</TD>
+      <TD> 7.199</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.454</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.710</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.187</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58210.081</TD>
+      <TD> 7.301</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.532</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.793</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.279</TD>
+      <TD> 0.063</TD>
+      <TD> 0.063</TD>
+     </TR>
+     <TR>
+      <TD>58211.102</TD>
+      <TD> 7.212</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.587</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.811</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.285</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58212.108</TD>
+      <TD> 7.242</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.686</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.895</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.389</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58213.067</TD>
+      <TD> 7.191</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.627</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.828</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.351</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58214.093</TD>
+      <TD> 6.578</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.023</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.371</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.956</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58215.069</TD>
+      <TD> 7.057</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.491</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.699</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.260</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58216.095</TD>
+      <TD> 7.038</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.563</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.701</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.229</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58217.063</TD>
+      <TD> 6.934</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.424</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.539</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.063</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58220.077</TD>
+      <TD> 6.655</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.216</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.324</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.844</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58221.054</TD>
+      <TD> 6.704</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.290</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.390</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.950</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58222.063</TD>
+      <TD> 6.345</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 5.844</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 4.901</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.368</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58223.098</TD>
+      <TD> 6.457</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 5.980</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.021</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.556</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58224.085</TD>
+      <TD> 6.456</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 5.982</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.074</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.666</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58225.042</TD>
+      <TD> 6.557</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.141</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.170</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.780</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58227.054</TD>
+      <TD> 6.657</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.254</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.199</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.825</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58228.046</TD>
+      <TD> 6.709</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.301</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.192</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.813</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58229.065</TD>
+      <TD> 6.685</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 6.279</TD>
+      <TD> 0.045</TD>
+      <TD> 0.045</TD>
+      <TD> 5.129</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 4.751</TD>
+      <TD> 0.062</TD>
+      <TD> 0.062</TD>
+     </TR>
+     <TR>
+      <TD>58237.036</TD>
+      <TD> 7.278</TD>
+      <TD> 0.068</TD>
+      <TD> 0.068</TD>
+      <TD> 6.983</TD>
+      <TD> 0.047</TD>
+      <TD> 0.047</TD>
+      <TD> 5.620</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.360</TD>
+      <TD> 0.063</TD>
+      <TD> 0.063</TD>
+     </TR>
+     <TR>
+      <TD>58245.030</TD>
+      <TD> 7.804</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 7.474</TD>
+      <TD> 0.046</TD>
+      <TD> 0.046</TD>
+      <TD> 5.907</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 5.715</TD>
+      <TD> 0.063</TD>
+      <TD> 0.063</TD>
+     </TR>
+     <TR>
+      <TD>58253.007</TD>
+      <TD> 8.723</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 8.393</TD>
+      <TD> 0.047</TD>
+      <TD> 0.047</TD>
+      <TD> 6.439</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 6.252</TD>
+      <TD> 0.063</TD>
+      <TD> 0.063</TD>
+     </TR>
+     <TR>
+      <TD>58261.045</TD>
+      <TD> 8.897</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 8.619</TD>
+      <TD> 0.046</TD>
+      <TD> 0.046</TD>
+      <TD> 6.705</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 6.544</TD>
+      <TD> 0.063</TD>
+      <TD> 0.063</TD>
+     </TR>
+     <TR>
+      <TD>58270.982</TD>
+      <TD> 9.365</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 9.022</TD>
+      <TD> 0.046</TD>
+      <TD> 0.046</TD>
+      <TD> 7.044</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 6.935</TD>
+      <TD> 0.063</TD>
+      <TD> 0.063</TD>
+     </TR>
+     <TR>
+      <TD>58277.974</TD>
+      <TD> 9.237</TD>
+      <TD> 0.067</TD>
+      <TD> 0.067</TD>
+      <TD> 9.021</TD>
+      <TD> 0.046</TD>
+      <TD> 0.046</TD>
+      <TD> 7.115</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 6.977</TD>
+      <TD> 0.063</TD>
+      <TD> 0.063</TD>
+     </TR>
+     <TR>
+      <TD>58281.979</TD>
+      <TD> 9.662</TD>
+      <TD> 0.068</TD>
+      <TD> 0.068</TD>
+      <TD> 9.361</TD>
+      <TD> 0.046</TD>
+      <TD> 0.046</TD>
+      <TD> 7.321</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 7.219</TD>
+      <TD> 0.063</TD>
+      <TD> 0.063</TD>
+     </TR>
+     <TR>
+      <TD>58288.968</TD>
+      <TD> 9.589</TD>
+      <TD> 0.068</TD>
+      <TD> 0.068</TD>
+      <TD> 9.352</TD>
+      <TD> 0.046</TD>
+      <TD> 0.046</TD>
+      <TD> 7.377</TD>
+      <TD> 0.053</TD>
+      <TD> 0.053</TD>
+      <TD> 7.302</TD>
+      <TD> 0.063</TD>
+      <TD> 0.063</TD>
+     </TR>
+     <TR>
+      <TD>58295.958</TD>
+      <TD>10.093</TD>
+      <TD> 0.071</TD>
+      <TD> 0.071</TD>
+      <TD> 9.731</TD>
+      <TD> 0.049</TD>
+      <TD> 0.049</TD>
+      <TD> 7.684</TD>
+      <TD> 0.054</TD>
+      <TD> 0.054</TD>
+      <TD> 7.659</TD>
+      <TD> 0.064</TD>
+      <TD> 0.064</TD>
+     </TR>
+     <TR>
+      <TD>58307.956</TD>
+      <TD>10.101</TD>
+      <TD> 0.070</TD>
+      <TD> 0.070</TD>
+      <TD> 9.722</TD>
+      <TD> 0.048</TD>
+      <TD> 0.048</TD>
+      <TD> 7.724</TD>
+      <TD> 0.054</TD>
+      <TD> 0.054</TD>
+      <TD> 7.763</TD>
+      <TD> 0.064</TD>
+      <TD> 0.064</TD>
+     </TR>
+     <TR>
+      <TD>58314.961</TD>
+      <TD>10.025</TD>
+      <TD> 0.070</TD>
+      <TD> 0.070</TD>
+      <TD> 9.732</TD>
+      <TD> 0.048</TD>
+      <TD> 0.048</TD>
+      <TD> 7.752</TD>
+      <TD> 0.055</TD>
+      <TD> 0.055</TD>
+      <TD> 7.854</TD>
+      <TD> 0.064</TD>
+      <TD> 0.064</TD>
+     </TR>
+     <TR>
+      <TD>58321.959</TD>
+      <TD>10.133</TD>
+      <TD> 0.082</TD>
+      <TD> 0.083</TD>
+      <TD> 9.767</TD>
+      <TD> 0.059</TD>
+      <TD> 0.059</TD>
+      <TD> 7.796</TD>
+      <TD> 0.058</TD>
+      <TD> 0.058</TD>
+      <TD> 7.872</TD>
+      <TD> 0.071</TD>
+      <TD> 0.071</TD>
+     </TR>
+     <TR>
+      <TD>58328.965</TD>
+      <TD>10.105</TD>
+      <TD> 0.071</TD>
+      <TD> 0.071</TD>
+      <TD> 9.755</TD>
+      <TD> 0.048</TD>
+      <TD> 0.048</TD>
+      <TD> 7.799</TD>
+      <TD> 0.056</TD>
+      <TD> 0.056</TD>
+      <TD> 7.919</TD>
+      <TD> 0.065</TD>
+      <TD> 0.065</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

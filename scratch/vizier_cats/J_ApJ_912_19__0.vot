@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_912_19_table1" name="J/ApJ/912/19/table1">
+   <DESCRIPTION>
+    *Summary of novae detected in the first 17 months of the Palomar
+    Gattini-IR (PGIR) survey (see the Appendix section for details)
+   </DESCRIPTION>
+   <FIELD ID="PGIR" arraysize="5" datatype="char" name="PGIR" ucd="ID_MAIN">
+    <DESCRIPTION>
+     PGIR name
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Name" arraysize="9" datatype="char" name="Name" ucd="ID_CROSSID">
+    <DESCRIPTION>
+     Name of the nova
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="RAJ2000" arraysize="10" datatype="char" name="RAJ2000" ucd="POS_EQ_RA_MAIN" xtype="hms">
+    <DESCRIPTION>
+     Hour of right ascension (J2000)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="DEJ2000" arraysize="11" datatype="char" name="DEJ2000" ucd="POS_EQ_DEC_MAIN" xtype="dms">
+    <DESCRIPTION>
+     Degree of declination (J2000)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="MJD" datatype="double" name="MJD" precision="2" ucd="TIME_DATE" unit="d" width="8">
+    <DESCRIPTION>
+     [58685.2/59180.3] Modified Julian Date, first detection (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Jmag" datatype="float" name="Jmag" precision="2" ucd="PHOT_MAG_J" unit="mag" width="5">
+    <DESCRIPTION>
+     [6.22/12.07] Peak J-band Vega magnitude (2)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_Jmag" datatype="float" name="e_Jmag" precision="2" ucd="ERROR" unit="mag" width="5">
+    <DESCRIPTION>
+     [0.01/0.03] Uncertainty on the Jmag
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="phCl" arraysize="8" datatype="char" name="phCl" ucd="PHOT_CLASS">
+    <DESCRIPTION>
+     Photometric class of the nova based on classification schemes of
+     Strope+ 2010, J/AJ/140/34
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="spCl" arraysize="9*" datatype="char" name="spCl" ucd="SPECT_TYPE_GENERAL">
+    <DESCRIPTION>
+     Spectroscopic class of the nova based on classification schemes
+     of Williams+ 1992AJ....104..725W
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="phAv" datatype="float" name="phAv" precision="1" ucd="PHOT_EXTINCTION_ISM" width="4">
+    <DESCRIPTION>
+     [1/9.4]? Estimated extinction toward the nova using the
+     photometric color, A_V,c_
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="spAv" arraysize="15" datatype="char" name="spAv" ucd="PHOT_EXTINCTION_ISM">
+    <DESCRIPTION>
+     Estimated extinction toward the nova using the spectroscopic
+     method, A_V,s_ (3)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Av" datatype="float" name="Av" precision="1" ucd="PHOT_EXTINCTION_TOTAL" width="4">
+    <DESCRIPTION>
+     [1.5/12.1] The total Galactic extinction along this direction
+     estimated in Schlafly &amp; Finkbeiner (2011ApJ...737..103S)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="File1" arraysize="32" datatype="char" name="File1" ucd="ID_FILE">
+    <DESCRIPTION>
+     Name of the spectrum in ASCII format in subdirectory "sp"
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Sp1" arraysize="3" datatype="char" name="Sp1" ucd="DATA_LINK">
+    <DESCRIPTION>
+     Interactive plot of the spectrum
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="File2" arraysize="31" datatype="char" name="File2" ucd="ID_FILE">
+    <DESCRIPTION>
+     Name of a second spectrum (if any) in ASCII format in
+     subdirectory "sp"
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Sp2" arraysize="3" datatype="char" name="Sp2" ucd="DATA_LINK">
+    <DESCRIPTION>
+     Interactive plot of the spectrum
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="LC" arraysize="2" datatype="char" name="LC" ucd="DATA_LINK">
+    <DESCRIPTION>
+     Interactive plot of PGIR light curve
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Simbad" arraysize="6*" datatype="char" name="Simbad" ucd="DATA_LINK">
+    <DESCRIPTION>
+     Simbad column added by the CDS
+    </DESCRIPTION>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>20ekz</TD>
+      <TD>V3731 Oph</TD>
+      <TD>17 38 35.1</TD>
+      <TD>-25 19 02.9</TD>
+      <TD>58685.25</TD>
+      <TD> 8.71</TD>
+      <TD> 0.01</TD>
+      <TD>S class?</TD>
+      <TD>He/N?</TD>
+      <TD> 6.4</TD>
+      <TD/>
+      <TD> 5.5</TD>
+      <TD>PGIRN20ekz_20200915_Keck1_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD/>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>19bte</TD>
+      <TD>V2860 Ori</TD>
+      <TD>06 09 57.4</TD>
+      <TD>+12 12 24.8</TD>
+      <TD>58735.52</TD>
+      <TD>12.07</TD>
+      <TD> 0.03</TD>
+      <TD>D class</TD>
+      <TD>He/N</TD>
+      <TD> 1.0</TD>
+      <TD>1.7 (K 7699)</TD>
+      <TD> 2.1</TD>
+      <TD>PGIRN19bte_20191005_P200_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD>PGIRN19bte_20191022_P200_v2.dat</TD>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>19bgv</TD>
+      <TD>V569 Vul</TD>
+      <TD>19 52 08.2</TD>
+      <TD>+27 42 21.1</TD>
+      <TD>58716.28</TD>
+      <TD> 8.42</TD>
+      <TD> 0.01</TD>
+      <TD>S class</TD>
+      <TD>He/N</TD>
+      <TD> 8.9</TD>
+      <TD>10.0 (K 7699)</TD>
+      <TD> 9.6</TD>
+      <TD>PGIRN19bgv_20191022_P200_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD>PGIRN19bgv_20190907_P200_v2.dat</TD>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>19brv</TD>
+      <TD>V2891 Cyg</TD>
+      <TD>21 09 25.5</TD>
+      <TD>+48 10 51.9</TD>
+      <TD>58743.25</TD>
+      <TD> 8.83</TD>
+      <TD> 0.01</TD>
+      <TD>F class</TD>
+      <TD>Fe II</TD>
+      <TD> 7.3</TD>
+      <TD>12.2 (K 7699)</TD>
+      <TD>12.1</TD>
+      <TD>PGIRN19brv_20191003_P200_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD>PGIRN19brv_20191022_P200_v1.dat</TD>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>19fai</TD>
+      <TD>V3890 Sgr</TD>
+      <TD>18 30 43.1</TD>
+      <TD>-24 01 10.5</TD>
+      <TD>58744.14</TD>
+      <TD> 9.92</TD>
+      <TD> 0.01</TD>
+      <TD/>
+      <TD>Symbiotic</TD>
+      <TD/>
+      <TD>1.9 (Na D1)</TD>
+      <TD> 1.5</TD>
+      <TD>PGIRN19fai_20191022_P200_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD>PGIRN19fai_20191105_P200_v1.dat</TD>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>20dcl</TD>
+      <TD>V659 Sct</TD>
+      <TD>18 39 59.7</TD>
+      <TD>-10 25 43.1</TD>
+      <TD>58904.56</TD>
+      <TD> 7.59</TD>
+      <TD> 0.01</TD>
+      <TD>J class</TD>
+      <TD>Hybrid</TD>
+      <TD> 2.9</TD>
+      <TD>4.0 (K 7699)</TD>
+      <TD> 5.7</TD>
+      <TD>PGIRN20dcl_20191113_SSO_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD>PGIRN20dcl_20200512_IRTF_v1.dat</TD>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>20duo</TD>
+      <TD>V2000 Aql</TD>
+      <TD>18 43 53.4</TD>
+      <TD>+00 03 51.7</TD>
+      <TD>58981.34</TD>
+      <TD>10.38</TD>
+      <TD> 0.01</TD>
+      <TD>S class</TD>
+      <TD>Fe II</TD>
+      <TD> 9.4</TD>
+      <TD/>
+      <TD> 8.4</TD>
+      <TD>PGIRN20duo_20200625_P200_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD>PGIRN20duo_20200627_IRTF_v1.dat</TD>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>20dsv</TD>
+      <TD>V6567 Sgr</TD>
+      <TD>18 22 45.2</TD>
+      <TD>-19 36 02.6</TD>
+      <TD>59001.43</TD>
+      <TD> 9.01</TD>
+      <TD> 0.01</TD>
+      <TD>O class</TD>
+      <TD>Fe II</TD>
+      <TD> 4.6</TD>
+      <TD>4.3 (DIB 5780)</TD>
+      <TD> 4.7</TD>
+      <TD>PGIRN20dsv_20200627_IRTF_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD>PGIRN20dsv_20200628_SSO_v1.dat</TD>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>20eig</TD>
+      <TD>V2029 Aql</TD>
+      <TD>19 14 27.0</TD>
+      <TD>+14 44 32.0</TD>
+      <TD>59043.26</TD>
+      <TD>10.41</TD>
+      <TD> 0.02</TD>
+      <TD>C class</TD>
+      <TD>Fe II</TD>
+      <TD> 6.1</TD>
+      <TD>5.7 (DIB 5780)</TD>
+      <TD> 5.9</TD>
+      <TD>PGIRN20eig_20200826_P200_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD>PGIRN20eig_20200904_P200_v1.dat</TD>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>20emj</TD>
+      <TD>V1391 Cas</TD>
+      <TD>00 11 42.8</TD>
+      <TD>+66 11 19.1</TD>
+      <TD>59076.48</TD>
+      <TD> 8.04</TD>
+      <TD> 0.01</TD>
+      <TD>D class</TD>
+      <TD>Fe II</TD>
+      <TD> 4.7</TD>
+      <TD>4.6 (DIB 5780)</TD>
+      <TD> 4.0</TD>
+      <TD>PGIRN20emj_20200828_P200_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD>PGIRN20emj_20200904_P200_v1.dat</TD>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>20evr</TD>
+      <TD>V6593 Sgr</TD>
+      <TD>17 54 59.9</TD>
+      <TD>-21 22 41.3</TD>
+      <TD>59124.11</TD>
+      <TD> 6.98</TD>
+      <TD> 0.01</TD>
+      <TD/>
+      <TD>Fe II</TD>
+      <TD> 4.2</TD>
+      <TD/>
+      <TD> 4.7</TD>
+      <TD>PGIRN20evr_20201029_P200_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD/>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+     <TR>
+      <TD>20fbf</TD>
+      <TD>V1112 Per</TD>
+      <TD>04 29 18.7</TD>
+      <TD>+43 54 21.5</TD>
+      <TD>59180.22</TD>
+      <TD> 6.22</TD>
+      <TD> 0.01</TD>
+      <TD>D class</TD>
+      <TD>R-Hybrid</TD>
+      <TD> 2.3</TD>
+      <TD>2.4 (K 7699)</TD>
+      <TD> 2.1</TD>
+      <TD>PGIRN20fbf_20201212_P200_v1.dat</TD>
+      <TD>Sp1</TD>
+      <TD>PGIRN20fbf_20201222_P200_v1.dat</TD>
+      <TD>Sp2</TD>
+      <TD>LC</TD>
+      <TD>Simbad</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_852_108_table1" name="J/ApJ/852/108/table1">
+   <DESCRIPTION>
+    Table of photometric data
+   </DESCRIPTION>
+   <FIELD ID="Date" arraysize="10" datatype="char" name="Date" ucd="TIME_DATE" xtype="timestamp">
+    <DESCRIPTION>
+     UT date of the observation
+    </DESCRIPTION>
+    <VALUES null=" "/>
+   </FIELD>
+   <FIELD ID="JD" datatype="double" name="JD" precision="3" ucd="TIME_DATE" unit="d" width="11">
+    <DESCRIPTION>
+     Julian Date of the observation
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="t-t0" datatype="double" name="t-t0" precision="3" ucd="TIME_INTERVAL" unit="d" width="9">
+    <DESCRIPTION>
+     [-2413.2/446] Days relative to 2012 June 1
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Filt" arraysize="4" datatype="char" name="Filt" ucd="INST_FILTER_CODE">
+    <DESCRIPTION>
+     Filter used (I, V, B, R, J, K, H or UVM2)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="mag" datatype="float" name="mag" precision="2" ucd="PHOT_MAG_UNDEF" unit="mag" width="5">
+    <DESCRIPTION>
+     [4.6/25.2] Observed magnitude in Filter
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_mag" datatype="float" name="e_mag" precision="2" ucd="ERROR" unit="mag" width="5">
+    <DESCRIPTION>
+     [0/5] Uncertainty in mag
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Obs" arraysize="7*" datatype="char" name="Obs" ucd="ID_HUMAN">
+    <DESCRIPTION>
+     Observer/Group identifier (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Tel" arraysize="11" datatype="char" name="Tel" ucd="TEL_ID">
+    <DESCRIPTION>
+     Telescope information (2)
+    </DESCRIPTION>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>2012-06-03</TD>
+      <TD>2456081.942</TD>
+      <TD>    2.942</TD>
+      <TD>B</TD>
+      <TD>15.25</TD>
+      <TD> 0.03</TD>
+      <TD>MOA</TD>
+      <TD>MJUO-B</TD>
+     </TR>
+     <TR>
+      <TD>2012-07-09</TD>
+      <TD>2456117.626</TD>
+      <TD>   38.626</TD>
+      <TD>H</TD>
+      <TD> 6.84</TD>
+      <TD> 0.00</TD>
+      <TD>Walters</TD>
+      <TD>SMARTS</TD>
+     </TR>
+     <TR>
+      <TD>2005-10-22</TD>
+      <TD>2453665.858</TD>
+      <TD>-2413.142</TD>
+      <TD>I</TD>
+      <TD>19.19</TD>
+      <TD> 0.10</TD>
+      <TD>MOA</TD>
+      <TD>MJUO-Ibroad</TD>
+     </TR>
+     <TR>
+      <TD>2012-07-06</TD>
+      <TD>2456114.774</TD>
+      <TD>   35.774</TD>
+      <TD>J</TD>
+      <TD> 6.94</TD>
+      <TD> 0.01</TD>
+      <TD>Walters</TD>
+      <TD>SMARTS</TD>
+     </TR>
+     <TR>
+      <TD>2012-07-06</TD>
+      <TD>2456114.774</TD>
+      <TD>   35.774</TD>
+      <TD>K</TD>
+      <TD> 6.19</TD>
+      <TD> 0.01</TD>
+      <TD>Walters</TD>
+      <TD>SMARTS</TD>
+     </TR>
+     <TR>
+      <TD>2012-06-12</TD>
+      <TD>2456090.838</TD>
+      <TD>   11.838</TD>
+      <TD>R</TD>
+      <TD> 9.32</TD>
+      <TD> 0.02</TD>
+      <TD>AAVSO</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>2012-06-22</TD>
+      <TD>2456100.500</TD>
+      <TD>   21.000</TD>
+      <TD>UVM2</TD>
+      <TD>20.80</TD>
+      <TD> 0.07</TD>
+      <TD>Swift</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>2012-06-03</TD>
+      <TD>2456081.856</TD>
+      <TD>    2.856</TD>
+      <TD>V</TD>
+      <TD>13.64</TD>
+      <TD> 0.03</TD>
+      <TD>MOA</TD>
+      <TD>MJUO-V</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_835_274_table5" name="J/ApJ/835/274/table5">
+   <DESCRIPTION>
+    Reddening-corrected fluxes for late June 2012 and May 2015
+   </DESCRIPTION>
+   <FIELD ID="lambda1" datatype="short" name="lambda1" ucd="SPECT_WAVELENGTH_MISC" unit="0.1nm" width="5">
+    <DESCRIPTION>
+     [3934/10126] Wavelength (or lower range of wavelength); in
+     Angstroms units
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="lambda2" datatype="short" name="lambda2" ucd="SPECT_WAVELENGTH_MISC" unit="0.1nm" width="4">
+    <DESCRIPTION>
+     ? Upper range of Wavelength; Angstroms
+    </DESCRIPTION>
+    <VALUES null="-32768"/>
+   </FIELD>
+   <FIELD ID="Species" arraysize="18*" datatype="char" name="Species" ucd="AT_SPECIES">
+    <DESCRIPTION>
+     Species identifier
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="F-Jun20" datatype="float" name="F-Jun20" precision="E1" ucd="SPECT_FLUX_VALUE" unit="mW.m**-2" width="8">
+    <DESCRIPTION>
+     ? The June 20, 2012 line flux (G1)
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="F-Jun22" datatype="float" name="F-Jun22" precision="E1" ucd="SPECT_FLUX_VALUE" unit="mW.m**-2" width="8">
+    <DESCRIPTION>
+     ? The June 22, 2012 line flux (G1)
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="F-Jun24" datatype="float" name="F-Jun24" precision="E1" ucd="SPECT_FLUX_VALUE" unit="mW.m**-2" width="8">
+    <DESCRIPTION>
+     ? The June 24, 2012 line flux (G1)
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="F-May08" datatype="float" name="F-May08" precision="E1" ucd="SPECT_FLUX_VALUE" unit="mW.m**-2" width="8">
+    <DESCRIPTION>
+     ? The May 8, 2015 line flux (G1)
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>3934</TD>
+      <TD/>
+      <TD>Ca II</TD>
+      <TD>   3e-11</TD>
+      <TD/>
+      <TD>   2e-11</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>3970</TD>
+      <TD/>
+      <TD>Ca II and Hepsilon</TD>
+      <TD>   3e-11</TD>
+      <TD/>
+      <TD>   1e-11</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4101</TD>
+      <TD/>
+      <TD>Hdelta</TD>
+      <TD>   6e-12</TD>
+      <TD/>
+      <TD>   1e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4178</TD>
+      <TD/>
+      <TD>Fe II (28)</TD>
+      <TD>   2e-12</TD>
+      <TD/>
+      <TD>   3e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4233</TD>
+      <TD/>
+      <TD>Fe II (27)</TD>
+      <TD/>
+      <TD/>
+      <TD>   6e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4273</TD>
+      <TD/>
+      <TD>Fe II (27)</TD>
+      <TD/>
+      <TD/>
+      <TD>   1e-11</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4340</TD>
+      <TD/>
+      <TD>Hgamma</TD>
+      <TD>   8e-11</TD>
+      <TD/>
+      <TD>   2e-11</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4488</TD>
+      <TD/>
+      <TD>N II</TD>
+      <TD/>
+      <TD/>
+      <TD>   7e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4555</TD>
+      <TD/>
+      <TD>Fe II (37)</TD>
+      <TD>   7e-12</TD>
+      <TD/>
+      <TD>   4e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4586</TD>
+      <TD/>
+      <TD>Fe II (38)</TD>
+      <TD/>
+      <TD/>
+      <TD>   1e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4663</TD>
+      <TD/>
+      <TD>Al II</TD>
+      <TD>   3e-12</TD>
+      <TD/>
+      <TD>   3e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4861</TD>
+      <TD/>
+      <TD>Hbeta</TD>
+      <TD>   1e-11</TD>
+      <TD/>
+      <TD>   4e-11</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>4924</TD>
+      <TD/>
+      <TD>Fe II (42)</TD>
+      <TD>   5e-11</TD>
+      <TD/>
+      <TD>   1e-11</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5018</TD>
+      <TD/>
+      <TD>Fe II (42)</TD>
+      <TD>   6e-12</TD>
+      <TD/>
+      <TD>   9e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5169</TD>
+      <TD/>
+      <TD>Fe II + Mg I</TD>
+      <TD>   4e-12</TD>
+      <TD/>
+      <TD>   6e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5235</TD>
+      <TD/>
+      <TD>Fe II (49)</TD>
+      <TD>   3e-12</TD>
+      <TD/>
+      <TD>   1e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5276</TD>
+      <TD/>
+      <TD>Fe II (49+48)</TD>
+      <TD>   7e-12</TD>
+      <TD/>
+      <TD>   3e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5316</TD>
+      <TD/>
+      <TD>Fe II (49)</TD>
+      <TD>   1e-11</TD>
+      <TD/>
+      <TD>   1e-12</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5535</TD>
+      <TD/>
+      <TD>Fe II (55) + N II</TD>
+      <TD>   3e-12</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5577</TD>
+      <TD/>
+      <TD>[O I]</TD>
+      <TD>   9e-12</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5686</TD>
+      <TD/>
+      <TD>Na I</TD>
+      <TD>   2e-11</TD>
+      <TD>   6e-12</TD>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5755</TD>
+      <TD/>
+      <TD>[N II] (3)</TD>
+      <TD>   1e-11</TD>
+      <TD>   8e-12</TD>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5890</TD>
+      <TD>5896</TD>
+      <TD>Na I</TD>
+      <TD>   2e-11</TD>
+      <TD>   1e-11</TD>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>5942</TD>
+      <TD/>
+      <TD>N II (28)</TD>
+      <TD>   2e-12</TD>
+      <TD>   4e-12</TD>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>6154</TD>
+      <TD>6160</TD>
+      <TD>Na I</TD>
+      <TD>   1e-11</TD>
+      <TD>   7e-12</TD>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>6243</TD>
+      <TD/>
+      <TD>Fe II + N II</TD>
+      <TD>   5e-12</TD>
+      <TD>   4e-12</TD>
+      <TD/>
+      <TD>   2e-13</TD>
+     </TR>
+     <TR>
+      <TD>6300</TD>
+      <TD/>
+      <TD>[O I]</TD>
+      <TD>   4e-11</TD>
+      <TD>   2e-11</TD>
+      <TD/>
+      <TD>   5e-12</TD>
+     </TR>
+     <TR>
+      <TD>6364</TD>
+      <TD/>
+      <TD>[O I]</TD>
+      <TD>   1e-11</TD>
+      <TD>   7e-12</TD>
+      <TD/>
+      <TD>   2e-12</TD>
+     </TR>
+     <TR>
+      <TD>6456</TD>
+      <TD/>
+      <TD>Fe II</TD>
+      <TD/>
+      <TD>   3e-12</TD>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>6482</TD>
+      <TD/>
+      <TD>N II</TD>
+      <TD/>
+      <TD>   2e-12</TD>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>6563</TD>
+      <TD/>
+      <TD>Halpha</TD>
+      <TD>   8e-11</TD>
+      <TD>   1e-10</TD>
+      <TD/>
+      <TD>   2e-10</TD>
+     </TR>
+     <TR>
+      <TD>6678</TD>
+      <TD/>
+      <TD>He I</TD>
+      <TD>   2e-12</TD>
+      <TD>   2e-12</TD>
+      <TD/>
+      <TD>   8e-13</TD>
+     </TR>
+     <TR>
+      <TD>6716</TD>
+      <TD>6730</TD>
+      <TD>[S II]</TD>
+      <TD>   3e-12</TD>
+      <TD>   1e-12</TD>
+      <TD/>
+      <TD>   2e-13</TD>
+     </TR>
+     <TR>
+      <TD>7002</TD>
+      <TD/>
+      <TD>[O I]</TD>
+      <TD/>
+      <TD>   2e-12</TD>
+      <TD/>
+      <TD>   2e-13</TD>
+     </TR>
+     <TR>
+      <TD>7065</TD>
+      <TD/>
+      <TD>He I</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD>   5e-13</TD>
+     </TR>
+     <TR>
+      <TD>7120</TD>
+      <TD/>
+      <TD>C I</TD>
+      <TD>   5e-12</TD>
+      <TD/>
+      <TD/>
+      <TD>   1e-13</TD>
+     </TR>
+     <TR>
+      <TD>7237</TD>
+      <TD/>
+      <TD>[Ar IV]</TD>
+      <TD>   2e-11</TD>
+      <TD/>
+      <TD/>
+      <TD>   1e-12</TD>
+     </TR>
+     <TR>
+      <TD>7281</TD>
+      <TD/>
+      <TD>He I</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD>   9e-14</TD>
+     </TR>
+     <TR>
+      <TD>7319</TD>
+      <TD>7331</TD>
+      <TD>[O II]</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD>   6e-12</TD>
+     </TR>
+     <TR>
+      <TD>7774</TD>
+      <TD/>
+      <TD>O I</TD>
+      <TD>   3e-11</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>8446</TD>
+      <TD/>
+      <TD>O I</TD>
+      <TD>   1e-10</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>8727</TD>
+      <TD/>
+      <TD>[C I]</TD>
+      <TD>   7e-12</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>9069</TD>
+      <TD/>
+      <TD>[S III]</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD>   2e-12</TD>
+     </TR>
+     <TR>
+      <TD>9531</TD>
+      <TD/>
+      <TD>[S III]</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD>   4e-12</TD>
+     </TR>
+     <TR>
+      <TD>10126</TD>
+      <TD/>
+      <TD>He II</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD>   8e-13</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

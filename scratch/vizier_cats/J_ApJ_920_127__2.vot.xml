@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_920_127_table5" name="J/ApJ/920/127/table5">
+   <DESCRIPTION>
+    Pre-eruption NIR photometry from Baade/FourStar
+   </DESCRIPTION>
+   <FIELD ID="MJD" datatype="double" name="MJD" precision="2" ucd="TIME_DATE" unit="d" width="8">
+    <DESCRIPTION>
+     [55813.38/57015.1] Modified Julian date (JD-2400000.5)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Phase" datatype="double" name="Phase" precision="2" ucd="TIME_PHASE" unit="d" width="8">
+    <DESCRIPTION>
+     [-2939/-1737] Time since MJD 58752.12
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Band" arraysize="2" datatype="char" name="Band" ucd="OBS_BAND">
+    <DESCRIPTION>
+     [ HJKs] Photometric band (2MASS system)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="mag" datatype="float" name="mag" precision="2" ucd="PHOT_MAG_UNDEF" unit="mag" width="5">
+    <DESCRIPTION>
+     [18.6/20.2] Apparent Vega magnitude in Band
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_mag" datatype="float" name="e_mag" precision="2" ucd="ERROR" unit="mag" width="5">
+    <DESCRIPTION>
+     [0.06/0.1] 1-sigma uncertainty on mag
+    </DESCRIPTION>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>55813.38</TD>
+      <TD>-2938.74</TD>
+      <TD>H</TD>
+      <TD>19.41</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>55814.30</TD>
+      <TD>-2937.82</TD>
+      <TD>Ks</TD>
+      <TD>19.30</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>55814.37</TD>
+      <TD>-2937.75</TD>
+      <TD>J</TD>
+      <TD>20.07</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>55839.39</TD>
+      <TD>-2912.73</TD>
+      <TD>Ks</TD>
+      <TD>19.06</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>55840.14</TD>
+      <TD>-2911.98</TD>
+      <TD>Ks</TD>
+      <TD>18.96</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>55840.20</TD>
+      <TD>-2911.92</TD>
+      <TD>H</TD>
+      <TD>19.28</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>55840.25</TD>
+      <TD>-2911.87</TD>
+      <TD>J</TD>
+      <TD>20.00</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>55869.21</TD>
+      <TD>-2882.91</TD>
+      <TD>J</TD>
+      <TD>19.70</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>55869.27</TD>
+      <TD>-2882.85</TD>
+      <TD>H</TD>
+      <TD>19.20</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>55869.31</TD>
+      <TD>-2882.81</TD>
+      <TD>Ks</TD>
+      <TD>18.60</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>57015.04</TD>
+      <TD>-1737.08</TD>
+      <TD>Ks</TD>
+      <TD>18.80</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>57015.06</TD>
+      <TD>-1737.06</TD>
+      <TD>J</TD>
+      <TD>20.20</TD>
+      <TD> 0.10</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

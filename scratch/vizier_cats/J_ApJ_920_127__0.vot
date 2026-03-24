@@ -1,0 +1,4129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_920_127_table1" name="J/ApJ/920/127/table1">
+   <DESCRIPTION>
+    Photometry from follow-up observations
+   </DESCRIPTION>
+   <FIELD ID="MJD" datatype="double" name="MJD" precision="2" ucd="TIME_DATE" unit="d" width="8">
+    <DESCRIPTION>
+     [58752.2/58879.1] Modified Julian date (JD-2400000.5)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Phase" datatype="float" name="Phase" precision="2" ucd="TIME_PHASE" unit="d" width="6">
+    <DESCRIPTION>
+     [0.09/127] Time since MJD 58752.12
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Tel" arraysize="21*" datatype="char" name="Tel" ucd="TEL_ID">
+    <DESCRIPTION>
+     Telescope and instrument used (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Band" arraysize="5*" datatype="char" name="Band" ucd="OBS_BAND">
+    <DESCRIPTION>
+     Photometric band
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="l_mag" arraysize="1" datatype="char" name="l_mag" ucd="CODE_LIMIT">
+    <DESCRIPTION>
+     5-sigma limit flag on mag for a non-detection
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="mag" datatype="float" name="mag" precision="2" ucd="PHOT_MAG_UNDEF" unit="mag" width="5">
+    <DESCRIPTION>
+     [16.07/22.52] Apparent magnitude in Band (2)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_mag" datatype="float" name="e_mag" precision="2" ucd="ERROR" unit="mag" width="5">
+    <DESCRIPTION>
+     [0.01/0.6]? 1-sigma uncertainty on mag
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>58752.21</TD>
+      <TD>  0.09</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.38</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.22</TD>
+      <TD>  0.10</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.34</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.22</TD>
+      <TD>  0.10</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.39</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.23</TD>
+      <TD>  0.11</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.40</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.25</TD>
+      <TD>  0.13</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.41</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.25</TD>
+      <TD>  0.13</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.42</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.25</TD>
+      <TD>  0.13</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>17.52</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.25</TD>
+      <TD>  0.13</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>up</TD>
+      <TD/>
+      <TD>17.39</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58752.25</TD>
+      <TD>  0.13</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>17.34</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.26</TD>
+      <TD>  0.14</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.60</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>17.51</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.45</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.46</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>17.21</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>17.54</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>17.22</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.35</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>17.45</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>17.45</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58752.28</TD>
+      <TD>  0.16</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.20</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58752.28</TD>
+      <TD>  0.16</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.38</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.28</TD>
+      <TD>  0.16</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.20</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58752.28</TD>
+      <TD>  0.16</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>16.84</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58752.29</TD>
+      <TD>  0.17</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>17.47</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.29</TD>
+      <TD>  0.17</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.48</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.30</TD>
+      <TD>  0.18</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>17.29</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.31</TD>
+      <TD>  0.19</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.58</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58752.31</TD>
+      <TD>  0.19</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.31</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.33</TD>
+      <TD>  0.21</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.21</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.34</TD>
+      <TD>  0.22</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.23</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.35</TD>
+      <TD>  0.23</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.18</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.36</TD>
+      <TD>  0.24</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.19</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.37</TD>
+      <TD>  0.25</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw1</TD>
+      <TD/>
+      <TD>16.07</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58752.37</TD>
+      <TD>  0.25</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.24</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.37</TD>
+      <TD>  0.25</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>17.50</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58752.37</TD>
+      <TD>  0.25</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>16.30</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58752.38</TD>
+      <TD>  0.26</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvm2</TD>
+      <TD/>
+      <TD>16.08</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58752.38</TD>
+      <TD>  0.26</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw2</TD>
+      <TD/>
+      <TD>16.31</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58752.38</TD>
+      <TD>  0.26</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.43</TD>
+      <TD> 0.18</TD>
+     </TR>
+     <TR>
+      <TD>58752.39</TD>
+      <TD>  0.27</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.24</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.74</TD>
+      <TD>  0.62</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>17.09</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.74</TD>
+      <TD>  0.62</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>17.13</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.75</TD>
+      <TD>  0.62</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.22</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.84</TD>
+      <TD>  0.72</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw1</TD>
+      <TD/>
+      <TD>16.92</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58752.85</TD>
+      <TD>  0.73</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvm2</TD>
+      <TD/>
+      <TD>17.01</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.85</TD>
+      <TD>  0.73</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>16.77</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58752.85</TD>
+      <TD>  0.73</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw2</TD>
+      <TD/>
+      <TD>17.26</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58752.85</TD>
+      <TD>  0.73</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>17.42</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58752.85</TD>
+      <TD>  0.73</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.18</TD>
+      <TD> 0.13</TD>
+     </TR>
+     <TR>
+      <TD>58753.05</TD>
+      <TD>  0.93</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>17.16</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.05</TD>
+      <TD>  0.93</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.14</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.05</TD>
+      <TD>  0.93</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>17.16</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.05</TD>
+      <TD>  0.93</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.14</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.06</TD>
+      <TD>  0.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>17.15</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.06</TD>
+      <TD>  0.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>17.32</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.06</TD>
+      <TD>  0.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.08</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.06</TD>
+      <TD>  0.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>17.78</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58753.06</TD>
+      <TD>  0.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>17.32</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.06</TD>
+      <TD>  0.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>17.15</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.06</TD>
+      <TD>  0.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.08</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.06</TD>
+      <TD>  0.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>17.78</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58753.07</TD>
+      <TD>  0.95</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>16.96</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58753.08</TD>
+      <TD>  0.96</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>17.43</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58753.09</TD>
+      <TD>  0.97</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.10</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.09</TD>
+      <TD>  0.97</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>17.24</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58753.10</TD>
+      <TD>  0.98</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>17.17</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58753.10</TD>
+      <TD>  0.98</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.02</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58753.10</TD>
+      <TD>  0.98</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.14</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.37</TD>
+      <TD>  1.25</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>17.03</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58753.37</TD>
+      <TD>  1.25</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw1</TD>
+      <TD/>
+      <TD>17.48</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58753.38</TD>
+      <TD>  1.26</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>17.91</TD>
+      <TD> 0.12</TD>
+     </TR>
+     <TR>
+      <TD>58753.38</TD>
+      <TD>  1.26</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw2</TD>
+      <TD/>
+      <TD>17.87</TD>
+      <TD> 0.13</TD>
+     </TR>
+     <TR>
+      <TD>58753.38</TD>
+      <TD>  1.26</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.71</TD>
+      <TD> 0.19</TD>
+     </TR>
+     <TR>
+      <TD>58753.38</TD>
+      <TD>  1.26</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvm2</TD>
+      <TD/>
+      <TD>17.47</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58753.49</TD>
+      <TD>  1.36</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>17.34</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58753.49</TD>
+      <TD>  1.37</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>17.90</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58753.50</TD>
+      <TD>  1.38</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.62</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58753.50</TD>
+      <TD>  1.38</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>17.72</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58753.51</TD>
+      <TD>  1.39</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>17.39</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58753.51</TD>
+      <TD>  1.39</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.30</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58753.68</TD>
+      <TD>  1.56</TD>
+      <TD>Lulin1m/PIXIS</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>17.88</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.68</TD>
+      <TD>  1.56</TD>
+      <TD>Lulin1m/PIXIS</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.59</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58753.68</TD>
+      <TD>  1.56</TD>
+      <TD>Lulin1m/PIXIS</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>17.72</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58753.69</TD>
+      <TD>  1.57</TD>
+      <TD>Lulin1m/PIXIS</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.34</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58753.69</TD>
+      <TD>  1.57</TD>
+      <TD>Lulin1m/PIXIS</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>17.44</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58754.04</TD>
+      <TD>  1.92</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>18.18</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58754.05</TD>
+      <TD>  1.93</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.53</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58754.05</TD>
+      <TD>  1.93</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>17.65</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58754.06</TD>
+      <TD>  1.94</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.73</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58754.15</TD>
+      <TD>  2.03</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.72</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58754.16</TD>
+      <TD>  2.04</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>17.76</TD>
+      <TD> 0.13</TD>
+     </TR>
+     <TR>
+      <TD>58754.17</TD>
+      <TD>  2.05</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>18.46</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.18</TD>
+      <TD>  2.06</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>18.15</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.18</TD>
+      <TD>  2.06</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>18.28</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58754.18</TD>
+      <TD>  2.06</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>17.72</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58754.19</TD>
+      <TD>  2.07</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.61</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.23</TD>
+      <TD>  2.11</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>17.63</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.23</TD>
+      <TD>  2.11</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>17.63</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.23</TD>
+      <TD>  2.11</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.77</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.23</TD>
+      <TD>  2.11</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.77</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.24</TD>
+      <TD>  2.12</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>18.05</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.24</TD>
+      <TD>  2.12</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>18.36</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58754.24</TD>
+      <TD>  2.12</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>18.05</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.24</TD>
+      <TD>  2.12</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>18.36</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58754.25</TD>
+      <TD>  2.13</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>18.07</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.25</TD>
+      <TD>  2.13</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>18.20</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58754.25</TD>
+      <TD>  2.13</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>18.07</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.25</TD>
+      <TD>  2.13</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>18.20</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58754.67</TD>
+      <TD>  2.55</TD>
+      <TD>Lulin1m/PIXIS</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>18.29</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.68</TD>
+      <TD>  2.56</TD>
+      <TD>Lulin1m/PIXIS</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.80</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.68</TD>
+      <TD>  2.56</TD>
+      <TD>Lulin1m/PIXIS</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>18.33</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.68</TD>
+      <TD>  2.56</TD>
+      <TD>Lulin1m/PIXIS</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>18.48</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.68</TD>
+      <TD>  2.56</TD>
+      <TD>Lulin1m/PIXIS</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>17.90</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.73</TD>
+      <TD>  2.61</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.73</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.73</TD>
+      <TD>  2.61</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>17.92</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58754.73</TD>
+      <TD>  2.61</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>up</TD>
+      <TD/>
+      <TD>18.35</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58754.73</TD>
+      <TD>  2.61</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>18.38</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58755.16</TD>
+      <TD>  3.04</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.95</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58755.16</TD>
+      <TD>  3.04</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.97</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58755.16</TD>
+      <TD>  3.04</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.95</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58755.16</TD>
+      <TD>  3.04</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.97</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58755.17</TD>
+      <TD>  3.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>18.42</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58755.17</TD>
+      <TD>  3.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>17.84</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58755.17</TD>
+      <TD>  3.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>18.51</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58755.17</TD>
+      <TD>  3.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>18.51</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58755.17</TD>
+      <TD>  3.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>18.42</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58755.17</TD>
+      <TD>  3.05</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>18.26</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58755.17</TD>
+      <TD>  3.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>17.76</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58755.18</TD>
+      <TD>  3.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>18.33</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58755.18</TD>
+      <TD>  3.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>18.33</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58755.18</TD>
+      <TD>  3.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>18.45</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58755.18</TD>
+      <TD>  3.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>18.45</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58755.32</TD>
+      <TD>  3.20</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>18.11</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58755.33</TD>
+      <TD>  3.21</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>18.89</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58755.34</TD>
+      <TD>  3.22</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>18.70</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58755.34</TD>
+      <TD>  3.22</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>18.76</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58755.35</TD>
+      <TD>  3.22</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.08</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58755.35</TD>
+      <TD>  3.23</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>18.03</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.05</TD>
+      <TD>  3.93</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>18.14</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.05</TD>
+      <TD>  3.93</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>18.09</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.05</TD>
+      <TD>  3.93</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>18.13</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.05</TD>
+      <TD>  3.93</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>18.14</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.06</TD>
+      <TD>  3.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>18.71</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.06</TD>
+      <TD>  3.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>18.89</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58756.06</TD>
+      <TD>  3.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>18.71</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.06</TD>
+      <TD>  3.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>18.89</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58756.07</TD>
+      <TD>  3.95</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>18.82</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58756.07</TD>
+      <TD>  3.95</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>18.79</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58756.07</TD>
+      <TD>  3.95</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>18.79</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58756.07</TD>
+      <TD>  3.95</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>18.82</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58756.13</TD>
+      <TD>  4.01</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>18.41</TD>
+      <TD> 0.12</TD>
+     </TR>
+     <TR>
+      <TD>58756.13</TD>
+      <TD>  4.01</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>19.27</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.14</TD>
+      <TD>  4.02</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>18.99</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.14</TD>
+      <TD>  4.02</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.09</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.15</TD>
+      <TD>  4.03</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.22</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.15</TD>
+      <TD>  4.03</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>18.24</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58756.36</TD>
+      <TD>  4.24</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.06</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58756.37</TD>
+      <TD>  4.25</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>18.43</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58756.37</TD>
+      <TD>  4.25</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.23</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58757.09</TD>
+      <TD>  4.97</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>18.80</TD>
+      <TD> 0.19</TD>
+     </TR>
+     <TR>
+      <TD>58757.10</TD>
+      <TD>  4.98</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>19.44</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58757.10</TD>
+      <TD>  4.98</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>18.85</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58757.10</TD>
+      <TD>  4.98</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.22</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58757.11</TD>
+      <TD>  4.99</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.32</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58757.11</TD>
+      <TD>  4.99</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.34</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58757.12</TD>
+      <TD>  5.00</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>18.52</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58757.20</TD>
+      <TD>  5.08</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>18.81</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58758.06</TD>
+      <TD>  5.93</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>18.86</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58758.06</TD>
+      <TD>  5.94</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>19.54</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58758.07</TD>
+      <TD>  5.95</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.34</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58758.07</TD>
+      <TD>  5.95</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.36</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58758.08</TD>
+      <TD>  5.96</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.40</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58758.08</TD>
+      <TD>  5.96</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>18.65</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58758.13</TD>
+      <TD>  6.01</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>18.77</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58758.68</TD>
+      <TD>  6.56</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.50</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58758.69</TD>
+      <TD>  6.57</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.54</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58758.69</TD>
+      <TD>  6.57</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>18.82</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58758.69</TD>
+      <TD>  6.57</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.49</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58759.03</TD>
+      <TD>  6.91</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>18.49</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58759.03</TD>
+      <TD>  6.91</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>18.84</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58759.03</TD>
+      <TD>  6.91</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>18.84</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58759.03</TD>
+      <TD>  6.91</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>18.49</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58759.04</TD>
+      <TD>  6.92</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>19.54</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58759.04</TD>
+      <TD>  6.92</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>19.38</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58759.04</TD>
+      <TD>  6.92</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>19.54</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58759.04</TD>
+      <TD>  6.92</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>19.38</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58759.05</TD>
+      <TD>  6.93</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.46</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58759.05</TD>
+      <TD>  6.93</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.46</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58759.06</TD>
+      <TD>  6.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>19.38</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58759.06</TD>
+      <TD>  6.94</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>19.38</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58759.47</TD>
+      <TD>  7.35</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>19.08</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58759.48</TD>
+      <TD>  7.36</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>19.82</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58759.49</TD>
+      <TD>  7.37</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.63</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58759.54</TD>
+      <TD>  7.42</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>19.17</TD>
+      <TD> 0.15</TD>
+     </TR>
+     <TR>
+      <TD>58759.55</TD>
+      <TD>  7.43</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>19.81</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58759.55</TD>
+      <TD>  7.43</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.72</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58759.56</TD>
+      <TD>  7.44</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.71</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58759.56</TD>
+      <TD>  7.44</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.56</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58759.57</TD>
+      <TD>  7.44</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>18.98</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58760.07</TD>
+      <TD>  7.95</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>19.17</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58760.08</TD>
+      <TD>  7.96</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>19.79</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58760.09</TD>
+      <TD>  7.97</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.68</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58760.09</TD>
+      <TD>  7.97</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.65</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58760.10</TD>
+      <TD>  7.98</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.52</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58760.10</TD>
+      <TD>  7.98</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.02</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58760.28</TD>
+      <TD>  8.16</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>18.51</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58760.28</TD>
+      <TD>  8.16</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>18.51</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58760.29</TD>
+      <TD>  8.17</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>18.95</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58760.29</TD>
+      <TD>  8.17</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>18.95</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58760.29</TD>
+      <TD>  8.17</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>19.43</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58760.29</TD>
+      <TD>  8.17</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>19.43</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58760.99</TD>
+      <TD>  8.87</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>19.38</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58761.00</TD>
+      <TD>  8.88</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>19.92</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58761.00</TD>
+      <TD>  8.88</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.81</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58761.00</TD>
+      <TD>  8.88</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.79</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58761.01</TD>
+      <TD>  8.89</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.57</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58761.01</TD>
+      <TD>  8.89</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.09</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58761.67</TD>
+      <TD>  9.55</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.72</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58761.67</TD>
+      <TD>  9.55</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.47</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58761.93</TD>
+      <TD>  9.81</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>19.36</TD>
+      <TD> 0.12</TD>
+     </TR>
+     <TR>
+      <TD>58761.94</TD>
+      <TD>  9.82</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.00</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58761.94</TD>
+      <TD>  9.82</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.87</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58761.95</TD>
+      <TD>  9.83</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.87</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58761.95</TD>
+      <TD>  9.83</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.65</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58761.96</TD>
+      <TD>  9.84</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.21</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58762.75</TD>
+      <TD> 10.63</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>19.68</TD>
+      <TD> 0.21</TD>
+     </TR>
+     <TR>
+      <TD>58762.76</TD>
+      <TD> 10.64</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>19.95</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58762.76</TD>
+      <TD> 10.64</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.99</TD>
+      <TD> 0.13</TD>
+     </TR>
+     <TR>
+      <TD>58762.77</TD>
+      <TD> 10.65</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.93</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58762.77</TD>
+      <TD> 10.65</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.56</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58762.78</TD>
+      <TD> 10.66</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.18</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58762.78</TD>
+      <TD> 10.66</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>19.86</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58763.35</TD>
+      <TD> 11.23</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>19.96</TD>
+      <TD> 0.21</TD>
+     </TR>
+     <TR>
+      <TD>58763.36</TD>
+      <TD> 11.24</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.19</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58763.36</TD>
+      <TD> 11.24</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.10</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58763.37</TD>
+      <TD> 11.25</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.16</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58763.37</TD>
+      <TD> 11.25</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.63</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58763.38</TD>
+      <TD> 11.26</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.41</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58764.17</TD>
+      <TD> 12.05</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>19.44</TD>
+      <TD> 0.20</TD>
+     </TR>
+     <TR>
+      <TD>58764.17</TD>
+      <TD> 12.05</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.21</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58764.18</TD>
+      <TD> 12.06</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>19.99</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58764.18</TD>
+      <TD> 12.06</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.25</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58764.19</TD>
+      <TD> 12.07</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.67</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58764.19</TD>
+      <TD> 12.07</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.40</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58764.62</TD>
+      <TD> 12.50</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.84</TD>
+      <TD> 0.19</TD>
+     </TR>
+     <TR>
+      <TD>58764.62</TD>
+      <TD> 12.50</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.65</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58764.62</TD>
+      <TD> 12.50</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.18</TD>
+      <TD> 0.17</TD>
+     </TR>
+     <TR>
+      <TD>58765.03</TD>
+      <TD> 12.91</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.24</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58765.04</TD>
+      <TD> 12.92</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.00</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58765.04</TD>
+      <TD> 12.92</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.07</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58765.05</TD>
+      <TD> 12.93</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.64</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58765.06</TD>
+      <TD> 12.94</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.49</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58765.40</TD>
+      <TD> 13.28</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[4.5]</TD>
+      <TD/>
+      <TD>16.39</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58765.40</TD>
+      <TD> 13.28</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[3.6]</TD>
+      <TD/>
+      <TD>16.82</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58767.31</TD>
+      <TD> 15.19</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.11</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58767.32</TD>
+      <TD> 15.20</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.19</TD>
+      <TD> 0.13</TD>
+     </TR>
+     <TR>
+      <TD>58767.33</TD>
+      <TD> 15.21</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.27</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58767.33</TD>
+      <TD> 15.21</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.74</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58767.34</TD>
+      <TD> 15.22</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.68</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58767.75</TD>
+      <TD> 15.63</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.79</TD>
+      <TD> 0.12</TD>
+     </TR>
+     <TR>
+      <TD>58767.75</TD>
+      <TD> 15.63</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.72</TD>
+      <TD> 0.23</TD>
+     </TR>
+     <TR>
+      <TD>58767.76</TD>
+      <TD> 15.64</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.69</TD>
+      <TD> 0.13</TD>
+     </TR>
+     <TR>
+      <TD>58769.85</TD>
+      <TD> 17.73</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.15</TD>
+      <TD> 0.19</TD>
+     </TR>
+     <TR>
+      <TD>58769.86</TD>
+      <TD> 17.74</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.12</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58769.86</TD>
+      <TD> 17.74</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.80</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58769.87</TD>
+      <TD> 17.75</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.82</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58770.62</TD>
+      <TD> 18.50</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.88</TD>
+      <TD> 0.29</TD>
+     </TR>
+     <TR>
+      <TD>58770.62</TD>
+      <TD> 18.50</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.02</TD>
+      <TD> 0.13</TD>
+     </TR>
+     <TR>
+      <TD>58772.04</TD>
+      <TD> 19.92</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.44</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58772.05</TD>
+      <TD> 19.93</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.32</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58772.05</TD>
+      <TD> 19.93</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.49</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58772.06</TD>
+      <TD> 19.94</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.77</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58772.06</TD>
+      <TD> 19.94</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.91</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58774.03</TD>
+      <TD> 21.91</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.87</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58774.03</TD>
+      <TD> 21.91</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>19.77</TD>
+      <TD> 0.16</TD>
+     </TR>
+     <TR>
+      <TD>58774.03</TD>
+      <TD> 21.91</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.37</TD>
+      <TD> 0.17</TD>
+     </TR>
+     <TR>
+      <TD>58774.17</TD>
+      <TD> 22.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>18.92</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58774.17</TD>
+      <TD> 22.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>18.92</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58774.18</TD>
+      <TD> 22.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>19.97</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58774.18</TD>
+      <TD> 22.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>19.97</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58774.19</TD>
+      <TD> 22.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.21</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58774.19</TD>
+      <TD> 22.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.21</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58774.28</TD>
+      <TD> 22.16</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.72</TD>
+      <TD> 0.13</TD>
+     </TR>
+     <TR>
+      <TD>58774.29</TD>
+      <TD> 22.17</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.56</TD>
+      <TD> 0.12</TD>
+     </TR>
+     <TR>
+      <TD>58774.29</TD>
+      <TD> 22.17</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.62</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58774.30</TD>
+      <TD> 22.18</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.88</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58774.30</TD>
+      <TD> 22.18</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.02</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58776.17</TD>
+      <TD> 24.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>18.96</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58776.17</TD>
+      <TD> 24.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>18.96</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58776.18</TD>
+      <TD> 24.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.26</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58776.18</TD>
+      <TD> 24.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.26</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58776.18</TD>
+      <TD> 24.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.37</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58776.18</TD>
+      <TD> 24.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.37</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58776.19</TD>
+      <TD> 24.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.50</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58776.19</TD>
+      <TD> 24.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.50</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58776.66</TD>
+      <TD> 24.54</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.86</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58777.29</TD>
+      <TD> 25.17</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.69</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58777.30</TD>
+      <TD> 25.18</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.61</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58777.31</TD>
+      <TD> 25.19</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.64</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58777.31</TD>
+      <TD> 25.19</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>18.96</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58777.32</TD>
+      <TD> 25.20</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.18</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58778.85</TD>
+      <TD> 26.73</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD>&gt;</TD>
+      <TD>18.93</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>58779.65</TD>
+      <TD> 27.53</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.92</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58779.66</TD>
+      <TD> 27.54</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.91</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58779.67</TD>
+      <TD> 27.54</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.81</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58779.67</TD>
+      <TD> 27.55</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.05</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58779.68</TD>
+      <TD> 27.56</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.34</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58781.00</TD>
+      <TD> 28.88</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.23</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58783.68</TD>
+      <TD> 31.56</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.00</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58784.13</TD>
+      <TD> 32.01</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.06</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58784.13</TD>
+      <TD> 32.01</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.06</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58784.13</TD>
+      <TD> 32.01</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.41</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58784.13</TD>
+      <TD> 32.01</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.41</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58784.14</TD>
+      <TD> 32.02</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.27</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58784.14</TD>
+      <TD> 32.02</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.27</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58785.21</TD>
+      <TD> 33.09</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[4.5]</TD>
+      <TD/>
+      <TD>17.11</TD>
+      <TD> 0.16</TD>
+     </TR>
+     <TR>
+      <TD>58785.21</TD>
+      <TD> 33.09</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.08</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58785.21</TD>
+      <TD> 33.09</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[3.6]</TD>
+      <TD/>
+      <TD>17.62</TD>
+      <TD> 0.19</TD>
+     </TR>
+     <TR>
+      <TD>58785.22</TD>
+      <TD> 33.10</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.94</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58785.22</TD>
+      <TD> 33.10</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.98</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58785.23</TD>
+      <TD> 33.11</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.06</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58785.24</TD>
+      <TD> 33.12</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.43</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58786.15</TD>
+      <TD> 34.03</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.06</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58786.15</TD>
+      <TD> 34.03</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.28</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58786.15</TD>
+      <TD> 34.03</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.28</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58786.15</TD>
+      <TD> 34.03</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.06</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58786.16</TD>
+      <TD> 34.04</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.55</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58786.16</TD>
+      <TD> 34.04</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.55</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58786.16</TD>
+      <TD> 34.04</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.19</TD>
+      <TD> 0.13</TD>
+     </TR>
+     <TR>
+      <TD>58786.17</TD>
+      <TD> 34.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.80</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58786.17</TD>
+      <TD> 34.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.80</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58786.18</TD>
+      <TD> 34.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.58</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58786.18</TD>
+      <TD> 34.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>20.58</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58789.42</TD>
+      <TD> 37.30</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.23</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58789.43</TD>
+      <TD> 37.31</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.95</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58789.44</TD>
+      <TD> 37.32</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.02</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58789.45</TD>
+      <TD> 37.33</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.17</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58789.46</TD>
+      <TD> 37.33</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.54</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58791.23</TD>
+      <TD> 39.11</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.04</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58791.23</TD>
+      <TD> 39.11</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.04</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58791.23</TD>
+      <TD> 39.11</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.62</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58791.23</TD>
+      <TD> 39.11</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.62</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58793.02</TD>
+      <TD> 40.90</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.40</TD>
+      <TD> 0.15</TD>
+     </TR>
+     <TR>
+      <TD>58793.02</TD>
+      <TD> 40.90</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.05</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58793.02</TD>
+      <TD> 40.90</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.59</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58793.03</TD>
+      <TD> 40.91</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>z_s</TD>
+      <TD/>
+      <TD>20.27</TD>
+      <TD> 0.27</TD>
+     </TR>
+     <TR>
+      <TD>58793.07</TD>
+      <TD> 40.95</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.07</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58793.08</TD>
+      <TD> 40.96</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.96</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58793.09</TD>
+      <TD> 40.97</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.10</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58793.10</TD>
+      <TD> 40.98</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.10</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58793.10</TD>
+      <TD> 40.98</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.46</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58795.07</TD>
+      <TD> 42.95</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.22</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58795.07</TD>
+      <TD> 42.95</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>z_s</TD>
+      <TD/>
+      <TD>19.98</TD>
+      <TD> 0.32</TD>
+     </TR>
+     <TR>
+      <TD>58795.59</TD>
+      <TD> 43.47</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[3.6]</TD>
+      <TD/>
+      <TD>17.84</TD>
+      <TD> 0.34</TD>
+     </TR>
+     <TR>
+      <TD>58795.59</TD>
+      <TD> 43.47</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[4.5]</TD>
+      <TD/>
+      <TD>17.24</TD>
+      <TD> 0.26</TD>
+     </TR>
+     <TR>
+      <TD>58797.51</TD>
+      <TD> 45.39</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.22</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58797.51</TD>
+      <TD> 45.39</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.34</TD>
+      <TD> 0.23</TD>
+     </TR>
+     <TR>
+      <TD>58797.51</TD>
+      <TD> 45.39</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.81</TD>
+      <TD> 0.25</TD>
+     </TR>
+     <TR>
+      <TD>58797.56</TD>
+      <TD> 45.44</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>20.91</TD>
+      <TD> 0.12</TD>
+     </TR>
+     <TR>
+      <TD>58797.57</TD>
+      <TD> 45.45</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.37</TD>
+      <TD> 0.14</TD>
+     </TR>
+     <TR>
+      <TD>58797.58</TD>
+      <TD> 45.46</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.24</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58797.59</TD>
+      <TD> 45.47</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.51</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58798.06</TD>
+      <TD> 45.94</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw2</TD>
+      <TD>&gt;</TD>
+      <TD>19.10</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>58800.52</TD>
+      <TD> 48.40</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.47</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58800.52</TD>
+      <TD> 48.40</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.50</TD>
+      <TD> 0.44</TD>
+     </TR>
+     <TR>
+      <TD>58800.52</TD>
+      <TD> 48.40</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.70</TD>
+      <TD> 0.26</TD>
+     </TR>
+     <TR>
+      <TD>58800.53</TD>
+      <TD> 48.41</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>z_s</TD>
+      <TD/>
+      <TD>20.96</TD>
+      <TD> 0.58</TD>
+     </TR>
+     <TR>
+      <TD>58801.06</TD>
+      <TD> 48.94</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[3.6]</TD>
+      <TD/>
+      <TD>17.85</TD>
+      <TD> 0.31</TD>
+     </TR>
+     <TR>
+      <TD>58801.06</TD>
+      <TD> 48.94</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[4.5]</TD>
+      <TD/>
+      <TD>17.16</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58801.25</TD>
+      <TD> 49.13</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw2</TD>
+      <TD>&gt;</TD>
+      <TD>19.11</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>58803.17</TD>
+      <TD> 51.05</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw2</TD>
+      <TD>&gt;</TD>
+      <TD>19.25</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>58803.51</TD>
+      <TD> 51.39</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.30</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58803.51</TD>
+      <TD> 51.39</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.09</TD>
+      <TD> 0.15</TD>
+     </TR>
+     <TR>
+      <TD>58803.51</TD>
+      <TD> 51.39</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.69</TD>
+      <TD> 0.20</TD>
+     </TR>
+     <TR>
+      <TD>58803.52</TD>
+      <TD> 51.40</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>z_s</TD>
+      <TD/>
+      <TD>19.84</TD>
+      <TD> 0.22</TD>
+     </TR>
+     <TR>
+      <TD>58803.55</TD>
+      <TD> 51.43</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[3.6]</TD>
+      <TD/>
+      <TD>17.89</TD>
+      <TD> 0.33</TD>
+     </TR>
+     <TR>
+      <TD>58803.55</TD>
+      <TD> 51.43</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[4.5]</TD>
+      <TD/>
+      <TD>17.38</TD>
+      <TD> 0.25</TD>
+     </TR>
+     <TR>
+      <TD>58805.19</TD>
+      <TD> 53.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.17</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58805.19</TD>
+      <TD> 53.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.17</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58805.20</TD>
+      <TD> 53.08</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.48</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58805.20</TD>
+      <TD> 53.08</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.48</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58805.20</TD>
+      <TD> 53.08</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.32</TD>
+      <TD> 0.12</TD>
+     </TR>
+     <TR>
+      <TD>58805.21</TD>
+      <TD> 53.09</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>21.07</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58805.21</TD>
+      <TD> 53.09</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>21.07</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58805.21</TD>
+      <TD> 53.09</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>21.25</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58805.22</TD>
+      <TD> 53.10</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.17</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58805.23</TD>
+      <TD> 53.11</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.23</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58805.24</TD>
+      <TD> 53.12</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.55</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58808.14</TD>
+      <TD> 56.02</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.40</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58808.14</TD>
+      <TD> 56.02</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.40</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58808.15</TD>
+      <TD> 56.03</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.88</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58808.15</TD>
+      <TD> 56.03</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.88</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58808.16</TD>
+      <TD> 56.04</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.21</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58808.16</TD>
+      <TD> 56.04</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>21.01</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58808.16</TD>
+      <TD> 56.04</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.21</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58808.16</TD>
+      <TD> 56.04</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>21.01</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58808.23</TD>
+      <TD> 56.11</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.29</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58808.23</TD>
+      <TD> 56.11</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.83</TD>
+      <TD> 0.25</TD>
+     </TR>
+     <TR>
+      <TD>58808.23</TD>
+      <TD> 56.11</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.82</TD>
+      <TD> 0.12</TD>
+     </TR>
+     <TR>
+      <TD>58811.71</TD>
+      <TD> 59.59</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[4.5]</TD>
+      <TD/>
+      <TD>17.17</TD>
+      <TD> 0.15</TD>
+     </TR>
+     <TR>
+      <TD>58811.71</TD>
+      <TD> 59.59</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[3.6]</TD>
+      <TD/>
+      <TD>17.84</TD>
+      <TD> 0.22</TD>
+     </TR>
+     <TR>
+      <TD>58812.18</TD>
+      <TD> 60.06</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.50</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58812.19</TD>
+      <TD> 60.07</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>21.19</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58812.20</TD>
+      <TD> 60.08</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.28</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58812.21</TD>
+      <TD> 60.09</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.31</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58812.21</TD>
+      <TD> 60.09</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.63</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58813.18</TD>
+      <TD> 61.06</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>20.80</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58813.19</TD>
+      <TD> 61.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.27</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58813.19</TD>
+      <TD> 61.07</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.25</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58813.19</TD>
+      <TD> 61.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.27</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58813.19</TD>
+      <TD> 61.07</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>z_s</TD>
+      <TD/>
+      <TD>19.75</TD>
+      <TD> 0.17</TD>
+     </TR>
+     <TR>
+      <TD>58813.19</TD>
+      <TD> 61.07</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.86</TD>
+      <TD> 0.20</TD>
+     </TR>
+     <TR>
+      <TD>58813.20</TD>
+      <TD> 61.08</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.52</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58813.20</TD>
+      <TD> 61.08</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.52</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58813.21</TD>
+      <TD> 61.09</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.99</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58813.21</TD>
+      <TD> 61.09</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>20.99</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58816.17</TD>
+      <TD> 64.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.25</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58816.17</TD>
+      <TD> 64.05</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>19.25</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58816.18</TD>
+      <TD> 64.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.47</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58816.18</TD>
+      <TD> 64.06</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>20.47</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58816.19</TD>
+      <TD> 64.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>21.00</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58816.19</TD>
+      <TD> 64.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>21.11</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58816.19</TD>
+      <TD> 64.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>21.00</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58816.19</TD>
+      <TD> 64.07</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>21.11</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58816.20</TD>
+      <TD> 64.08</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.15</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58816.20</TD>
+      <TD> 64.08</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.15</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58816.85</TD>
+      <TD> 64.73</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.11</TD>
+      <TD> 0.12</TD>
+     </TR>
+     <TR>
+      <TD>58816.85</TD>
+      <TD> 64.73</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.30</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58816.85</TD>
+      <TD> 64.73</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>21.40</TD>
+      <TD> 0.28</TD>
+     </TR>
+     <TR>
+      <TD>58816.86</TD>
+      <TD> 64.74</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>z_s</TD>
+      <TD/>
+      <TD>20.07</TD>
+      <TD> 0.20</TD>
+     </TR>
+     <TR>
+      <TD>58818.78</TD>
+      <TD> 66.65</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.13</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58818.78</TD>
+      <TD> 66.66</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>21.34</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58818.79</TD>
+      <TD> 66.67</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.40</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58818.80</TD>
+      <TD> 66.68</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.35</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58818.81</TD>
+      <TD> 66.69</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.87</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58823.06</TD>
+      <TD> 70.94</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.46</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58823.07</TD>
+      <TD> 70.95</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>21.28</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58823.08</TD>
+      <TD> 70.96</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.53</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58823.09</TD>
+      <TD> 70.97</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.33</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58823.10</TD>
+      <TD> 70.98</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.54</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58834.53</TD>
+      <TD> 82.40</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.74</TD>
+      <TD> 0.18</TD>
+     </TR>
+     <TR>
+      <TD>58846.83</TD>
+      <TD> 94.71</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>21.58</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58846.84</TD>
+      <TD> 94.72</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>21.74</TD>
+      <TD> 0.15</TD>
+     </TR>
+     <TR>
+      <TD>58846.84</TD>
+      <TD> 94.72</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>21.74</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58846.85</TD>
+      <TD> 94.73</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.58</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58846.86</TD>
+      <TD> 94.74</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>21.12</TD>
+      <TD> 0.12</TD>
+     </TR>
+     <TR>
+      <TD>58857.81</TD>
+      <TD>105.68</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD>&gt;</TD>
+      <TD>21.49</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>58857.81</TD>
+      <TD>105.69</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.69</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58857.82</TD>
+      <TD>105.70</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>20.84</TD>
+      <TD> 0.18</TD>
+     </TR>
+     <TR>
+      <TD>58868.04</TD>
+      <TD>115.92</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.88</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58874.06</TD>
+      <TD>121.94</TD>
+      <TD>HST_WFC3/UVIS</TD>
+      <TD>F555W</TD>
+      <TD/>
+      <TD>22.52</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58878.78</TD>
+      <TD>126.66</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>20.12</TD>
+      <TD> 0.11</TD>
+     </TR>
+     <TR>
+      <TD>58879.06</TD>
+      <TD>126.94</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>19.84</TD>
+      <TD> 0.06</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

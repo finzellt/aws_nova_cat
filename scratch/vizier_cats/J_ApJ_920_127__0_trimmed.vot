@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_920_127_table1" name="J/ApJ/920/127/table1">
+   <DESCRIPTION>
+    Photometry from follow-up observations
+   </DESCRIPTION>
+   <FIELD ID="MJD" datatype="double" name="MJD" precision="2" ucd="TIME_DATE" unit="d" width="8">
+    <DESCRIPTION>
+     [58752.2/58879.1] Modified Julian date (JD-2400000.5)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Phase" datatype="float" name="Phase" precision="2" ucd="TIME_PHASE" unit="d" width="6">
+    <DESCRIPTION>
+     [0.09/127] Time since MJD 58752.12
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Tel" arraysize="21*" datatype="char" name="Tel" ucd="TEL_ID">
+    <DESCRIPTION>
+     Telescope and instrument used (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Band" arraysize="5*" datatype="char" name="Band" ucd="OBS_BAND">
+    <DESCRIPTION>
+     Photometric band
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="l_mag" arraysize="1" datatype="char" name="l_mag" ucd="CODE_LIMIT">
+    <DESCRIPTION>
+     5-sigma limit flag on mag for a non-detection
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="mag" datatype="float" name="mag" precision="2" ucd="PHOT_MAG_UNDEF" unit="mag" width="5">
+    <DESCRIPTION>
+     [16.07/22.52] Apparent magnitude in Band (2)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="e_mag" datatype="float" name="e_mag" precision="2" ucd="ERROR" unit="mag" width="5">
+    <DESCRIPTION>
+     [0.01/0.6]? 1-sigma uncertainty on mag
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>58752.29</TD>
+      <TD>  0.17</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD>17.47</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58874.06</TD>
+      <TD>121.94</TD>
+      <TD>HST_WFC3/UVIS</TD>
+      <TD>F555W</TD>
+      <TD/>
+      <TD>22.52</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.21</TD>
+      <TD>  0.09</TD>
+      <TD>DLT40</TD>
+      <TD>Open</TD>
+      <TD/>
+      <TD>17.38</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.28</TD>
+      <TD>  0.16</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>U</TD>
+      <TD/>
+      <TD>16.84</TD>
+      <TD> 0.10</TD>
+     </TR>
+     <TR>
+      <TD>58752.28</TD>
+      <TD>  0.16</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>V</TD>
+      <TD/>
+      <TD>17.20</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58765.40</TD>
+      <TD> 13.28</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[3.6]</TD>
+      <TD/>
+      <TD>16.82</TD>
+      <TD> 0.05</TD>
+     </TR>
+     <TR>
+      <TD>58765.40</TD>
+      <TD> 13.28</TD>
+      <TD>Spitzer/IRAC</TD>
+      <TD>[4.5]</TD>
+      <TD/>
+      <TD>16.39</TD>
+      <TD> 0.07</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>g</TD>
+      <TD/>
+      <TD>17.21</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58752.25</TD>
+      <TD>  0.13</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>gp</TD>
+      <TD/>
+      <TD>17.34</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>i</TD>
+      <TD/>
+      <TD>17.51</TD>
+      <TD> 0.02</TD>
+     </TR>
+     <TR>
+      <TD>58752.26</TD>
+      <TD>  0.14</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>ip</TD>
+      <TD/>
+      <TD>17.60</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>r</TD>
+      <TD/>
+      <TD>17.45</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58752.25</TD>
+      <TD>  0.13</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>rp</TD>
+      <TD/>
+      <TD>17.52</TD>
+      <TD> 0.01</TD>
+     </TR>
+     <TR>
+      <TD>58752.27</TD>
+      <TD>  0.15</TD>
+      <TD>Swope/4Kx4K</TD>
+      <TD>u</TD>
+      <TD/>
+      <TD>17.45</TD>
+      <TD> 0.04</TD>
+     </TR>
+     <TR>
+      <TD>58752.25</TD>
+      <TD>  0.13</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>up</TD>
+      <TD/>
+      <TD>17.39</TD>
+      <TD> 0.03</TD>
+     </TR>
+     <TR>
+      <TD>58752.38</TD>
+      <TD>  0.26</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvm2</TD>
+      <TD/>
+      <TD>16.08</TD>
+      <TD> 0.06</TD>
+     </TR>
+     <TR>
+      <TD>58752.37</TD>
+      <TD>  0.25</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw1</TD>
+      <TD/>
+      <TD>16.07</TD>
+      <TD> 0.08</TD>
+     </TR>
+     <TR>
+      <TD>58752.38</TD>
+      <TD>  0.26</TD>
+      <TD>Swift/UVOT</TD>
+      <TD>uvw2</TD>
+      <TD/>
+      <TD>16.31</TD>
+      <TD> 0.09</TD>
+     </TR>
+     <TR>
+      <TD>58793.03</TD>
+      <TD> 40.91</TD>
+      <TD>LasCumbres1m/Sinistro</TD>
+      <TD>z_s</TD>
+      <TD/>
+      <TD>20.27</TD>
+      <TD> 0.27</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

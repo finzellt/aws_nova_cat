@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_918_63_fig347" name="J/ApJ/918/63/fig347">
+   <DESCRIPTION>
+    Forced PSF photometry light curves of the 5 fast transients (from
+    Figures 3, 4 and 7)
+   </DESCRIPTION>
+   <FIELD ID="Name" arraysize="12" datatype="char" name="Name" ucd="ID_MAIN">
+    <DESCRIPTION>
+     ZTF name of the source
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Inst" arraysize="8*" datatype="char" name="Inst" ucd="INST_ID">
+    <DESCRIPTION>
+     Instrument used (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Obs" arraysize="16" datatype="char" name="Obs" ucd="TIME_DATE" unit="s">
+    <DESCRIPTION>
+     Observed UTC date, ISO 8601 (2)
+    </DESCRIPTION>
+    <VALUES null=" "/>
+   </FIELD>
+   <FIELD ID="JD" arraysize="13" datatype="char" name="JD" ucd="TIME_DATE" unit="d">
+    <DESCRIPTION>
+     Julian date
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="omag" datatype="float" name="omag" precision="2" ucd="PHOT_MAG_UNDEF" unit="mag" width="5">
+    <DESCRIPTION>
+     [17.16/23.95]? Observed AB magnitude in Filt
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="e_omag" datatype="float" name="e_omag" precision="2" ucd="ERROR" unit="mag" width="5">
+    <DESCRIPTION>
+     [0.03/0.4]? Uncertainty in omag
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="LimOmag" datatype="float" name="LimOmag" precision="2" ucd="PHOT_MAG_LIMIT" unit="mag" width="5">
+    <DESCRIPTION>
+     [17.3/25.6]? Limiting magnitude, AB system
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="Filt" arraysize="1" datatype="char" name="Filt" ucd="INST_FILTER_CODE">
+    <DESCRIPTION>
+     [griJ] Filter
+    </DESCRIPTION>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>ZTF20abtxwfx</TD>
+      <TD>WIRC</TD>
+      <TD>2020-09-04T07:06</TD>
+      <TD>2459096.79583</TD>
+      <TD/>
+      <TD/>
+      <TD>21.50</TD>
+      <TD>J</TD>
+     </TR>
+     <TR>
+      <TD>ZTF20abtxwfx</TD>
+      <TD>ZTF</TD>
+      <TD>2020-08-16T05:11</TD>
+      <TD>2459077.71597</TD>
+      <TD/>
+      <TD/>
+      <TD>20.50</TD>
+      <TD>g</TD>
+     </TR>
+     <TR>
+      <TD>ZTF20abtxwfx</TD>
+      <TD>ZTF</TD>
+      <TD>2020-08-19T05:53</TD>
+      <TD>2459080.74514</TD>
+      <TD>19.79</TD>
+      <TD> 0.17</TD>
+      <TD>19.60</TD>
+      <TD>i</TD>
+     </TR>
+     <TR>
+      <TD>ZTF20abtxwfx</TD>
+      <TD>ZTF</TD>
+      <TD>2020-08-16T06:12</TD>
+      <TD>2459077.75833</TD>
+      <TD/>
+      <TD/>
+      <TD>20.40</TD>
+      <TD>r</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

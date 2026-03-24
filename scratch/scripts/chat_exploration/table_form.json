@@ -1,0 +1,99 @@
+{
+  "_comment": "File metadata form. One instance per table. Completed by LLM; reviewed by operator before use.",
+  "_form_version": "0.2",
+
+  "source_file": "J_ApJ_899_162__0.vot",
+  "table_name": "J/ApJ/899/162/fig3a",
+  "paper_title": "Optical and Infrared Observations of the Recurrent Nova V745 Sco",
+  "bibcode": "2019ApJ...899..162S",
+
+  "table_context": {
+    "nova_relevance": {
+      "value": true,
+      "confidence": 0.97,
+      "reasoning": "Paper title explicitly mentions recurrent nova V745 Sco."
+    },
+    "data_type": {
+      "value": "photometry",
+      "confidence": 0.95,
+      "reasoning": "Table name 'fig3a' and description 'IR light curves' both indicate photometry."
+    },
+    "table_format": {
+      "value": "wide",
+      "confidence": 0.92,
+      "reasoning": "Columns are Jmag, Hmag, Kmag — band identity baked into column names, no explicit filter column."
+    },
+    "wavelength_regime": {
+      "value": "nir",
+      "confidence": 0.93,
+      "reasoning": "Description says 'IR light curves'; column names J, H, K are unambiguously NIR."
+    },
+    "telescope": {
+      "value": "SMARTS 1.3m",
+      "confidence": 0.75,
+      "reasoning": "Inferred from description: 'ANDICAM + CTIO Yale SMARTS 1.3m Telescope'.",
+      "source": "description"
+    },
+    "instrument": {
+      "value": "ANDICAM",
+      "confidence": 0.75,
+      "reasoning": "Inferred from description.",
+      "source": "description"
+    },
+    "time_coverage": {
+      "value": "multi-epoch",
+      "confidence": 0.90,
+      "reasoning": "MJD column present; 36 rows suggests a time series."
+    }
+  },
+
+  "columns": [
+    {
+      "_comment": "Column classification form. One instance per column. Completed by LLM.",
+      "column_name": "MJD",
+      "semantic_role": {
+        "value": "time",
+        "confidence": 0.99,
+        "reasoning": "Column name MJD is unambiguous; UCD TIME_DATE confirms."
+      },
+      "filter_name": null,
+      "wavelength_regime": null,
+      "telescope": null,
+      "instrument": null,
+      "ucd_suggestion": {
+        "value": "time.epoch;obs",
+        "confidence": 0.90,
+        "reasoning": "Standard UCD1+ for MJD observation epoch."
+      },
+      "is_error_column": { "value": false, "confidence": 0.99, "reasoning": null },
+      "notes": null
+    },
+    {
+      "column_name": "Jmag",
+      "semantic_role": {
+        "value": "magnitude",
+        "confidence": 0.95,
+        "reasoning": "Jmag follows <band>mag convention; PHOT_MAG_J UCD confirms."
+      },
+      "filter_name": {
+        "value": "J",
+        "confidence": 0.95,
+        "reasoning": "Stripped 'mag' suffix."
+      },
+      "wavelength_regime": {
+        "value": "nir",
+        "confidence": 0.95,
+        "reasoning": "J band is unambiguously NIR (~1.2 µm). Consistent with table-level regime."
+      },
+      "telescope": { "value": "SMARTS 1.3m", "confidence": 0.75, "reasoning": "Inherited from table context.", "source": "description" },
+      "instrument": { "value": "ANDICAM", "confidence": 0.75, "reasoning": "Inherited from table context.", "source": "description" },
+      "ucd_suggestion": {
+        "value": "phot.mag;em.ir.j",
+        "confidence": 0.90,
+        "reasoning": "UCD1+ composite for J-band magnitude."
+      },
+      "is_error_column": { "value": false, "confidence": 0.99, "reasoning": null },
+      "notes": null
+    }
+  ]
+}

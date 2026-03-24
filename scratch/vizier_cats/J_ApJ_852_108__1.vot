@@ -1,0 +1,565 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_852_108_table2" name="J/ApJ/852/108/table2">
+   <DESCRIPTION>
+    VLA observations of V1324 Sco
+   </DESCRIPTION>
+   <FIELD ID="JD" datatype="float" name="JD" precision="1" ucd="TIME_DATE" unit="d" width="6">
+    <DESCRIPTION>
+     Julian date; JD-2450000
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Date" arraysize="10" datatype="char" name="Date" ucd="TIME_DATE" xtype="timestamp">
+    <DESCRIPTION>
+     UT date of observation
+    </DESCRIPTION>
+    <VALUES null=" "/>
+   </FIELD>
+   <FIELD ID="t-t0" datatype="float" name="t-t0" precision="1" ucd="TIME_INTERVAL" unit="d" width="5">
+    <DESCRIPTION>
+     [25/930] Days since t_0_ (= 2012 June 1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Conf" arraysize="3" datatype="char" name="Conf" ucd="INST_SETUP">
+    <DESCRIPTION>
+     VLA configuration
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="l_F4.5GHz" arraysize="1" datatype="char" name="l_F4.5GHz" ucd="CODE_LIMIT">
+    <DESCRIPTION>
+     Limit flag on F4.5GHz (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="F4.5GHz" datatype="float" name="F4.5GHz" precision="3" ucd="PHOT_FLUX_RADIO_5G" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.1/1.4]? VLA 4.5GHz flux
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="e_F4.5GHz" datatype="float" name="e_F4.5GHz" precision="3" ucd="ERROR" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.02/0.3]? F4.5GHz uncertainty
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="F7.8GHz" datatype="float" name="F7.8GHz" precision="3" ucd="PHOT_FLUX_RADIO_7.5G" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.1/3]? VLA 7.8GHz flux
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="e_F7.8GHz" datatype="float" name="e_F7.8GHz" precision="3" ucd="ERROR" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.02/0.2]? F7.8GHz uncertainty
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="F13.3GHz" datatype="float" name="F13.3GHz" precision="3" ucd="PHOT_FLUX_RADIO_15G" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.2/3]? VLA 13.3GHz flux
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="e_F13.3GHz" datatype="float" name="e_F13.3GHz" precision="3" ucd="ERROR" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.04/0.4]? F13.3GHz uncertainty
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="F17.4GHz" datatype="float" name="F17.4GHz" precision="3" ucd="PHOT_FLUX_RADIO_15G" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.2/4.1]? VLA 17.4GHz flux
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="e_F17.4GHz" datatype="float" name="e_F17.4GHz" precision="3" ucd="ERROR" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.04/0.5]? F17.4GHz uncertainty
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="l_F27.5GHz" arraysize="1" datatype="char" name="l_F27.5GHz" ucd="CODE_LIMIT">
+    <DESCRIPTION>
+     Limit flag on F27.5GHz (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="F27.5GHz" datatype="float" name="F27.5GHz" precision="3" ucd="PHOT_FLUX_RADIO_22G" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.2/5.7]? VLA 27.5GHz flux
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="e_F27.5GHz" datatype="float" name="e_F27.5GHz" precision="3" ucd="ERROR" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.1/0.8]? F27.5GHz uncertainty
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="l_F36.5GHz" arraysize="1" datatype="char" name="l_F36.5GHz" ucd="CODE_LIMIT">
+    <DESCRIPTION>
+     Limit flag on F36.5GHz (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="F36.5GHz" datatype="float" name="F36.5GHz" precision="3" ucd="PHOT_FLUX_RADIO_36G" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.3/7]? VLA 36.5GHz flux
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <FIELD ID="e_F36.5GHz" datatype="float" name="e_F36.5GHz" precision="3" ucd="ERROR" unit="mJy" width="6">
+    <DESCRIPTION>
+     [0.1/1]? F36.5GHz uncertainty
+    </DESCRIPTION>
+    <VALUES null="nan"/>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>6104.3</TD>
+      <TD>2012-06-26</TD>
+      <TD> 25.0</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD> 0.165</TD>
+      <TD> 0.023</TD>
+      <TD> 0.149</TD>
+      <TD> 0.021</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>6106.1</TD>
+      <TD>2012-06-28</TD>
+      <TD> 27.0</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD>&lt;</TD>
+      <TD> 0.822</TD>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>6144.1</TD>
+      <TD>2012-08-05</TD>
+      <TD> 65.0</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD> 0.605</TD>
+      <TD> 0.115</TD>
+      <TD> 2.074</TD>
+      <TD> 0.160</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>6147.1</TD>
+      <TD>2012-08-08</TD>
+      <TD> 68.0</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD> 0.817</TD>
+      <TD> 0.124</TD>
+      <TD> 2.720</TD>
+      <TD> 0.191</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>6151.2</TD>
+      <TD>2012-08-12</TD>
+      <TD> 72.0</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD> 1.385</TD>
+      <TD> 0.100</TD>
+      <TD> 2.803</TD>
+      <TD> 0.171</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD> 5.133</TD>
+      <TD> 0.636</TD>
+      <TD/>
+      <TD> 5.647</TD>
+      <TD> 0.766</TD>
+     </TR>
+     <TR>
+      <TD>6159.2</TD>
+      <TD>2012-08-20</TD>
+      <TD> 80.0</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD> 2.574</TD>
+      <TD> 0.307</TD>
+      <TD> 2.690</TD>
+      <TD> 0.364</TD>
+      <TD/>
+      <TD> 3.246</TD>
+      <TD> 0.489</TD>
+      <TD/>
+      <TD> 2.639</TD>
+      <TD> 0.533</TD>
+     </TR>
+     <TR>
+      <TD>6167.0</TD>
+      <TD>2012-08-28</TD>
+      <TD> 88.0</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD> 1.036</TD>
+      <TD> 0.092</TD>
+      <TD> 1.128</TD>
+      <TD> 0.089</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>6171.1</TD>
+      <TD>2012-09-01</TD>
+      <TD> 92.0</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD> 1.169</TD>
+      <TD> 0.144</TD>
+      <TD> 1.250</TD>
+      <TD> 0.165</TD>
+      <TD/>
+      <TD> 1.760</TD>
+      <TD> 0.261</TD>
+      <TD/>
+      <TD> 2.370</TD>
+      <TD> 0.377</TD>
+     </TR>
+     <TR>
+      <TD>6177.9</TD>
+      <TD>2012-09-07</TD>
+      <TD> 98.0</TD>
+      <TD>BnA</TD>
+      <TD/>
+      <TD> 0.502</TD>
+      <TD> 0.055</TD>
+      <TD> 0.431</TD>
+      <TD> 0.038</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+     </TR>
+     <TR>
+      <TD>6182.1</TD>
+      <TD>2012-09-12</TD>
+      <TD>103.0</TD>
+      <TD>BnA</TD>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD/>
+      <TD> 0.810</TD>
+      <TD> 0.128</TD>
+      <TD> 1.080</TD>
+      <TD> 0.165</TD>
+      <TD/>
+      <TD> 1.738</TD>
+      <TD> 0.290</TD>
+      <TD/>
+      <TD> 2.126</TD>
+      <TD> 0.392</TD>
+     </TR>
+     <TR>
+      <TD>6215.0</TD>
+      <TD>2012-10-15</TD>
+      <TD>136.0</TD>
+      <TD>A</TD>
+      <TD>&lt;</TD>
+      <TD> 0.218</TD>
+      <TD/>
+      <TD> 0.338</TD>
+      <TD> 0.049</TD>
+      <TD> 0.843</TD>
+      <TD> 0.121</TD>
+      <TD> 1.201</TD>
+      <TD> 0.174</TD>
+      <TD/>
+      <TD> 2.085</TD>
+      <TD> 0.332</TD>
+      <TD/>
+      <TD> 2.460</TD>
+      <TD> 0.415</TD>
+     </TR>
+     <TR>
+      <TD>6243.8</TD>
+      <TD>2012-11-12</TD>
+      <TD>164.0</TD>
+      <TD>A</TD>
+      <TD/>
+      <TD> 0.228</TD>
+      <TD> 0.055</TD>
+      <TD> 0.484</TD>
+      <TD> 0.050</TD>
+      <TD> 1.297</TD>
+      <TD> 0.174</TD>
+      <TD> 1.955</TD>
+      <TD> 0.256</TD>
+      <TD/>
+      <TD> 4.153</TD>
+      <TD> 0.582</TD>
+      <TD/>
+      <TD> 5.667</TD>
+      <TD> 0.838</TD>
+     </TR>
+     <TR>
+      <TD>6297.6</TD>
+      <TD>2013-01-05</TD>
+      <TD>218.0</TD>
+      <TD>A</TD>
+      <TD/>
+      <TD> 0.353</TD>
+      <TD> 0.039</TD>
+      <TD> 0.701</TD>
+      <TD> 0.051</TD>
+      <TD> 1.699</TD>
+      <TD> 0.198</TD>
+      <TD> 2.539</TD>
+      <TD> 0.301</TD>
+      <TD/>
+      <TD> 4.240</TD>
+      <TD> 0.574</TD>
+      <TD/>
+      <TD> 6.230</TD>
+      <TD> 0.983</TD>
+     </TR>
+     <TR>
+      <TD>6357.5</TD>
+      <TD>2013-03-06</TD>
+      <TD>278.0</TD>
+      <TD>D</TD>
+      <TD/>
+      <TD> 0.761</TD>
+      <TD> 0.075</TD>
+      <TD> 1.300</TD>
+      <TD> 0.121</TD>
+      <TD> 2.877</TD>
+      <TD> 0.337</TD>
+      <TD> 4.071</TD>
+      <TD> 0.469</TD>
+      <TD/>
+      <TD> 5.660</TD>
+      <TD> 0.725</TD>
+      <TD/>
+      <TD> 6.821</TD>
+      <TD> 0.917</TD>
+     </TR>
+     <TR>
+      <TD>6402.3</TD>
+      <TD>2013-04-20</TD>
+      <TD>323.0</TD>
+      <TD>D</TD>
+      <TD/>
+      <TD> 0.963</TD>
+      <TD> 0.216</TD>
+      <TD> 1.352</TD>
+      <TD> 0.153</TD>
+      <TD> 2.810</TD>
+      <TD> 0.313</TD>
+      <TD> 3.637</TD>
+      <TD> 0.403</TD>
+      <TD/>
+      <TD> 4.677</TD>
+      <TD> 0.543</TD>
+      <TD/>
+      <TD> 5.089</TD>
+      <TD> 0.605</TD>
+     </TR>
+     <TR>
+      <TD>6445.4</TD>
+      <TD>2013-06-02</TD>
+      <TD>366.0</TD>
+      <TD>DnC</TD>
+      <TD/>
+      <TD> 1.037</TD>
+      <TD> 0.186</TD>
+      <TD> 1.507</TD>
+      <TD> 0.139</TD>
+      <TD> 2.855</TD>
+      <TD> 0.322</TD>
+      <TD> 3.283</TD>
+      <TD> 0.379</TD>
+      <TD/>
+      <TD> 3.290</TD>
+      <TD> 0.429</TD>
+      <TD/>
+      <TD> 3.680</TD>
+      <TD> 0.538</TD>
+     </TR>
+     <TR>
+      <TD>6501.3</TD>
+      <TD>2013-07-28</TD>
+      <TD>422.0</TD>
+      <TD>C</TD>
+      <TD/>
+      <TD> 1.041</TD>
+      <TD> 0.105</TD>
+      <TD> 1.446</TD>
+      <TD> 0.118</TD>
+      <TD> 2.318</TD>
+      <TD> 0.270</TD>
+      <TD> 2.337</TD>
+      <TD> 0.286</TD>
+      <TD/>
+      <TD> 3.017</TD>
+      <TD> 0.659</TD>
+      <TD/>
+      <TD> 3.160</TD>
+      <TD> 0.811</TD>
+     </TR>
+     <TR>
+      <TD>6584.0</TD>
+      <TD>2013-10-19</TD>
+      <TD>505.0</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD> 0.937</TD>
+      <TD> 0.084</TD>
+      <TD> 1.440</TD>
+      <TD> 0.093</TD>
+      <TD> 1.933</TD>
+      <TD> 0.218</TD>
+      <TD> 1.773</TD>
+      <TD> 0.206</TD>
+      <TD/>
+      <TD> 1.682</TD>
+      <TD> 0.222</TD>
+      <TD/>
+      <TD> 1.486</TD>
+      <TD> 0.213</TD>
+     </TR>
+     <TR>
+      <TD>6649.7</TD>
+      <TD>2013-12-23</TD>
+      <TD>570.0</TD>
+      <TD>B</TD>
+      <TD/>
+      <TD> 0.963</TD>
+      <TD> 0.106</TD>
+      <TD> 1.120</TD>
+      <TD> 0.087</TD>
+      <TD> 1.350</TD>
+      <TD> 0.182</TD>
+      <TD> 1.350</TD>
+      <TD> 0.186</TD>
+      <TD/>
+      <TD> 1.027</TD>
+      <TD> 0.205</TD>
+      <TD/>
+      <TD> 1.098</TD>
+      <TD> 0.304</TD>
+     </TR>
+     <TR>
+      <TD>6719.5</TD>
+      <TD>2014-03-03</TD>
+      <TD>640.0</TD>
+      <TD>A</TD>
+      <TD/>
+      <TD> 0.719</TD>
+      <TD> 0.068</TD>
+      <TD> 0.841</TD>
+      <TD> 0.064</TD>
+      <TD> 0.899</TD>
+      <TD> 0.114</TD>
+      <TD> 0.843</TD>
+      <TD> 0.119</TD>
+      <TD/>
+      <TD> 0.696</TD>
+      <TD> 0.143</TD>
+      <TD/>
+      <TD> 0.529</TD>
+      <TD> 0.132</TD>
+     </TR>
+     <TR>
+      <TD>7009.8</TD>
+      <TD>2014-12-18</TD>
+      <TD>930.0</TD>
+      <TD>C</TD>
+      <TD/>
+      <TD> 0.368</TD>
+      <TD> 0.058</TD>
+      <TD> 0.293</TD>
+      <TD> 0.034</TD>
+      <TD> 0.268</TD>
+      <TD> 0.044</TD>
+      <TD> 0.244</TD>
+      <TD> 0.044</TD>
+      <TD>&lt;</TD>
+      <TD> 0.282</TD>
+      <TD/>
+      <TD>&lt;</TD>
+      <TD> 0.365</TD>
+      <TD/>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

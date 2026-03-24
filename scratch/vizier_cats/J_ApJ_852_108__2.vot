@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_852_108_table3" name="J/ApJ/852/108/table3">
+   <DESCRIPTION>
+    Optical spectroscopic observations
+   </DESCRIPTION>
+   <FIELD ID="Date" arraysize="10" datatype="char" name="Date" ucd="TIME_DATE" xtype="timestamp">
+    <DESCRIPTION>
+     UT date of observation
+    </DESCRIPTION>
+    <VALUES null=" "/>
+   </FIELD>
+   <FIELD ID="t-t0" datatype="float" name="t-t0" precision="1" ucd="TIME_INTERVAL" unit="d" width="6">
+    <DESCRIPTION>
+     [3/450] Days since t_0_ (= 2012 June 1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Obs" arraysize="7" datatype="char" name="Obs" ucd="ID_HUMAN">
+    <DESCRIPTION>
+     Observer
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Tel" arraysize="15*" datatype="char" name="Tel" ucd="TEL_ID">
+    <DESCRIPTION>
+     Telescope
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Inst" arraysize="7*" datatype="char" name="Inst" ucd="INST_ID">
+    <DESCRIPTION>
+     Instrument
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="u_Disp" arraysize="1" datatype="char" name="u_Disp" ucd="CODE_ERROR">
+    <DESCRIPTION>
+     [~] Uncertainty flag on Disp
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Disp" datatype="float" name="Disp" precision="3" ucd="INST_DISPERSION" unit="0.1nm" width="6">
+    <DESCRIPTION>
+     Dispersion in Angstroms
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="lam1" datatype="short" name="lam1" ucd="INST_WAVELENGTH_COVERAGE" unit="0.1nm" width="4">
+    <DESCRIPTION>
+     [3000/5620] Minimum wavelength range in Angstroms
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="lam2" datatype="short" name="lam2" ucd="INST_WAVELENGTH_COVERAGE" unit="0.1nm" width="5">
+    <DESCRIPTION>
+     [5420/10000] Maximum wavelength range in Angstroms
+    </DESCRIPTION>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>2012-06-04</TD>
+      <TD>   3.0</TD>
+      <TD>Bensby</TD>
+      <TD>VLT</TD>
+      <TD>UVES</TD>
+      <TD/>
+      <TD> 0.020</TD>
+      <TD>3700</TD>
+      <TD>9500</TD>
+     </TR>
+     <TR>
+      <TD>2012-06-08</TD>
+      <TD>   7.5</TD>
+      <TD>Bohlsen</TD>
+      <TD>Vixen VC200L</TD>
+      <TD>LISA</TD>
+      <TD/>
+      <TD> 0.500</TD>
+      <TD>3800</TD>
+      <TD>8000</TD>
+     </TR>
+     <TR>
+      <TD>2012-06-14</TD>
+      <TD>  13.5</TD>
+      <TD>Bohlsen</TD>
+      <TD>Vixen VC200L</TD>
+      <TD>LISA</TD>
+      <TD/>
+      <TD> 0.500</TD>
+      <TD>3800</TD>
+      <TD>8000</TD>
+     </TR>
+     <TR>
+      <TD>2012-06-18</TD>
+      <TD>  17.5</TD>
+      <TD>Bohlsen</TD>
+      <TD>Vixen VC200L</TD>
+      <TD>LISA</TD>
+      <TD/>
+      <TD> 0.500</TD>
+      <TD>3800</TD>
+      <TD>8000</TD>
+     </TR>
+     <TR>
+      <TD>2012-06-21</TD>
+      <TD>  19.9</TD>
+      <TD>Buil</TD>
+      <TD>0.28m Celestron</TD>
+      <TD>LISA</TD>
+      <TD>~</TD>
+      <TD> 0.600</TD>
+      <TD>3700</TD>
+      <TD>7250</TD>
+     </TR>
+     <TR>
+      <TD>2012-06-21</TD>
+      <TD>  20.2</TD>
+      <TD>Walter</TD>
+      <TD>SMARTS 1.5m</TD>
+      <TD>RC</TD>
+      <TD>~</TD>
+      <TD> 5.500</TD>
+      <TD>3240</TD>
+      <TD>9500</TD>
+     </TR>
+     <TR>
+      <TD>2012-06-23</TD>
+      <TD>  22.1</TD>
+      <TD>Walter</TD>
+      <TD>SMARTS 1.5m</TD>
+      <TD>RC</TD>
+      <TD>~</TD>
+      <TD> 1.000</TD>
+      <TD>5620</TD>
+      <TD>6940</TD>
+     </TR>
+     <TR>
+      <TD>2012-06-25</TD>
+      <TD>  23.9</TD>
+      <TD>Buil</TD>
+      <TD>0.28m Celestron</TD>
+      <TD>LISA</TD>
+      <TD/>
+      <TD> 6.200</TD>
+      <TD>3700</TD>
+      <TD>7250</TD>
+     </TR>
+     <TR>
+      <TD>2012-06-25</TD>
+      <TD>  24.1</TD>
+      <TD>Walter</TD>
+      <TD>SMARTS 1.5m</TD>
+      <TD>RC</TD>
+      <TD>~</TD>
+      <TD> 1.500</TD>
+      <TD>3650</TD>
+      <TD>5420</TD>
+     </TR>
+     <TR>
+      <TD>2012-07-03</TD>
+      <TD>  32.0</TD>
+      <TD>Walter</TD>
+      <TD>SMARTS 1.5m</TD>
+      <TD>RC</TD>
+      <TD>~</TD>
+      <TD> 1.500</TD>
+      <TD>3650</TD>
+      <TD>5420</TD>
+     </TR>
+     <TR>
+      <TD>2012-07-07</TD>
+      <TD>  36.1</TD>
+      <TD>Walter</TD>
+      <TD>SMARTS 1.5m</TD>
+      <TD>RC</TD>
+      <TD>~</TD>
+      <TD> 1.000</TD>
+      <TD>5620</TD>
+      <TD>6940</TD>
+     </TR>
+     <TR>
+      <TD>2012-07-11</TD>
+      <TD>  40.1</TD>
+      <TD>Walter</TD>
+      <TD>SMARTS 1.5m</TD>
+      <TD>RC</TD>
+      <TD>~</TD>
+      <TD> 5.500</TD>
+      <TD>3240</TD>
+      <TD>9500</TD>
+     </TR>
+     <TR>
+      <TD>2012-07-15</TD>
+      <TD>  44.0</TD>
+      <TD>Walter</TD>
+      <TD>SMARTS 1.5m</TD>
+      <TD>RC</TD>
+      <TD>~</TD>
+      <TD> 1.000</TD>
+      <TD>5620</TD>
+      <TD>6940</TD>
+     </TR>
+     <TR>
+      <TD>2012-07-16</TD>
+      <TD>  45.1</TD>
+      <TD>Chomiuk</TD>
+      <TD>Clay Magellan</TD>
+      <TD>MIKE</TD>
+      <TD/>
+      <TD> 0.035</TD>
+      <TD>3700</TD>
+      <TD>9200</TD>
+     </TR>
+     <TR>
+      <TD>2012-07-19</TD>
+      <TD>  48.0</TD>
+      <TD>Walter</TD>
+      <TD>SMARTS 1.5m</TD>
+      <TD>RC</TD>
+      <TD>~</TD>
+      <TD> 5.500</TD>
+      <TD>3240</TD>
+      <TD>9500</TD>
+     </TR>
+     <TR>
+      <TD>2013-05-20</TD>
+      <TD> 353.0</TD>
+      <TD>Wagner</TD>
+      <TD>LBT</TD>
+      <TD>MODS1</TD>
+      <TD>~</TD>
+      <TD> 3.500</TD>
+      <TD>3420</TD>
+      <TD>10000</TD>
+     </TR>
+     <TR>
+      <TD>2013-08-04</TD>
+      <TD> 450.0</TD>
+      <TD>Chomiuk</TD>
+      <TD>SOAR</TD>
+      <TD>Goodman</TD>
+      <TD>~</TD>
+      <TD> 1.000</TD>
+      <TD>3000</TD>
+      <TD>7000</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

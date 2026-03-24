@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Produced with astropy.io.votable version 7.2.0
+     http://www.astropy.org/ -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/VOTable-1.4.xsd">
+ <RESOURCE type="results">
+  <TABLE ID="J_ApJ_916_44_table2" name="J/ApJ/916/44/table2">
+   <DESCRIPTION>
+    Journal of observations of V5669 Sgr by Subaru/HDS
+   </DESCRIPTION>
+   <FIELD ID="Date" arraysize="10" datatype="char" name="Date" ucd="TIME_DATE" xtype="timestamp">
+    <DESCRIPTION>
+     Date of observation (UT)
+    </DESCRIPTION>
+    <VALUES null=" "/>
+   </FIELD>
+   <FIELD ID="MJD" datatype="double" name="MJD" precision="2" ucd="TIME_DATE" unit="d" width="8">
+    <DESCRIPTION>
+     [57318.19/57322.22] Modified Julian Date
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="t" datatype="float" name="t" precision="2" ucd="TIME_INTERVAL" unit="d" width="6">
+    <DESCRIPTION>
+     [24.09/28.12] Days after t_max_ (2015 Sep 29.1; MJD57294.1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Setup" arraysize="2" datatype="char" name="Setup" ucd="SPECT_RANGE">
+    <DESCRIPTION>
+     Setup ("Ub" or "Yb") (1)
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Exp" datatype="short" name="Exp" ucd="TIME_EXPTIME" unit="s" width="4">
+    <DESCRIPTION>
+     [1800/3000] Exposure time
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Airmass" datatype="float" name="Airmass" precision="2" ucd="PHOT_ATM_AIRMASS" width="5">
+    <DESCRIPTION>
+     [1.88/2.59] Airmass
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="File" arraysize="21" datatype="char" name="File" ucd="ID_FILE">
+    <DESCRIPTION>
+     Name of the FITS file in subdirectory "sp"; column added by CDS
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="fits" arraysize="4" datatype="char" name="fits" ucd="DATA_LINK">
+    <DESCRIPTION>
+     Download the FITS file
+    </DESCRIPTION>
+   </FIELD>
+   <FIELD ID="Sp" arraysize="2" datatype="char" name="Sp" ucd="DATA_LINK">
+    <DESCRIPTION>
+     Interactive spectrum spectrum plot
+    </DESCRIPTION>
+   </FIELD>
+   <DATA>
+    <TABLEDATA>
+     <TR>
+      <TD>2015-10-23</TD>
+      <TD>57318.19</TD>
+      <TD> 24.09</TD>
+      <TD>Ub</TD>
+      <TD>3000</TD>
+      <TD> 1.88</TD>
+      <TD>V5669Sgr_Ub_+24d.fits</TD>
+      <TD>fits</TD>
+      <TD>Sp</TD>
+     </TR>
+     <TR>
+      <TD>2015-10-23</TD>
+      <TD>57318.23</TD>
+      <TD> 24.13</TD>
+      <TD>Yb</TD>
+      <TD>1800</TD>
+      <TD> 2.58</TD>
+      <TD>V5669Sgr_Yb_+24d.fits</TD>
+      <TD>fits</TD>
+      <TD>Sp</TD>
+     </TR>
+     <TR>
+      <TD>2015-10-27</TD>
+      <TD>57322.19</TD>
+      <TD> 28.09</TD>
+      <TD>Ub</TD>
+      <TD>2400</TD>
+      <TD> 1.97</TD>
+      <TD>V5669Sgr_Ub_+28d.fits</TD>
+      <TD>fits</TD>
+      <TD>Sp</TD>
+     </TR>
+     <TR>
+      <TD>2015-10-27</TD>
+      <TD>57322.22</TD>
+      <TD> 28.12</TD>
+      <TD>Yb</TD>
+      <TD>1800</TD>
+      <TD> 2.59</TD>
+      <TD>V5669Sgr_Yb_+28d.fits</TD>
+      <TD>fits</TD>
+      <TD>Sp</TD>
+     </TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>
