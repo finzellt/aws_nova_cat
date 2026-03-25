@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Seed script for band_registry.json (ADR-017).
+Seed script for band_registry.json (ADR-017, amended 2026-03-25).
 
 Queries the SVO Filter Profile Service via ``astroquery.svo_fps`` for each
 canonical band defined in this script and emits a fully-populated
@@ -8,9 +8,10 @@ canonical band defined in this script and emits a fully-populated
 
 Usage::
 
-    python seed_band_registry.py
-    python seed_band_registry.py --output /path/to/band_registry.json
-    python seed_band_registry.py --dry-run   # prints summary, no file
+    python scripts/exploratory/seed_band_registry.py
+    python scripts/exploratory/seed_band_registry.py --output /path/to/band_registry.json
+    python scripts/exploratory/seed_band_registry.py --dry-run   # prints summary, no file
+    python scripts/exploratory/seed_band_registry.py --specs band_specs.json
 
 The output file is intended for OPERATOR REVIEW before being committed to::
 
@@ -25,7 +26,7 @@ Design notes
 * ``get_filter_list(facility, instrument)`` returns one row per calibration system
   (Vega / AB / ST) for each filter in that facility+instrument combination.  Calls are
   cached by (facility, instrument) pair so a second band in the same system (e.g.
-  Johnson B after Johnson V) issues no additional HTTP request.
+  Bessell B after Bessell V) issues no additional HTTP request.
 
 * If an SVO lookup fails for all candidate filter IDs, a sparse entry is emitted and
   a WARNING is logged.  Sparse entries have ``null`` for all SVO-derived fields.
@@ -34,8 +35,12 @@ Design notes
 * The two sparse entries that are *intentionally* sparse (``Generic_K``, ``Open``)
   do not trigger the failure log.
 
-* Regime vocabulary used here (optical / uv / nir / mir) is provisional and must be
-  reconciled with ADR-019 before the registry is committed.
+* ``photometric_system`` is abolished per ADR-019 Decision 1 and does not appear
+  in ``BandSpec`` or the output registry entries.
+
+* ``band_id`` follows the two-track naming convention from the ADR-017 amendment:
+  instrument-specific entries use ``{Facility}_{Instrument}_{BandLabel}`` (with
+  redundancy collapsing), Generic fallbacks use ``Generic_{BandLabel}``.
 
 Requirements
 ------------
@@ -73,7 +78,7 @@ log = logging.getLogger("seed_band_registry")
 _C_AA_S: float = 2.99792458e18
 
 # ── ADR-017 schema version ──────────────────────────────────────────────────
-REGISTRY_SCHEMA_VERSION = "1.0.0"
+REGISTRY_SCHEMA_VERSION = "1.1.0"
 
 # ---------------------------------------------------------------------------
 # Band specification table
@@ -88,16 +93,20 @@ class BandSpec:
     ``svo_candidates`` is a list of SVO filter IDs (``"Facility/Instrument.Band"``)
     to try in order; the first one that returns a non-empty table wins.  An empty
     list means "no SVO entry exists" and a sparse entry will be generated.
+
+    ``photometric_system`` is abolished per ADR-019 Decision 1 and does not appear
+    here.
     """
 
     band_id: str
-    """NovaCat canonical band ID (ADR-017 Decision 2)."""
+    """NovaCat canonical band ID (ADR-017 Decision 2, amended)."""
 
     aliases: list[str]
     """Alias list; band_id must be the first element (ADR-017 Decision 3)."""
 
     band_name: str | None
     regime: str | None
+    """Provisional; must be reconciled with ADR-019 vocabulary."""
 
     observatory_facility: str | None
     instrument: str | None
@@ -115,7 +124,7 @@ class BandSpec:
     the instrument name (e.g. ``SLOAN/SDSS.u`` has facility=SLOAN, instrument=None).
     """
 
-    # Intentionally-sparse entries (Generic_K, Open) bypass SVO lookup
+    # Intentionally-sparse entries (Generic_*, Open) bypass SVO lookup
     sparse: bool = False
 
     excluded: bool = False
@@ -126,88 +135,92 @@ class BandSpec:
 
 
 # ---------------------------------------------------------------------------
-# Band definitions — 24 physical bands + 1 excluded entry
+# Band definitions — 22 instrument-specific + 8 Generic fallbacks + 1 excluded
+#
+# ADR-017 amendment (2026-03-25): band_id follows two-track convention.
+# Instrument-specific: {Facility}_{Instrument}_{BandLabel} (redundancy-collapsed).
+# Generic fallback: Generic_{BandLabel}.
+#
+# photometric_system is abolished (ADR-019 Decision 1).
 #
 # svo_candidates format: {"filter_id": str, "facility": str, "instrument": str|None}
 # facility/instrument are passed *directly* to SvoFps.get_filter_list(); they
-# are NOT derived from filter_id to avoid assumption errors (e.g. SLOAN/SDSS.u
-# has facility=SLOAN, instrument=None — the "SDSS" in the path is not the API
-# instrument parameter).
+# are NOT derived from filter_id to avoid assumption errors.
 # ---------------------------------------------------------------------------
 BAND_SPECS: list[BandSpec] = [
-    # ── Johnson-Cousins ────────────────────────────────────────────────────
+    # ── Johnson-Cousins (Bessell reference profiles) ───────────────────────
     # Generic/Johnson and Generic/Cousins do not exist in the SVO database.
     # OAF/Bessell and HCT/HFOSC are used instead: Bessell (1990) defines the
     # canonical UBVRI transmission curves that operationally ARE the
-    # Johnson-Cousins system in modern CCD photometry.  The photometric_system
-    # field on the registry entry remains "Johnson"/"Cousins" to reflect the
-    # scientific system identity; svo_filter_id records the SVO profile used.
+    # Johnson-Cousins system in modern CCD photometry.
+    # observatory_facility and instrument now reflect the actual SVO profile
+    # source, not a generic label.
     BandSpec(
-        band_id="Johnson_U",
-        aliases=["Johnson_U", "U"],
+        band_id="HCT_HFOSC_Bessell_U",
+        aliases=["HCT_HFOSC_Bessell_U", "Johnson_U", "U"],
         band_name="U",
         regime="optical",
-        observatory_facility="Generic",
-        instrument=None,
+        observatory_facility="HCT",
+        instrument="HFOSC",
         svo_candidates=[
-            {"filter_id": "OAF/Bessell.U", "facility": "OAF", "instrument": "Bessell"},
+            {"filter_id": "HCT/HFOSC.Bessell_U", "facility": "HCT", "instrument": "HFOSC"},
             {"filter_id": "HCT/HFOSC.Bessell_U", "facility": "HCT", "instrument": "HFOSC"},
         ],
     ),
     BandSpec(
-        band_id="Johnson_B",
-        aliases=["Johnson_B", "B"],
+        band_id="HCT_HFOSC_Bessell_B",
+        aliases=["HCT_HFOSC_Bessell_B", "Johnson_B", "B"],
         band_name="B",
         regime="optical",
-        observatory_facility="Generic",
-        instrument=None,
+        observatory_facility="HCT",
+        instrument="HFOSC",
         svo_candidates=[
-            {"filter_id": "OAF/Bessell.B", "facility": "OAF", "instrument": "Bessell"},
             {"filter_id": "HCT/HFOSC.Bessell_B", "facility": "HCT", "instrument": "HFOSC"},
+            {"filter_id": "OAF/Bessell.B", "facility": "OAF", "instrument": "Bessell"},
         ],
     ),
     BandSpec(
-        band_id="Johnson_V",
-        aliases=["Johnson_V", "V"],
+        band_id="HCT_HFOSC_Bessell_V",
+        aliases=["HCT_HFOSC_Bessell_V", "Johnson_V", "V", "Johnson V", "Vmag"],
         band_name="V",
         regime="optical",
-        observatory_facility="Generic",
-        instrument=None,
+        observatory_facility="HCT",
+        instrument="HFOSC",
         svo_candidates=[
-            {"filter_id": "OAF/Bessell.V", "facility": "OAF", "instrument": "Bessell"},
             {"filter_id": "HCT/HFOSC.Bessell_V", "facility": "HCT", "instrument": "HFOSC"},
+            {"filter_id": "OAF/Bessell.V", "facility": "OAF", "instrument": "Bessell"},
         ],
     ),
     BandSpec(
-        band_id="Cousins_R",
-        aliases=["Cousins_R", "R"],
+        band_id="HCT_HFOSC_Bessell_R",
+        aliases=["HCT_HFOSC_Bessell_R", "Cousins_R", "R"],
         band_name="R",
         regime="optical",
-        observatory_facility="Generic",
-        instrument=None,
+        observatory_facility="HCT",
+        instrument="HFOSC",
         svo_candidates=[
-            {"filter_id": "OAF/Bessell.R", "facility": "OAF", "instrument": "Bessell"},
             {"filter_id": "HCT/HFOSC.Bessell_R", "facility": "HCT", "instrument": "HFOSC"},
+            {"filter_id": "OAF/Bessell.R", "facility": "OAF", "instrument": "Bessell"},
         ],
     ),
     BandSpec(
-        band_id="Cousins_I",
-        aliases=["Cousins_I", "I"],
+        band_id="HCT_HFOSC_Bessell_I",
+        aliases=["HCT_HFOSC_Bessell_I", "Cousins_I", "I"],
         band_name="I",
         regime="optical",
-        observatory_facility="Generic",
-        instrument=None,
+        observatory_facility="HCT",
+        instrument="HFOSC",
         svo_candidates=[
-            {"filter_id": "OAF/Bessell.I", "facility": "OAF", "instrument": "Bessell"},
             {"filter_id": "HCT/HFOSC.Bessell_I", "facility": "HCT", "instrument": "HFOSC"},
+            {"filter_id": "OAF/Bessell.I", "facility": "OAF", "instrument": "Bessell"},
         ],
     ),
     # ── Sloan unprimed ─────────────────────────────────────────────────────
     # facility=SLOAN, instrument=None  (NOT "SDSS" — the path component in the
     # filterID is not the API instrument parameter for these entries).
     BandSpec(
-        band_id="Sloan_u",
-        aliases=["Sloan_u", "u"],
+        band_id="SLOAN_SDSS_u",
+        aliases=["SLOAN_SDSS_u", "Sloan_u", "u"],
         band_name="u",
         regime="optical",
         observatory_facility="SLOAN",
@@ -217,8 +230,8 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     BandSpec(
-        band_id="Sloan_g",
-        aliases=["Sloan_g", "g"],
+        band_id="SLOAN_SDSS_g",
+        aliases=["SLOAN_SDSS_g", "Sloan_g", "g"],
         band_name="g",
         regime="optical",
         observatory_facility="SLOAN",
@@ -228,8 +241,8 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     BandSpec(
-        band_id="Sloan_r",
-        aliases=["Sloan_r", "r"],
+        band_id="SLOAN_SDSS_r",
+        aliases=["SLOAN_SDSS_r", "Sloan_r", "r"],
         band_name="r",
         regime="optical",
         observatory_facility="SLOAN",
@@ -239,8 +252,8 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     BandSpec(
-        band_id="Sloan_i",
-        aliases=["Sloan_i", "i"],
+        band_id="SLOAN_SDSS_i",
+        aliases=["SLOAN_SDSS_i", "Sloan_i", "i"],
         band_name="i",
         regime="optical",
         observatory_facility="SLOAN",
@@ -250,8 +263,8 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     BandSpec(
-        band_id="Sloan_z",
-        aliases=["Sloan_z", "z_s"],
+        band_id="SLOAN_SDSS_z",
+        aliases=["SLOAN_SDSS_z", "Sloan_z", "z_s"],
         band_name="z",
         regime="optical",
         observatory_facility="SLOAN",
@@ -264,8 +277,8 @@ BAND_SPECS: list[BandSpec] = [
     # SVO naming for primed SDSS bands is uncertain; multiple candidates listed.
     # Operator must verify the matched filterID in the output.
     BandSpec(
-        band_id="Sloan_up",
-        aliases=["Sloan_up", "up"],
+        band_id="SLOAN_SDSS_up",
+        aliases=["SLOAN_SDSS_up", "Sloan_up", "up"],
         band_name="u'",
         regime="optical",
         observatory_facility="SLOAN",
@@ -275,8 +288,8 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     BandSpec(
-        band_id="Sloan_gp",
-        aliases=["Sloan_gp", "gp"],
+        band_id="SLOAN_SDSS_gp",
+        aliases=["SLOAN_SDSS_gp", "Sloan_gp", "gp"],
         band_name="g'",
         regime="optical",
         observatory_facility="SLOAN",
@@ -286,8 +299,8 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     BandSpec(
-        band_id="Sloan_rp",
-        aliases=["Sloan_rp", "rp"],
+        band_id="SLOAN_SDSS_rp",
+        aliases=["SLOAN_SDSS_rp", "Sloan_rp", "rp"],
         band_name="r'",
         regime="optical",
         observatory_facility="SLOAN",
@@ -297,8 +310,8 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     BandSpec(
-        band_id="Sloan_ip",
-        aliases=["Sloan_ip", "ip"],
+        band_id="SLOAN_SDSS_ip",
+        aliases=["SLOAN_SDSS_ip", "Sloan_ip", "ip"],
         band_name="i'",
         regime="optical",
         observatory_facility="SLOAN",
@@ -308,6 +321,7 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     # ── 2MASS ──────────────────────────────────────────────────────────────
+    # Redundancy collapse: 2MASS/2MASS.J → 2MASS_J (facility = instrument)
     BandSpec(
         band_id="2MASS_J",
         aliases=["2MASS_J", "J"],
@@ -341,23 +355,10 @@ BAND_SPECS: list[BandSpec] = [
             {"filter_id": "2MASS/2MASS.Ks", "facility": "2MASS", "instrument": None},
         ],
     ),
-    # ── Generic K — intentionally sparse (no SVO entry for generic K) ──────
-    # λ_eff hint ≈ 2190 nm = 21900 Å (community-standard K-band centre).
-    # Operator must annotate this entry with a source justification before commit.
-    BandSpec(
-        band_id="Generic_K",
-        aliases=["Generic_K", "K"],
-        band_name="K",
-        regime="nir",
-        observatory_facility=None,
-        instrument=None,
-        sparse=True,
-        lambda_eff_hint=21900.0,
-    ),
     # ── Swift UVOT ─────────────────────────────────────────────────────────
     BandSpec(
-        band_id="UVOT_UVW1",
-        aliases=["UVOT_UVW1", "uvw1"],
+        band_id="Swift_UVOT_UVW1",
+        aliases=["Swift_UVOT_UVW1", "UVOT_UVW1", "uvw1"],
         band_name="UVW1",
         regime="uv",
         observatory_facility="Swift",
@@ -367,8 +368,8 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     BandSpec(
-        band_id="UVOT_UVW2",
-        aliases=["UVOT_UVW2", "uvw2"],
+        band_id="Swift_UVOT_UVW2",
+        aliases=["Swift_UVOT_UVW2", "UVOT_UVW2", "uvw2"],
         band_name="UVW2",
         regime="uv",
         observatory_facility="Swift",
@@ -378,8 +379,8 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     BandSpec(
-        band_id="UVOT_UVM2",
-        aliases=["UVOT_UVM2", "uvm2", "UVM2"],
+        band_id="Swift_UVOT_UVM2",
+        aliases=["Swift_UVOT_UVM2", "UVOT_UVM2", "uvm2", "UVM2"],
         band_name="UVM2",
         regime="uv",
         observatory_facility="Swift",
@@ -391,8 +392,8 @@ BAND_SPECS: list[BandSpec] = [
     # ── HST ────────────────────────────────────────────────────────────────
     # Prefer WFC3_UVIS2; fall back to WFPC2 if not found.
     BandSpec(
-        band_id="HST_F555W",
-        aliases=["HST_F555W", "F555W"],
+        band_id="HST_WFC3_UVIS2_F555W",
+        aliases=["HST_WFC3_UVIS2_F555W", "HST_F555W", "F555W"],
         band_name="F555W",
         regime="optical",
         observatory_facility="HST",
@@ -404,8 +405,8 @@ BAND_SPECS: list[BandSpec] = [
     ),
     # ── Spitzer IRAC ───────────────────────────────────────────────────────
     BandSpec(
-        band_id="Spitzer_IRAC1",
-        aliases=["Spitzer_IRAC1", "[3.6]", "3.6"],
+        band_id="Spitzer_IRAC_I1",
+        aliases=["Spitzer_IRAC_I1", "Spitzer_IRAC1", "[3.6]", "3.6"],
         band_name="[3.6]",
         regime="mir",
         observatory_facility="Spitzer",
@@ -415,8 +416,8 @@ BAND_SPECS: list[BandSpec] = [
         ],
     ),
     BandSpec(
-        band_id="Spitzer_IRAC2",
-        aliases=["Spitzer_IRAC2", "[4.5]", "4.5"],
+        band_id="Spitzer_IRAC_I2",
+        aliases=["Spitzer_IRAC_I2", "Spitzer_IRAC2", "[4.5]", "4.5"],
         band_name="[4.5]",
         regime="mir",
         observatory_facility="Spitzer",
@@ -424,6 +425,83 @@ BAND_SPECS: list[BandSpec] = [
         svo_candidates=[
             {"filter_id": "Spitzer/IRAC.I2", "facility": "Spitzer", "instrument": "IRAC"},
         ],
+    ),
+    # ── Generic fallbacks (ADR-018 disambiguation targets) ─────────────────
+    # Strictly low-confidence fallbacks. Sparse by definition.
+    BandSpec(
+        band_id="Generic_U",
+        aliases=["Generic_U"],
+        band_name="U",
+        regime="optical",
+        observatory_facility=None,
+        instrument=None,
+        sparse=True,
+    ),
+    BandSpec(
+        band_id="Generic_B",
+        aliases=["Generic_B"],
+        band_name="B",
+        regime="optical",
+        observatory_facility=None,
+        instrument=None,
+        sparse=True,
+    ),
+    BandSpec(
+        band_id="Generic_V",
+        aliases=["Generic_V"],
+        band_name="V",
+        regime="optical",
+        observatory_facility=None,
+        instrument=None,
+        sparse=True,
+    ),
+    BandSpec(
+        band_id="Generic_R",
+        aliases=["Generic_R"],
+        band_name="R",
+        regime="optical",
+        observatory_facility=None,
+        instrument=None,
+        sparse=True,
+    ),
+    BandSpec(
+        band_id="Generic_I",
+        aliases=["Generic_I"],
+        band_name="I",
+        regime="optical",
+        observatory_facility=None,
+        instrument=None,
+        sparse=True,
+    ),
+    BandSpec(
+        band_id="Generic_J",
+        aliases=["Generic_J"],
+        band_name="J",
+        regime="nir",
+        observatory_facility=None,
+        instrument=None,
+        sparse=True,
+    ),
+    BandSpec(
+        band_id="Generic_H",
+        aliases=["Generic_H"],
+        band_name="H",
+        regime="nir",
+        observatory_facility=None,
+        instrument=None,
+        sparse=True,
+    ),
+    # λ_eff hint ≈ 2190 nm = 21900 Å (community-standard K-band centre).
+    # Operator must annotate this entry with a source justification before commit.
+    BandSpec(
+        band_id="Generic_K",
+        aliases=["Generic_K", "K"],
+        band_name="K",
+        regime="nir",
+        observatory_facility=None,
+        instrument=None,
+        sparse=True,
+        lambda_eff_hint=21900.0,
     ),
     # ── Excluded ───────────────────────────────────────────────────────────
     BandSpec(
@@ -453,13 +531,12 @@ def load_band_specs_from_file(path: str) -> list[BandSpec]:
         {
           "bands": [
             {
-              "band_id": "Johnson_V",
-              "aliases": ["Johnson_V", "V"],
-              "photometric_system": "Johnson",
+              "band_id": "HCT_HFOSC_Bessell_V",
+              "aliases": ["HCT_HFOSC_Bessell_V", "Johnson_V", "V"],
               "band_name": "V",
               "regime": "optical",
-              "observatory_facility": "Generic",
-              "instrument": null,
+              "observatory_facility": "HCT",
+              "instrument": "HFOSC",
               "svo_candidates": [
                 {"filter_id": "OAF/Bessell.V", "facility": "OAF", "instrument": "Bessell"}
               ],
@@ -477,58 +554,29 @@ def load_band_specs_from_file(path: str) -> list[BandSpec]:
 
     Raises ``ValueError`` with a descriptive message on any schema violation.
     """
-    with open(path, encoding="utf-8") as fh:
-        raw = json.load(fh)
+    import json as _json
+    from pathlib import Path
 
+    raw = _json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(raw, dict) or "bands" not in raw:
-        raise ValueError(f"{path}: top-level object must have a 'bands' key")
+        raise ValueError(f"{path}: expected top-level object with 'bands' key")
 
     specs: list[BandSpec] = []
-    for i, item in enumerate(raw["bands"]):
-        ctx = f"{path}:bands[{i}]"
-
-        def _require(key: str, _item: dict[str, Any] = item, _ctx: str = ctx) -> Any:
-            if key not in _item:
-                raise ValueError(f"{_ctx}: missing required field '{key}'")
-            return _item[key]
-
-        band_id: str = _require("band_id")
-        aliases: list[str] = _require("aliases")
-        if not isinstance(aliases, list) or not aliases:
-            raise ValueError(f"{ctx} ({band_id}): 'aliases' must be a non-empty list")
-        if aliases[0] != band_id:
-            raise ValueError(
-                f"{ctx} ({band_id}): first alias must equal band_id, got {aliases[0]!r}"
-            )
-
-        raw_candidates = _require("svo_candidates")
-        if not isinstance(raw_candidates, list):
-            raise ValueError(f"{ctx} ({band_id}): 'svo_candidates' must be a list")
-        candidates: list[dict[str, str | None]] = []
-        for j, c in enumerate(raw_candidates):
-            if not isinstance(c, dict):
-                raise ValueError(f"{ctx} ({band_id}): svo_candidates[{j}] must be an object")
-            for req_key in ("filter_id", "facility"):
-                if req_key not in c:
-                    raise ValueError(f"{ctx} ({band_id}): svo_candidates[{j}] missing '{req_key}'")
-            candidates.append(
-                {
-                    "filter_id": c["filter_id"],
-                    "facility": c["facility"],
-                    "instrument": c.get("instrument"),
-                }
-            )
-
+    for item in raw["bands"]:
+        if not isinstance(item, dict):
+            raise ValueError(f"{path}: each band must be a dict")
+        missing = {"band_id", "aliases", "band_name", "regime"} - set(item.keys())
+        if missing:
+            raise ValueError(f"{path}: band missing required keys: {missing}")
         specs.append(
             BandSpec(
-                band_id=band_id,
-                aliases=aliases,
-                photometric_system=item.get("photometric_system"),
+                band_id=item["band_id"],
+                aliases=item["aliases"],
                 band_name=item.get("band_name"),
                 regime=item.get("regime"),
                 observatory_facility=item.get("observatory_facility"),
                 instrument=item.get("instrument"),
-                svo_candidates=candidates,
+                svo_candidates=item.get("svo_candidates", []),
                 sparse=bool(item.get("sparse", False)),
                 excluded=bool(item.get("excluded", False)),
                 exclusion_reason=item.get("exclusion_reason"),
@@ -696,79 +744,74 @@ def _jy_to_flam(zero_point_jy: float, lambda_pivot_aa: float) -> float | None:
     """
     Convert zero-point flux density from Jy to erg cm⁻² s⁻¹ Å⁻¹.
 
-    F_λ  =  F_ν  ×  c  /  λ²
-
-    where:
-        F_ν  is in erg cm⁻² s⁻¹ Hz⁻¹  (1 Jy = 1e-23 erg cm⁻² s⁻¹ Hz⁻¹)
-        c    is in Å s⁻¹               (_C_AA_S)
-        λ    is in Å                   (lambda_pivot_aa)
+    Formula:  f_λ = f_ν * c / λ²  (with unit conversions)
+              f_λ [erg cm⁻² s⁻¹ Å⁻¹] = f_ν [Jy] * 1e-23 * c [Å/s] / λ² [Å²]
     """
-    if lambda_pivot_aa <= 0:
+    if lambda_pivot_aa is None or lambda_pivot_aa <= 0:
         return None
-    return (zero_point_jy * 1e-23 * _C_AA_S) / (lambda_pivot_aa**2)
+    return zero_point_jy * 1e-23 * _C_AA_S / (lambda_pivot_aa**2)
 
 
-def _round_sig(val: float | None, digits: int = 6) -> float | None:
-    """Round to ``digits`` significant figures, or return None."""
+def _round_sig(val: float | None, sig: int = 6) -> float | None:
+    """Round to ``sig`` significant figures, or return None."""
     if val is None:
         return None
-    if val == 0.0:
+    if val == 0:
         return 0.0
     from math import floor, log10
 
     magnitude = floor(log10(abs(val)))
-    factor = 10 ** (digits - 1 - magnitude)
+    factor = 10 ** (sig - 1 - magnitude)
     return round(val * factor) / factor
-
-
-# ---------------------------------------------------------------------------
-# Entry builders
-# ---------------------------------------------------------------------------
 
 
 def _build_calibration(rows: AstropyTable) -> dict[str, Any]:
     """
-    Build the ``calibration`` block from an SVO filter table (multi-row).
+    Build the calibration block from SVO rows.
 
-    SVO returns one row per photometric calibration system.  We recognise
-    'Vega', 'AB', and 'ST' (case-insensitive) and map each to its sub-block.
-    Unknown systems are logged and skipped.
+    SVO returns one row per calibration system.  We aggregate into
+    {vega, ab, st} sub-blocks.
     """
-    calib: dict[str, Any] = {"vega": None, "ab": None, "st": None}
+    cal: dict[str, Any] = {"vega": None, "ab": None, "st": None}
 
     for row in rows:
-        mag_sys_raw = _to_str(_col(row, "MagSys", "MagSystem"))
-        if mag_sys_raw is None:
-            continue
-
-        key = mag_sys_raw.lower()
-        if key not in calib:
-            log.debug("SVO: unknown MagSys '%s' — skipped", mag_sys_raw)
-            continue
-
-        zero_point_jy = _to_float(_col(row, "ZeroPoint", "ZP"))
-        zp_type = _to_str(_col(row, "ZeroPointType"))
         photcal_id = _to_str(_col(row, "PhotCalID"))
-        lambda_pivot_aa = _to_float(_col(row, "WavelengthPivot", "WavelengthMean", "WavelengthCen"))
+        zp_type = _to_str(_col(row, "MagSys"))
+        zp_jy = _to_float(_col(row, "ZeroPoint"))
+        lambda_pivot = _to_float(_col(row, "WavelengthPivot"))
 
-        if zero_point_jy is not None and lambda_pivot_aa is not None:
-            zp_flam = _round_sig(_jy_to_flam(zero_point_jy, lambda_pivot_aa))
+        if photcal_id is None:
+            continue
+
+        # Determine which system this row represents
+        pid_lower = photcal_id.lower()
+        if "vega" in pid_lower:
+            key = "vega"
+        elif "/ab" in pid_lower:
+            key = "ab"
+        elif "/st" in pid_lower:
+            key = "st"
         else:
-            zp_flam = None
+            log.debug("Unknown calibration system in PhotCalID=%s, skipping", photcal_id)
+            continue
 
-        calib[key] = {
+        zp_flam = None
+        if zp_jy is not None and lambda_pivot is not None:
+            zp_flam = _round_sig(_jy_to_flam(zp_jy, lambda_pivot))
+
+        cal[key] = {
             "zero_point_flux_lambda": zp_flam,
-            "zero_point_flux_nu": _round_sig(zero_point_jy),
+            "zero_point_flux_nu": _round_sig(zp_jy),
             "zeropoint_type": zp_type,
             "photcal_id": photcal_id,
         }
 
-    return calib
+    return cal
 
 
 def _detector_type_str(raw: Any) -> str | None:
     """
-    Map SVO DetectorType code to a human-readable string.
+    Convert SVO DetectorType integer to a human-readable string.
 
     SVO convention: 0 = energy counter (bolometer), 1 = photon counter (CCD/etc.)
     """
@@ -825,7 +868,7 @@ def _build_sparse_entry(spec: BandSpec) -> dict[str, Any]:
     """
     Build a sparse ADR-017 entry with null SVO-derived fields.
 
-    Used for intentionally-sparse entries (``Generic_K``, ``Open``) and as a
+    Used for intentionally-sparse entries (``Generic_*``, ``Open``) and as a
     fallback when all SVO lookup candidates fail.
     """
     return {
@@ -873,7 +916,7 @@ def _fetch_band(spec: BandSpec) -> tuple[dict[str, Any], bool]:
         facility: str = candidate["facility"]
         instrument: str | None = candidate.get("instrument")
         log.info(
-            "%-20s  trying SVO: %s (facility=%s instrument=%s)",
+            "%-30s  trying SVO: %s (facility=%s instrument=%s)",
             spec.band_id,
             filter_id,
             facility,
@@ -884,7 +927,7 @@ def _fetch_band(spec: BandSpec) -> tuple[dict[str, Any], bool]:
             entry = _build_entry_from_svo(spec, rows)
             matched_id = entry.get("svo_filter_id") or filter_id
             log.info(
-                "%-20s  ✓ matched %s  (%d cal row%s)",
+                "%-30s  ✓ matched %s  (%d cal row%s)",
                 spec.band_id,
                 matched_id,
                 len(rows),
@@ -895,7 +938,7 @@ def _fetch_band(spec: BandSpec) -> tuple[dict[str, Any], bool]:
     # All candidates exhausted
     filter_ids = [c["filter_id"] for c in spec.svo_candidates]
     log.warning(
-        "%-20s  ✗ SVO lookup failed (tried %s) — sparse entry emitted",
+        "%-30s  ✗ SVO lookup failed (tried %s) — sparse entry emitted",
         spec.band_id,
         filter_ids,
     )
@@ -915,50 +958,64 @@ def _print_summary(
     specs: list[BandSpec],
 ) -> None:
     """Print a human-readable post-run summary to stderr."""
-    total = len(entries)
-    svo_ok = total - len(failures)
-    sparse_by_design = sum(1 for s in specs if s.sparse or not s.svo_candidates)
-
-    print("", file=sys.stderr)
-    print("─" * 60, file=sys.stderr)
-    print("  band_registry.json seed summary", file=sys.stderr)
-    print("─" * 60, file=sys.stderr)
-    print(f"  Total entries   : {total}", file=sys.stderr)
-    print(f"  SVO-populated   : {svo_ok - sparse_by_design}", file=sys.stderr)
-    print(f"  Sparse by design: {sparse_by_design}", file=sys.stderr)
-    if failures:
-        print(f"  SVO failures    : {len(failures)}  ← REVIEW REQUIRED", file=sys.stderr)
-        for fid in failures:
-            print(f"      • {fid}", file=sys.stderr)
-    else:
-        print("  SVO failures    : 0", file=sys.stderr)
-    print("─" * 60, file=sys.stderr)
-    print(f"  Output          : {output_path}", file=sys.stderr)
-    print("", file=sys.stderr)
-    if failures:
-        print(
-            "  ⚠  Sparse fallback entries were emitted for the bands above.\n"
-            "     Review each entry and populate manually or fix SVO candidates\n"
-            "     before committing to band_registry/.",
-            file=sys.stderr,
-        )
-        print("", file=sys.stderr)
-    print(
-        "  ⚠  Regime vocabulary (optical / uv / nir / mir) is provisional.\n"
-        "     Reconcile with ADR-019 before committing.",
-        file=sys.stderr,
+    n_instrument = sum(
+        1 for e in entries if not e["band_id"].startswith("Generic_") and not e.get("excluded")
     )
-    print("", file=sys.stderr)
+    n_generic = sum(1 for e in entries if e["band_id"].startswith("Generic_"))
+    n_excluded = sum(1 for e in entries if e.get("excluded"))
+    n_sparse = sum(1 for e in entries if e.get("lambda_eff") is None and not e.get("excluded"))
+
+    print("\n" + "=" * 60, file=sys.stderr)
+    print(f"Band Registry Seed — {len(entries)} entries", file=sys.stderr)
+    print(f"  Instrument-specific: {n_instrument}", file=sys.stderr)
+    print(f"  Generic fallbacks:   {n_generic}", file=sys.stderr)
+    print(f"  Excluded:            {n_excluded}", file=sys.stderr)
+    print(f"  Sparse (no SVO):     {n_sparse}", file=sys.stderr)
+    if failures:
+        print(f"\n  ⚠ SVO lookup failures ({len(failures)}):", file=sys.stderr)
+        for band_id in failures:
+            print(f"    - {band_id}", file=sys.stderr)
+    print(f"\n  Output: {output_path}", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
 
 
-def main(output_path: str, dry_run: bool, specs_file: str | None) -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Seed band_registry.json from SVO Filter Profile Service"
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        default="band_registry.json",
+        help="Output file path (default: band_registry.json)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print summary without writing file",
+    )
+    parser.add_argument(
+        "--specs",
+        default=None,
+        help="Path to external band specs JSON file (overrides built-in BAND_SPECS)",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable debug logging",
+    )
+    args = parser.parse_args(argv)
+
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)-8s  %(message)s",
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(levelname)-8s %(message)s",
         stream=sys.stderr,
     )
 
-    specs = load_band_specs_from_file(specs_file) if specs_file is not None else BAND_SPECS
+    specs = BAND_SPECS
+    if args.specs:
+        specs = load_band_specs_from_file(args.specs)
 
     entries: list[dict[str, Any]] = []
     failures: list[str] = []
@@ -969,68 +1026,30 @@ def main(output_path: str, dry_run: bool, specs_file: str | None) -> int:
         if not svo_ok:
             failures.append(spec.band_id)
 
-    registry: dict[str, Any] = {
+    registry = {
         "_schema_version": REGISTRY_SCHEMA_VERSION,
         "_generated_at": datetime.now(UTC).isoformat(),
         "_note": (
             "AUTO-GENERATED by scripts/exploratory/seed_band_registry.py — "
             "operator review required before commit to band_registry/. "
-            "Regime vocabulary is provisional (reconcile with ADR-019)."
+            "band_id convention: ADR-017 amendment 2026-03-25."
         ),
         "bands": entries,
     }
 
-    _print_summary(entries, failures, output_path, specs)
+    _print_summary(entries, failures, args.output, specs)
 
-    if dry_run:
-        log.info("Dry-run mode: no file written.")
-        print(json.dumps(registry, indent=2, ensure_ascii=False))
+    if args.dry_run:
+        log.info("Dry run — no file written")
         return 0
 
-    with open(output_path, "w", encoding="utf-8") as fh:
-        json.dump(registry, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")  # POSIX-friendly trailing newline
+    output_json = json.dumps(registry, indent=2, ensure_ascii=False)
+    with open(args.output, "w", encoding="utf-8") as f:
+        f.write(output_json + "\n")
 
-    log.info("Wrote %d entries to %s", len(entries), output_path)
-    return 1 if failures else 0
-
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--output",
-        default="band_registry.json",
-        metavar="PATH",
-        help="Output file path (default: band_registry.json in cwd)",
-    )
-    parser.add_argument(
-        "--specs-file",
-        default=None,
-        metavar="PATH",
-        help=(
-            "JSON file of BandSpec definitions to use instead of the built-in "
-            "BAND_SPECS table.  See load_band_specs_from_file() for the expected format."
-        ),
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print JSON to stdout instead of writing a file",
-    )
-    parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Enable DEBUG logging (shows per-column SVO details)",
-    )
-    return parser.parse_args()
+    log.info("Wrote %s (%d bytes)", args.output, len(output_json))
+    return 0
 
 
 if __name__ == "__main__":
-    args = _parse_args()
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-    sys.exit(main(args.output, args.dry_run, args.specs_file))
+    sys.exit(main())
