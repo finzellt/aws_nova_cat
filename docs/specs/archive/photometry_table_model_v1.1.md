@@ -1,7 +1,6 @@
 # Classical Novae Photometry Table — Data Model Specification
 
-**Version:** 2.0
-**Replaces:** `docs/specs/archive/photometry_table_model_v1.1.md` — replaced in `epic/22-photometry-doc-reconciliation`
+**Version:** 1.1
 **Standard alignment:** IVOA PhotDM 1.1, IVOA Data Origin Note 1.1, SVO Filter Profile Service, VOTable UCD vocabulary
 **Format:** Long/tidy — one row per photometric measurement
 
@@ -94,27 +93,27 @@ This section describes the photometric band. The design must accommodate wavelen
 
 | Column | Type | UCD | Nullable | Description |
 |---|---|---|---|---|
-| `svo_filter_id` | TEXT | `instr.filter.id` | YES | SVO Filter Profile Service identifier, e.g. `SDSS/SDSS.g`, `Swift/UVOT.UVW1`, `2MASS/2MASS.Ks`. NULL for radio, X-ray, and gamma-ray where no SVO entry exists. |
-| `band_id` | TEXT | `instr.bandpass` | NO | NovaCat canonical band ID from the band registry (ADR-017), e.g. `Johnson_V`, `2MASS_Ks`, `Swift_UVW1`. The authoritative identifier for band identity. |
-| `regime` | TEXT | `meta.code` | NO | Wavelength regime of the band. Controlled vocabulary: `optical`, `uv`, `nir`, `mir`, `radio`, `xray`, `gamma`. |
+| `svo_filter_id` | TEXT | `instr.filter.id` | YES | SVO Filter Profile Service identifier, e.g. `SDSS/SDSS.g`, `Swift/UVOT.UVW1`, `2MASS/2MASS.Ks`. NULL for radio and X-ray where no SVO entry exists. |
+| `filter_name` | TEXT | `instr.filter.id` | NO | Human-readable filter or band label, e.g. `V`, `r`, `UVW1`, `J`, `5 GHz`, `0.3-10 keV`. Always populated. |
+| `phot_system` | TEXT | `meta.code;phot` | NO | Photometric system name. Allowed values: `Johnson-Cousins`, `Sloan`, `Swift-UVOT`, `2MASS`, `Bessel`, `Radio`, `X-ray`, `OTHER`. |
 | `spectral_coord_type` | TEXT | `meta.code` | NO | Type of spectral coordinate. Allowed values: `wavelength`, `frequency`, `energy`. Determines the unit of `spectral_coord_value`. |
-| `spectral_coord_value` | REAL | `em.wl` / `em.freq` / `em.energy` | YES | Central wavelength (Å), frequency (GHz), or energy (keV) of the bandpass. Registry-derived from the resolved band entry's `lambda_eff` when not supplied by the source file. NULL only for sparse registry entries with no `lambda_eff`. |
-| `spectral_coord_unit` | TEXT | `meta.unit` | NO | Unit of `spectral_coord_value`. Allowed values: `Angstrom`, `nm`, `GHz`, `MHz`, `keV`, `MeV`, `GeV`. |
+| `spectral_coord_value` | REAL | `em.wl` / `em.freq` / `em.energy` | NO | Central wavelength (Å), frequency (GHz), or energy (keV) of the bandpass, depending on `spectral_coord_type`. |
+| `spectral_coord_unit` | TEXT | `meta.unit` | NO | Unit of `spectral_coord_value`. Allowed values: `Angstrom`, `nm`, `GHz`, `MHz`, `keV`. |
 | `bandpass_width` | REAL | `instr.bandwidth` | YES | Effective width of the bandpass in the same units as `spectral_coord_value`. NULL if unknown. |
+| `mag_system` | TEXT | `meta.code;phot` | YES | Magnitude zero-point system. Allowed values: `Vega`, `AB`, `ST`. NULL for radio and X-ray (where magnitudes are not used). |
+| `zero_point_flux` | REAL | `phot.flux;phot.zp` | YES | Zero-point flux density for this filter, in Jy. Sourced from the SVO FPS where available. NULL if not applicable. |
 
 **Notes on spectral coordinate by regime:**
 
-| `regime` | `spectral_coord_type` | `spectral_coord_unit` | Example |
+| Regime | `spectral_coord_type` | `spectral_coord_unit` | Example |
 |---|---|---|---|
-| `optical`, `nir`, `mir` | `wavelength` | `Angstrom` | V band → 5500 Å |
-| `uv` | `wavelength` | `Angstrom` | UVW2 → 1928 Å |
-| `radio` | `frequency` | `GHz` | 5 GHz continuum → 5.0 |
-| `xray` | `energy` | `keV` | 0.3–10 keV; use midpoint 5.15 keV |
-| `gamma` | `energy` | `MeV` | 100 MeV–300 GeV Fermi-LAT band; `MeV` is the default unit, `GeV` and `keV` also permitted |
+| Johnson-Cousins, Sloan, NIR | `wavelength` | `Angstrom` | V band → 5500 Å |
+| Swift UVOT | `wavelength` | `Angstrom` | UVW2 → 1928 Å |
+| Radio | `frequency` | `GHz` | 5 GHz continuum → 5.0 |
+| X-ray (broadband) | `energy` | `keV` | 0.3–10 keV; use midpoint 5.15 keV |
 
-For non-optical bands with no SVO entry, `svo_filter_id` is NULL and `band_id`
-should be drawn from the band registry. The registry carries all spectral metadata.
-
+For radio and X-ray bands with no SVO entry, `svo_filter_id` is NULL and
+`filter_name` should be as descriptive as possible (e.g. `8.46 GHz VLA`, `0.5-2.0 keV Chandra`).
 
 ---
 
@@ -161,29 +160,20 @@ literature-compiled data.
 | `instrument` | TEXT | `instr` | YES | Instrument name (e.g. `UVOT`, `ACIS-S`, `ANDICAM`). |
 | `observer` | TEXT | `meta.id.PI` | YES | Name of the observer or team, if identified. For AAVSO data this may be the observer code. |
 | `data_rights` | TEXT | `meta.rights` | NO | Data rights/licence. Allowed values: `public`, `CC-BY`, `CC-BY-SA`, `proprietary`, `OTHER`. Defaults to `public` for published literature data. |
-| `band_resolution_type` | TEXT | `meta.code` | NO | Mechanism by which `band_id` was resolved. Allowed values: `canonical`, `synonym`, `generic_fallback`, `sidecar_assertion`. See ADR-018 Decision 6. |
-| `band_resolution_confidence` | TEXT | `meta.code.qual` | NO | Trustworthiness of the band resolution. Allowed values: `high`, `medium`, `low`. See ADR-018 Decision 6. |
-| `sidecar_contributed` | BOOLEAN | `meta.code` | NO | True if any sidecar field influenced band or photometric system resolution for this row. Defaults to `false`. |
-| `data_origin` | TEXT | `meta.code` | NO | Origin of this row. Allowed values: `literature`, `operator_upload`, `donor_submission`. Defaults to `literature`. |
-| `donor_attribution` | TEXT | `meta.note` | YES | Free-text attribution for donated data. NULL for literature rows. Max 512 characters. |
 
 ---
 
 ## Cross-Regime Guidance
 
-The applicable measurement fields vary by regime. `magnitude` is meaningful only for
-optical/UV/NIR data; flux-based quantities apply across all regimes.
-
-| `regime` | `magnitude` | `flux_density` | `count_rate` | Notes |
+| Regime | `magnitude` | `flux_density` | `count_rate` | Typical `flux_density_unit` |
 |---|---|---|---|---|
-| `optical` | ✓ | optional | — | |
-| `uv` | ✓ | optional | — | |
-| `nir` | ✓ | optional | — | |
-| `mir` | ✓ | optional | — | |
-| `radio` | — | ✓ | — | |
-| `xray` | — | ✓ | optional | Count rate in `s⁻¹` is instrument-specific; flux density in `erg/cm²/s/keV`. Both are in common use. |
-| `gamma` | — | ✓ | — | Reported as photon flux (`photons/cm²/s`). Use `flux_density_unit = photons/cm2/s`. |
-
+| Johnson-Cousins UBVRI | ✓ (Vega) | optional | — | `Jy` |
+| Sloan ugriz | ✓ (AB) | optional | — | `Jy` |
+| Swift UVOT | ✓ (Vega) | optional | — | `erg/cm2/s/Hz` |
+| 2MASS JHKs | ✓ (Vega) | optional | — | `Jy` |
+| Radio | — | ✓ | — | `mJy` or `Jy` |
+| X-ray (flux) | — | ✓ | optional | `erg/cm2/s/keV` |
+| X-ray (counts) | — | optional | ✓ | — |
 
 ---
 
@@ -194,8 +184,8 @@ These are independent of storage format; any serialization or indexing strategy 
 be evaluated against these patterns.
 
 1. `(nova_id, time_mjd)` — light curve retrieval for a single object (primary pattern)
-2. `(nova_id, band_id)` — single-band light curve for a single object
-3. `(nova_id, regime)` — all measurements for a single object in a given regime
+2. `(nova_id, filter_name)` — single-band light curve for a single object
+3. `(nova_id, phot_system)` — all measurements for a single object in a given regime
 4. `(bibcode)` — all measurements from a given paper (provenance audit)
 5. `(is_upper_limit)` — separating detections from non-detections across the table
 

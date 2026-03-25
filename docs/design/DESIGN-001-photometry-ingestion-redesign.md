@@ -850,13 +850,13 @@ ingestion workflow against real nova data.
 
 | Document | Status after this design | Action |
 |---|---|---|
-| `ADR-015` | Partially superseded. Decisions 1 (staging), 3 (idempotency key), 4 (row deduplication), 5 (file size guard), and the Tier 1–4 column mapping strategy remain valid. Decision 2's implementation details are superseded by Epic D. | Amend status to `Superseded-in-part`; annotate with reference to this document and successor ADRs. |
-| `ADR-016` | Fully superseded. The band resolution strategy it defines is replaced by the band registry (ADR-017) and disambiguation algorithm (ADR-018). | Amend status to `Superseded`; annotate accordingly. |
+| `ADR-015` | Partially superseded. Decisions 1 (staging), 3 (idempotency key), 4 (row deduplication), 5 (file size guard), and the Tier 1–4 column mapping strategy remain valid. Decision 2's implementation details are superseded by Epic D. | ✅ Done (`epic/22-photometry-doc-reconciliation`): status set to `Accepted — amended in part`; annotated with reference to ADR-021. |
+| `ADR-016` | Fully superseded. The band resolution strategy it defines is replaced by the band registry (ADR-017) and disambiguation algorithm (ADR-018). | ✅ Done (`epic/22-photometry-doc-reconciliation`): status set to `Superseded`; annotated with reference to ADR-017. |
 | `photometry_table_model.md` v1.1 | Superseded by the revised model produced in Epic C. | Retain as historical reference; version to v2.0 in Epic C. |
 | `entities.py` | Under revision in Epic C (enums) and Epic D (adapter-adjacent changes). | No action now; Epic C is the revision vehicle. |
 | `docs/research/astro_software_report.tex` | Ecosystem survey supporting §3. | Retain as reference; no action required. |
 | `docs/research/deep-research-report.md` | Ecosystem survey supporting §3. | Retain as reference; no action required. |
-| `DESIGN-002` *(forthcoming)* | Covers `ColorRow` / derived quantities, the sidecar metadata model, provenance framework, and donation workflow context. Layer 0 of this design depends on DESIGN-002 for the full sidecar contract. | Author in a future conversation; Epic A-0 produces a stub in the interim. |
+| `DESIGN-002` | Covers `ColorRow` / derived quantities, the sidecar metadata model, provenance framework, and donation workflow context. Layer 0 of this design depends on DESIGN-002 for the full sidecar contract. | ✅ Done: authored. |
 
 ---
 

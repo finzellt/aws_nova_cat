@@ -1,7 +1,13 @@
 # ADR-006: ADR Corpus Governance and Field Name Canonicalization
 
-**Status:** Accepted
-**Date:** 2026-03-05
+**Status:** Accepted/Decision 1 superseded in part (see below)
+**Date:** 2026-03-05/Date: 2026-03-05
+
+> ## Decision 1 Superseded
+> ADR-030 (ADR Amendment Policy Revision, 2026-03-25) supersedes Decision 1 of this
+> ADR. Direct amendment of pre-deployment documentation is now permitted under the
+> conditions defined there. Decision 2 of this ADR is unaffected and remains
+> authoritative.This file is preserved as a historical record explaining why some earlier files in the corpus carry annotation-style corrections rather than direct replacements.
 
 ---
 

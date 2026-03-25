@@ -1,7 +1,17 @@
 # ADR-016: Band and Filter Resolution Strategy for the CanonicalCsvAdapter
 
-Status: Proposed
-Date: 2026-03-17
+**Status:** Superseded
+**Date:** 2026-03-17
+
+> **⚠ Superseded** (2026-03-25)
+> This ADR is fully superseded by ADR-017 (Band Registry Design, accepted 2026-03-24).
+> The band resolution strategy defined here — adapter-internal Python dicts,
+> `excluded_filters.json`, and `_resolve_band()` — is replaced by the band registry
+> and disambiguation algorithm (ADR-018). The original decisions are preserved below
+> for historical reference.
+> See: `docs/adr/ADR-017-band-registry-design.md`
+
+---
 
 ---
 

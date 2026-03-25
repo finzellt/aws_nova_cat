@@ -347,23 +347,6 @@ class TimeOrigSys(str, Enum):
     other = "OTHER"
 
 
-class PhotSystem(str, Enum):
-    """
-    Photometric system name.
-
-    Allowed values follow photometry_table_model.md §3.
-    """
-
-    johnson_cousins = "Johnson-Cousins"
-    sloan = "Sloan"
-    swift_uvot = "Swift-UVOT"
-    twomass = "2MASS"
-    bessel = "Bessel"
-    radio = "Radio"
-    xray = "X-ray"
-    other = "OTHER"
-
-
 class SpectralCoordType(str, Enum):
     """
     Type of spectral coordinate for the band.
@@ -389,6 +372,8 @@ class SpectralCoordUnit(str, Enum):
     ghz = "GHz"
     mhz = "MHz"
     kev = "keV"
+    mev = "MeV"
+    gev = "GeV"
 
 
 class MagSystem(str, Enum):
@@ -448,6 +433,43 @@ class DataRights(str, Enum):
     other = "OTHER"
 
 
+class BandResolutionType(str, Enum):
+    """
+    Mechanism by which a band alias was resolved to a canonical band_id.
+
+    Allowed values follow ADR-018 Decision 6.
+    """
+
+    canonical = "canonical"
+    synonym = "synonym"
+    generic_fallback = "generic_fallback"
+    sidecar_assertion = "sidecar_assertion"
+
+
+class BandResolutionConfidence(str, Enum):
+    """
+    Trustworthiness of a band resolution result.
+
+    Allowed values follow ADR-018 Decision 6.
+    """
+
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
+class DataOrigin(str, Enum):
+    """
+    Origin of a photometry or color row.
+
+    Allowed values follow DESIGN-002 §4.2.
+    """
+
+    literature = "literature"
+    operator_upload = "operator_upload"
+    donor_submission = "donor_submission"
+
+
 class PhotometryQuarantineReasonCode(str, Enum):
     """
     Quarantine reason codes for photometry ingestion
@@ -459,7 +481,23 @@ class PhotometryQuarantineReasonCode(str, Enum):
     file_too_large = "FILE_TOO_LARGE"
     missing_required_columns = "MISSING_REQUIRED_COLUMNS"
     coercion_failure_threshold_exceeded = "COERCION_FAILURE_THRESHOLD_EXCEEDED"
+    unrecognized_band_string = "UNRECOGNIZED_BAND_STRING"
+    conflicting_band_context = "CONFLICTING_BAND_CONTEXT"
+    band_context_excludes_all_candidates = "BAND_CONTEXT_EXCLUDES_ALL_CANDIDATES"
+    ambiguous_band_unresolvable = "AMBIGUOUS_BAND_UNRESOLVABLE"
     other = "OTHER"
+
+
+class ConflictClass(str, Enum):
+    NOVA_NAME_MISMATCH = "NOVA_NAME_MISMATCH"
+    MULTI_OBJECT_IN_SINGLE_NOVA = "MULTI_OBJECT_IN_SINGLE_NOVA"
+    FORMAT_OVERRIDE_DISAGREEMENT = "FORMAT_OVERRIDE_DISAGREEMENT"
+    BAND_ASSERTION_DISAGREEMENT = "BAND_ASSERTION_DISAGREEMENT"
+    PHOT_SYSTEM_MISMATCH = "PHOT_SYSTEM_MISMATCH"
+    MAG_SYSTEM_MISMATCH = "MAG_SYSTEM_MISMATCH"
+    TIME_SYSTEM_MISMATCH = "TIME_SYSTEM_MISMATCH"
+    PROVENANCE_MISMATCH = "PROVENANCE_MISMATCH"
+    band_signal_conflict = "BAND_SIGNAL_CONFLICT"
 
 
 # ---------------------------------------------------------------------------
@@ -531,30 +569,33 @@ class PhotometryRow(BaseModel):
         max_length=256,
         description="SVO Filter Profile Service identifier.  NULL for radio and X-ray.",
     )
-    filter_name: str = Field(
+    band_id: str = Field(
         ...,
         min_length=1,
         max_length=256,
-        description="Human-readable filter or band label.  Always populated.",
+        description="NovaCat canonical band ID resolved from the band registry (ADR-017).",
     )
-    phot_system: PhotSystem
-    spectral_coord_type: SpectralCoordType
-    spectral_coord_value: float = Field(
+    regime: str = Field(
         ...,
-        description="Central wavelength (Å), frequency (GHz), or energy (keV).",
+        description=(
+            "Wavelength regime of the band.  Controlled vocabulary from ADR-017 §3.3: "
+            "optical, uv, nir, mir, radio, xray."
+        ),
+    )
+    spectral_coord_type: SpectralCoordType
+    spectral_coord_value: float | None = Field(
+        default=None,
+        description=(
+            "Central wavelength (Å), frequency (GHz), or energy (keV).  "
+            "Registry-derived from the resolved band entry's lambda_eff when not "
+            "supplied by the source file.  NULL only for sparse registry entries "
+            "with no lambda_eff."
+        ),
     )
     spectral_coord_unit: SpectralCoordUnit
     bandpass_width: float | None = Field(
         default=None,
         description="Effective width of the bandpass in spectral_coord_unit.  NULL if unknown.",
-    )
-    mag_system: MagSystem | None = Field(
-        default=None,
-        description="Magnitude zero-point system.  NULL for radio and X-ray.",
-    )
-    zero_point_flux: float | None = Field(
-        default=None,
-        description="Zero-point flux density in Jy.  NULL if not applicable.",
     )
 
     # --- Section 4: Photometric Measurement ------------------------------
@@ -596,6 +637,27 @@ class PhotometryRow(BaseModel):
     instrument: str | None = Field(default=None, max_length=256)
     observer: str | None = Field(default=None, max_length=256)
     data_rights: DataRights = Field(default=DataRights.public)
+    band_resolution_type: BandResolutionType = Field(
+        ...,
+        description="Mechanism by which band_id was resolved (ADR-018 Decision 6).",
+    )
+    band_resolution_confidence: BandResolutionConfidence = Field(
+        ...,
+        description="Trustworthiness of the band resolution result (ADR-018 Decision 6).",
+    )
+    sidecar_contributed: bool = Field(
+        default=False,
+        description="True if any sidecar field influenced band or photometric system resolution.",
+    )
+    data_origin: DataOrigin = Field(
+        ...,
+        description="Origin of this photometry row (DESIGN-002 §4.2).",
+    )
+    donor_attribution: str | None = Field(
+        default=None,
+        max_length=512,
+        description="Free-text attribution for donated data.  NULL for literature rows.",
+    )
 
     # --- Cross-field invariants ------------------------------------------
 

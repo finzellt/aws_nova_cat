@@ -1,7 +1,24 @@
 # ADR-015: Photometry Ingestion Mechanism and Column Mapping Strategy
 
-Status: Proposed
-Date: 2026-03-17
+**Status:** Accepted — amended in part (see below)
+**Date:** 2026-03-17
+
+> **⚠ Amended by ADR-021** (2026-03-25)
+> ADR-021 (Layer 0 Pre-Ingestion Normalization, 2026-03-19) amends this ADR as follows:
+>
+> - `IngestPhotometryEvent` v1.0.0 (defined in Decision 1) is superseded by v2.0.0,
+>   which adds `sidecar_s3_key`, `sidecar_s3_bucket`, `normalised_s3_key`,
+>   `normalised_s3_bucket`, and `context` fields, and removes `candidate_name`.
+>   v2.0.0 is dispatched by `prep_photometry_file`; v1.0.0 is no longer the operative
+>   contract for post-Layer-0 ingestion.
+> - The staging mechanism (Decision 1) is superseded by the `prep_photometry_file`
+>   workflow defined in ADR-021, which handles format normalization, wide-format
+>   pivoting, multi-nova splitting, and sidecar loading upstream of `ingest_photometry`.
+>
+> Decisions 2 (column mapping tiers), 3 (idempotency key), 4 (row deduplication), and
+> 5 (file size guard) remain valid and unaffected.
+>
+> See: `docs/adr/ADR-021-layer-0-pre-ingestion-normalization.md`
 
 ---
 
