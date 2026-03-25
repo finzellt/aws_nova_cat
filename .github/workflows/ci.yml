@@ -71,7 +71,7 @@ jobs:
 
       - name: Tests (pytest)
         if: steps.changes.outputs.run == 'true'
-        run: pytest --ignore=tests/smoke --ignore=tests/integration -q
+        run: pytest --ignore=tests/smoke -q
         env:
           PYTHONPATH: .
 

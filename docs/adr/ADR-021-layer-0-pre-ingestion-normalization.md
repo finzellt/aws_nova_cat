@@ -12,7 +12,7 @@ revises `IngestPhotometryEvent` to v2.0.0 for post-Layer-0 dispatch)
 - `DESIGN-002` §3, §3.4, §5.5 — sidecar contract, inline header extraction, ColorRow
   routing (adopted/amended here)
 - `ADR-015` — `IngestPhotometryEvent` contract (amended by §4 and §8.2)
-- `ADR-017` — Band Registry (Layer 0 depends on its interface; not yet adopted)
+- `ADR-017` — Band Registry (Accepted 2026-03-24; Layer 0 depends on its interface)
 - `ADR-018` — Band Disambiguation Algorithm (not yet adopted)
 - `ADR-019` — Photometry Table Model Revision (not yet adopted)
 - `ADR-020` — Canonical Persistence Format (not yet adopted)
@@ -673,8 +673,27 @@ the five resolution chains):
 **Structural hints (`file_format`, `wide_band_columns`, `column_map`):**
 Sidecar only. Inline headers do not carry structural hints.
 
-The context object is immutable after `prep_photometry_file` produces it. Downstream
-components read from it but do not modify it.
+The context object is immutable after `prep_photometry_file` produces it.
+Downstream components read from it but do not modify it.
+
+#### AAVSO Provenance Detection
+
+Layer 0 is responsible for detecting and propagating a definitive AAVSO provenance
+signal in `IngestionContext.aavso_provenance`. This signal is consumed by the band
+disambiguation algorithm (ADR-018 Decision 5) to apply the AAVSO Generic fallback
+exception on `AMBIGUOUS_BAND_UNRESOLVABLE`.
+
+Detection uses the `aavso_signals` block in `detection_registry.json`. Criteria are
+evaluated in priority order:
+
+1. A `known_strings` match (`"AAVSO"` or `"aavso"`) found in observer column values
+2. Observer column name matches `aavso_signals.column_names` (`Obs`, `Observer`,
+   `ObsCode`) AND sampled values match the pattern `^[A-Z]{2,6}$`
+3. Observer column name match alone — weak signal; logged at `DEBUG` but does **not**
+   set `aavso_provenance = True`
+
+Only criteria 1 and 2 constitute a definitive signal. `aavso_provenance` defaults to
+`False` and is set to `True` only when criterion 1 or 2 is satisfied.
 
 #### `IngestionContext` Pydantic Model
 
@@ -738,16 +757,22 @@ class IngestionContext(BaseModel, frozen=True):
     # quarantine signal; Layer 0 records faithfully without judging.
     uncertainty_pairings: dict[str, Optional[str]]
 
-    # --- Group 7: Header extraction artifacts ---
+    # --- Group 7: AAVSO provenance signal ---
+    # True when a definitive AAVSO provenance signal is detected (criteria 1 or 2
+    # below). Consumed by ADR-018 Decision 5 to apply the AAVSO Generic fallback
+    # exception on AMBIGUOUS_BAND_UNRESOLVABLE.
+    aavso_provenance: bool = False
+
+    # --- Group 8: Header extraction artifacts ---
     # Canonical key → raw string value (from inline header or astropy meta)
     header_context: dict[str, str]
     # Consolidated diagnostic residuals (see §7.5)
     header_residuals: list[HeaderResidual] = []
 
-    # --- Group 8: Conflict records (populated by §7.7) ---
+    # --- Group 9: Conflict records (populated by §7.7) ---
     conflicts: list[ConflictRecord] = []
 
-    # --- Group 9: Sidecar passthrough metadata ---
+    # --- Group 10: Sidecar passthrough metadata ---
     sidecar_version: Optional[str] = None
     sidecar_notes: Optional[str] = None
 ```

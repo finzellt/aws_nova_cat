@@ -154,6 +154,11 @@ disambiguation algorithm that governs when Generic entries are selected.
 
 ### Decision 3 — Registry Entry Schema
 
+> **Amendment (`epic/22-photometry-doc-reconciliation`):** `photometric_system` field
+> removed from the registry entry schema. Band identity is fully captured by `band_id`,
+> `regime`, and the SVO-derived spectral fields. See Category 2 of the reconciliation
+> delta log.
+
 Each entry represents a **filter class** — an abstract grouping of physically similar
 filters that are scientifically comparable. Specific instrument filter details are not
 stored as separate entities; they are captured via the `svo_filter_id` cross-reference
@@ -173,7 +178,6 @@ schema is designed to accommodate this gracefully. A valid entry requires only `
 {
   "band_id": "Johnson_V",
   "svo_filter_id": "Generic/Johnson.V",
-  "photometric_system": "Johnson",
   "band_name": "V",
   "regime": "optical",
   "detector_type": "photon",
@@ -208,7 +212,6 @@ schema is designed to accommodate this gracefully. A valid entry requires only `
 {
   "band_id": "Generic_V",
   "svo_filter_id": null,
-  "photometric_system": null,
   "band_name": "V",
   "regime": "optical",
   "detector_type": null,
@@ -238,7 +241,6 @@ schema is designed to accommodate this gracefully. A valid entry requires only `
 {
   "band_id": "AAVSO_Vis",
   "svo_filter_id": null,
-  "photometric_system": null,
   "band_name": null,
   "regime": null,
   "detector_type": null,
@@ -268,7 +270,6 @@ schema is designed to accommodate this gracefully. A valid entry requires only `
 |-------|------|----------|-------------|
 | `band_id` | string | No | Stable NovaCat canonical band identifier. Naming convention per Decision 2. Globally unique within the registry. Must be first element of `aliases`. |
 | `svo_filter_id` | string | Yes | SVO Filter Profile Service identifier. `null` if no SVO entry exists. |
-| `photometric_system` | string | Yes | From SVO `Phot.System`. Drives `SystemAbbrev`. `null` for excluded and Generic entries. |
 | `band_name` | string | Yes | From SVO `Band Name` (e.g. `V`, `J`, `g`). Coarse band label without system qualifier. |
 | `regime` | string | Yes | Broad wavelength regime. Controlled vocabulary: `optical`, `uv`, `nir`, `mir`, `fir`, `xray`, `radio`, `gamma`. `null` for excluded entries. |
 | `detector_type` | string | Yes | From SVO `Detector Type`. `null` if unknown or not applicable. |

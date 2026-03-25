@@ -8,9 +8,9 @@ canonical band defined in this script and emits a fully-populated
 
 Usage::
 
-    python scripts/exploratory/seed_band_registry.py
-    python scripts/exploratory/seed_band_registry.py --output /path/to/band_registry.json
-    python scripts/exploratory/seed_band_registry.py --dry-run   # prints summary, no file
+    python seed_band_registry.py
+    python seed_band_registry.py --output /path/to/band_registry.json
+    python seed_band_registry.py --dry-run   # prints summary, no file
 
 The output file is intended for OPERATOR REVIEW before being committed to::
 
@@ -96,10 +96,8 @@ class BandSpec:
     aliases: list[str]
     """Alias list; band_id must be the first element (ADR-017 Decision 3)."""
 
-    photometric_system: str | None
     band_name: str | None
     regime: str | None
-    """Provisional; must be reconciled with ADR-019 vocabulary."""
 
     observatory_facility: str | None
     instrument: str | None
@@ -147,7 +145,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Johnson_U",
         aliases=["Johnson_U", "U"],
-        photometric_system="Johnson",
         band_name="U",
         regime="optical",
         observatory_facility="Generic",
@@ -160,7 +157,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Johnson_B",
         aliases=["Johnson_B", "B"],
-        photometric_system="Johnson",
         band_name="B",
         regime="optical",
         observatory_facility="Generic",
@@ -173,7 +169,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Johnson_V",
         aliases=["Johnson_V", "V"],
-        photometric_system="Johnson",
         band_name="V",
         regime="optical",
         observatory_facility="Generic",
@@ -186,7 +181,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Cousins_R",
         aliases=["Cousins_R", "R"],
-        photometric_system="Cousins",
         band_name="R",
         regime="optical",
         observatory_facility="Generic",
@@ -199,7 +193,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Cousins_I",
         aliases=["Cousins_I", "I"],
-        photometric_system="Cousins",
         band_name="I",
         regime="optical",
         observatory_facility="Generic",
@@ -215,7 +208,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Sloan_u",
         aliases=["Sloan_u", "u"],
-        photometric_system="SDSS",
         band_name="u",
         regime="optical",
         observatory_facility="SLOAN",
@@ -227,7 +219,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Sloan_g",
         aliases=["Sloan_g", "g"],
-        photometric_system="SDSS",
         band_name="g",
         regime="optical",
         observatory_facility="SLOAN",
@@ -239,7 +230,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Sloan_r",
         aliases=["Sloan_r", "r"],
-        photometric_system="SDSS",
         band_name="r",
         regime="optical",
         observatory_facility="SLOAN",
@@ -251,7 +241,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Sloan_i",
         aliases=["Sloan_i", "i"],
-        photometric_system="SDSS",
         band_name="i",
         regime="optical",
         observatory_facility="SLOAN",
@@ -263,7 +252,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Sloan_z",
         aliases=["Sloan_z", "z_s"],
-        photometric_system="SDSS",
         band_name="z",
         regime="optical",
         observatory_facility="SLOAN",
@@ -278,7 +266,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Sloan_up",
         aliases=["Sloan_up", "up"],
-        photometric_system="SDSS",
         band_name="u'",
         regime="optical",
         observatory_facility="SLOAN",
@@ -290,7 +277,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Sloan_gp",
         aliases=["Sloan_gp", "gp"],
-        photometric_system="SDSS",
         band_name="g'",
         regime="optical",
         observatory_facility="SLOAN",
@@ -302,7 +288,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Sloan_rp",
         aliases=["Sloan_rp", "rp"],
-        photometric_system="SDSS",
         band_name="r'",
         regime="optical",
         observatory_facility="SLOAN",
@@ -314,7 +299,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Sloan_ip",
         aliases=["Sloan_ip", "ip"],
-        photometric_system="SDSS",
         band_name="i'",
         regime="optical",
         observatory_facility="SLOAN",
@@ -327,7 +311,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="2MASS_J",
         aliases=["2MASS_J", "J"],
-        photometric_system="2MASS",
         band_name="J",
         regime="nir",
         observatory_facility="2MASS",
@@ -339,7 +322,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="2MASS_H",
         aliases=["2MASS_H", "H"],
-        photometric_system="2MASS",
         band_name="H",
         regime="nir",
         observatory_facility="2MASS",
@@ -351,7 +333,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="2MASS_Ks",
         aliases=["2MASS_Ks", "Ks"],
-        photometric_system="2MASS",
         band_name="Ks",
         regime="nir",
         observatory_facility="2MASS",
@@ -366,7 +347,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Generic_K",
         aliases=["Generic_K", "K"],
-        photometric_system=None,
         band_name="K",
         regime="nir",
         observatory_facility=None,
@@ -378,7 +358,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="UVOT_UVW1",
         aliases=["UVOT_UVW1", "uvw1"],
-        photometric_system="UVOT",
         band_name="UVW1",
         regime="uv",
         observatory_facility="Swift",
@@ -390,7 +369,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="UVOT_UVW2",
         aliases=["UVOT_UVW2", "uvw2"],
-        photometric_system="UVOT",
         band_name="UVW2",
         regime="uv",
         observatory_facility="Swift",
@@ -402,7 +380,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="UVOT_UVM2",
         aliases=["UVOT_UVM2", "uvm2", "UVM2"],
-        photometric_system="UVOT",
         band_name="UVM2",
         regime="uv",
         observatory_facility="Swift",
@@ -416,7 +393,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="HST_F555W",
         aliases=["HST_F555W", "F555W"],
-        photometric_system="HST",
         band_name="F555W",
         regime="optical",
         observatory_facility="HST",
@@ -430,7 +406,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Spitzer_IRAC1",
         aliases=["Spitzer_IRAC1", "[3.6]", "3.6"],
-        photometric_system="Spitzer",
         band_name="[3.6]",
         regime="mir",
         observatory_facility="Spitzer",
@@ -442,7 +417,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Spitzer_IRAC2",
         aliases=["Spitzer_IRAC2", "[4.5]", "4.5"],
-        photometric_system="Spitzer",
         band_name="[4.5]",
         regime="mir",
         observatory_facility="Spitzer",
@@ -455,7 +429,6 @@ BAND_SPECS: list[BandSpec] = [
     BandSpec(
         band_id="Open",
         aliases=["Open"],
-        photometric_system=None,
         band_name=None,
         regime=None,
         observatory_facility=None,
@@ -829,7 +802,6 @@ def _build_entry_from_svo(spec: BandSpec, rows: AstropyTable) -> dict[str, Any]:
     return {
         "band_id": spec.band_id,
         "svo_filter_id": svo_filter_id,
-        "photometric_system": spec.photometric_system,
         "band_name": spec.band_name,
         "regime": spec.regime,
         "detector_type": detector_type,
@@ -859,7 +831,6 @@ def _build_sparse_entry(spec: BandSpec) -> dict[str, Any]:
     return {
         "band_id": spec.band_id,
         "svo_filter_id": None,
-        "photometric_system": spec.photometric_system,
         "band_name": spec.band_name,
         "regime": spec.regime,
         "detector_type": None,

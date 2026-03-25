@@ -538,9 +538,8 @@ provenance fields:
 
 | Field | Type | Description |
 |---|---|---|
-| `band_resolution_tier` | `string` enum | Which mapping tier resolved the band: `"tier1_canonical"`, `"tier2_synonym"`, `"tier3_ucd"`, `"tier4_ai"`, `"sidecar_assertion"`, `"operator_confirmed"`. Populated by the adapter. |
+| `band_resolution_type` | `string` enum | Which mechanism resolved the band: `"canonical"` (unambiguous alias match), `"synonym"` (disambiguation narrowed to one candidate), `"generic_fallback"` (resolved to Generic registry entry), `"sidecar_assertion"` (resolved via sidecar hint). Populated by the adapter. Vocabulary supersedes the prior tier vocabulary; see ADR-018 Decision 6. |
 | `band_resolution_confidence` | `string` enum | Confidence level of the band resolution: `"high"` (unambiguous registry match), `"medium"` (disambiguation required but resolved), `"low"` (resolved via sidecar hint with no independent corroboration). `"unresolved"` should not appear in persisted rows — those rows are quarantined before persistence. |
-| `phot_system_source` | `string` enum | How the photometric system was determined: `"file_column"`, `"sidecar"`, `"inline_header"`, `"band_registry"`, `"inferred"`. |
 | `sidecar_contributed` | `bool` | Whether any sidecar field influenced the band or photometric system resolution for this row. |
 | `context_sources` | `object \| None` | Snapshot of the `context_sources` map from the Layer 0 context object (§3.6), recording which source supplied each field value. Nullable; may be omitted if storage constraints require it. |
 
@@ -548,6 +547,11 @@ The exact field set is a key input to ADR-019, which will decide whether these f
 belong as columns in the photometry table, as a nested JSON document in a
 `resolution_meta` column, or in a separate resolution provenance table joined by
 `row_id`. That decision depends on the storage format chosen in ADR-020.
+
+> **Amendment note (`epic/22-photometry-doc-reconciliation`):** `band_resolution_tier`
+> renamed to `band_resolution_type` and vocabulary updated per ADR-018 Decision 6.
+> `phot_system_source` dropped as part of system-wide removal of the photometric system
+> concept (Category 2).
 
 **UCD alignment.** The closest IVOA UCD for resolution confidence metadata is
 `meta.code.qual`, which applies broadly to data quality indicators. The `quality_flag`
