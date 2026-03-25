@@ -12,8 +12,8 @@
 - `DESIGN-002` §4.3 — resolution provenance field vocabulary adopted here
 - `ADR-017` — Band Registry Design; alias index interface and `disambiguation_hints`
   reservation consumed here
-- `ADR-019` — Photometry Table Model Revision; `band_resolution_type`,
-  `band_resolution_confidence`, and `phot_system_source` fields defined here feed
+- `ADR-019` — Photometry Table Model Revision; `band_resolution_type`, and
+  `band_resolution_confidence` fields defined here feed
   ADR-019's `PhotometryRow` schema revision
 - `ADR-021` — Layer 0 Pre-Ingestion Normalization; `IngestionContext` and
   `ConflictRecord` / `ConflictClass` machinery consumed here; see §6 for ADR-021
@@ -109,8 +109,7 @@ validation. It receives:
   This classification is guaranteed present by the Layer 0 precondition (see below)
 - **`row_context`** — the resolved kwargs dict (post-synonym resolution), carrying
   optional fields: `instrument`, `telescope`, `spectral_coord_type`,
-  `spectral_coord_unit`. Note: `phot_system` is explicitly **not** consulted as a
-  disambiguation signal; see Decision 3
+  `spectral_coord_unit`.
 - **`file_context`** — the `IngestionContext` object assembled by Layer 0, carrying
   optional file-level and sidecar-contributed fields including `orig_catalog`,
   `observatory`, `instrument`, `telescope`
@@ -360,7 +359,6 @@ decision specifies how the algorithm populates them for each exit path.
 
 - `band_resolution_type` — the mechanism by which resolution was achieved
 - `band_resolution_confidence` — trustworthiness of the result
-- `phot_system_source` — how the photometric system was determined (consumed by ADR-019)
 
 **Note:** DESIGN-002 §4.3 uses `band_resolution_tier` with a different vocabulary. This
 ADR supersedes that vocabulary. `band_resolution_tier` is renamed to
@@ -479,8 +477,7 @@ the intra-file conflict detection introduced by this ADR:
 |---|---|
 | `BAND_SIGNAL_CONFLICT` | Two file-sourced context signals (e.g. `instrument` and `spectral_coord_unit`) point to incompatible band candidates |
 
-Existing ADR-021 conflict classes (`BAND_ASSERTION_DISAGREEMENT`,
-`PHOT_SYSTEM_MISMATCH`, etc.) cover sidecar-vs-file conflicts. `BAND_SIGNAL_CONFLICT`
+Existing ADR-021 conflict classes (`BAND_ASSERTION_DISAGREEMENT`, etc.) cover sidecar-vs-file conflicts. `BAND_SIGNAL_CONFLICT`
 covers the new intra-file case introduced by this ADR.
 
 ---
@@ -496,7 +493,7 @@ covers the new intra-file case introduced by this ADR.
   quarantine reason codes: `UNRECOGNIZED_BAND_STRING`, `CONFLICTING_BAND_CONTEXT`,
   `BAND_CONTEXT_EXCLUDES_ALL_CANDIDATES`, `AMBIGUOUS_BAND_UNRESOLVABLE`
 - **`PhotometryRow` schema:** gains `band_resolution_type`, `band_resolution_confidence`,
-  `phot_system_source` fields (ADR-019 governs the exact schema; this ADR defines the
+  fields (ADR-019 governs the exact schema; this ADR defines the
   vocabulary)
 - **DESIGN-002 §4.3 amendment required:** `band_resolution_tier` renamed to
   `band_resolution_type`; tier vocabulary replaced with type vocabulary defined in
@@ -515,7 +512,7 @@ covers the new intra-file case introduced by this ADR.
 
 | Downstream artifact | Dependency on this ADR |
 |---|---|
-| **ADR-019** (Photometry Table Model Revision) | Consumes `band_resolution_type`, `band_resolution_confidence`, `phot_system_source` vocabulary defined in Decision 6 |
+| **ADR-019** (Photometry Table Model Revision) | Consumes `band_resolution_type`, `band_resolution_confidence`, vocabulary defined in Decision 6 |
 | **ADR-022** (ColorRow Design) | `ColorRow.band1_id` and `band2_id` are resolved through this algorithm after color string parsing; same algorithm, different calling context |
 | **Epic D** (Adapter Revision) | Implements `CanonicalCsvAdapter._resolve_band()` against this specification |
 
