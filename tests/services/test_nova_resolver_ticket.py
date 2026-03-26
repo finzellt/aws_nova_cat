@@ -79,6 +79,12 @@ def _env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("INITIALIZE_NOVA_STATE_MACHINE_ARN", _SFN_ARN)
     monkeypatch.setenv("POWERTOOLS_SERVICE_NAME", "nova-cat-test")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    # Satisfy boto3 region/credential checks at module import time.
+    # The actual clients are patched in each test; these values are never
+    # used to make real AWS calls.
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
 
 
 @pytest.fixture()
@@ -569,3 +575,87 @@ class TestPollLoop:
 
         assert mock_sleep.call_count == 2
         assert mock_sleep.call_args_list == [call(2), call(2)]
+
+
+# ===========================================================================
+# 13. NOT_A_CLASSICAL_NOVA outcome
+# ===========================================================================
+
+
+class TestNotAClassicalNovaOutcome:
+    """
+    SFN execution SUCCEEDS with outcome NOT_A_CLASSICAL_NOVA → TerminalError.
+
+    This is distinct from NOT_FOUND: the object was found and resolved by
+    SIMBAD, but is not a classical nova (e.g. a recurrent nova).  The ticket
+    should be removed or reclassified — this is a terminal condition, not a
+    quarantine condition, because it reflects an operator data-quality error
+    rather than an ambiguous identity.
+    """
+
+    @staticmethod
+    def _make_event() -> dict[str, Any]:
+        return {"task_name": "ResolveNova", "object_name": "RS Oph"}
+
+    def test_raises_terminal_error(self, handler: Any) -> None:
+        """TerminalError raised when initialize_nova returns NOT_A_CLASSICAL_NOVA."""
+        sfn_out = _sfn_output("NOT_A_CLASSICAL_NOVA")
+        with (
+            patch(f"{_MODULE}._table") as mock_table,
+            patch(f"{_MODULE}._sfn") as mock_sfn,
+            patch(f"{_MODULE}._sleep"),
+        ):
+            mock_table.query.return_value = {"Items": []}
+            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
+            mock_sfn.describe_execution.return_value = _sfn_describe("SUCCEEDED", sfn_out)
+
+            with pytest.raises(TerminalError):
+                handler.handle(self._make_event(), None)
+
+
+# ===========================================================================
+# 14. Poll loop exhausted — _MAX_POLL_ATTEMPTS reached
+# ===========================================================================
+
+
+class TestPollLoopExhausted:
+    """
+    _poll_until_terminal raises TerminalError after _MAX_POLL_ATTEMPTS
+    consecutive non-terminal responses, rather than looping forever.
+
+    The test drives the mock to return RUNNING for every describe_execution
+    call (using side_effect=repeat) and asserts that:
+      - TerminalError is raised
+      - _sleep was called exactly _MAX_POLL_ATTEMPTS times (once per RUNNING
+        response before the cap is hit and the loop exits without a final
+        sleep)
+
+    Note: the loop structure is ``for attempt in range(1, _MAX_POLL_ATTEMPTS + 1)``,
+    calling _sleep inside the loop body when status is non-terminal, so
+    _sleep is called _MAX_POLL_ATTEMPTS times total before the post-loop
+    TerminalError is raised.
+    """
+
+    @staticmethod
+    def _make_event() -> dict[str, Any]:
+        return {"task_name": "ResolveNova", "object_name": "GQ Mus"}
+
+    def test_raises_terminal_error_after_max_attempts(self, handler: Any) -> None:
+        """TerminalError raised when RUNNING persists for _MAX_POLL_ATTEMPTS calls."""
+        from itertools import repeat
+
+        with (
+            patch(f"{_MODULE}._table") as mock_table,
+            patch(f"{_MODULE}._sfn") as mock_sfn,
+            patch(f"{_MODULE}._sleep") as mock_sleep,
+            patch(f"{_MODULE}._MAX_POLL_ATTEMPTS", 3),  # keep the test fast
+        ):
+            mock_table.query.return_value = {"Items": []}
+            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
+            mock_sfn.describe_execution.side_effect = repeat(_sfn_describe("RUNNING"))
+
+            with pytest.raises(TerminalError):
+                handler.handle(self._make_event(), None)
+
+        # _sleep called once per loop iteration (3 iterations at patched cap).
+        assert mock_sleep.call_count == 3

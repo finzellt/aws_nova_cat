@@ -70,6 +70,11 @@ _TERMINAL_STATUSES: frozenset[str] = frozenset({"SUCCEEDED", "FAILED", "TIMED_OU
 # initialize_nova outcomes that confirm a nova_id was assigned.
 _RESOLVED_OUTCOMES: frozenset[str] = frozenset({"CREATED_AND_LAUNCHED", "EXISTS_AND_LAUNCHED"})
 
+# Maximum number of DescribeExecution calls before giving up.
+# initialize_nova completes in 5–15s; at 2s intervals this allows ~60s of
+# polling before the ResolveNova Lambda's 120s task timeout takes over.
+_MAX_POLL_ATTEMPTS: int = 30
+
 
 # ---------------------------------------------------------------------------
 # Entry point
@@ -151,19 +156,19 @@ def _normalize(name: str) -> str:
 
 def _poll_until_terminal(execution_arn: str) -> dict[str, Any]:
     """
-    Poll sfn:DescribeExecution at 2-second intervals until a terminal status.
-
-    Returns:
-        Parsed execution output JSON (dict) for SUCCEEDED executions.
-
-    Raises:
-        TerminalError: For FAILED, TIMED_OUT, or ABORTED executions.
+    Poll sfn:DescribeExecution at 2-second intervals until a terminal status
+    or _MAX_POLL_ATTEMPTS is reached.
+    ...
     """
-    while True:
+    for attempt in range(1, _MAX_POLL_ATTEMPTS + 1):
         resp = _sfn.describe_execution(executionArn=execution_arn)
         status: str = resp["status"]
 
         if status not in _TERMINAL_STATUSES:
+            logger.debug(
+                "initialize_nova still running",
+                extra={"attempt": attempt, "executionArn": execution_arn},
+            )
             _sleep(2)
             continue
 
@@ -174,6 +179,11 @@ def _poll_until_terminal(execution_arn: str) -> dict[str, Any]:
 
         raw_output: str = resp.get("output", "{}")
         return cast(dict[str, Any], json.loads(raw_output))
+
+    raise TerminalError(
+        f"initialize_nova did not reach a terminal state after "
+        f"{_MAX_POLL_ATTEMPTS} attempts; arn={execution_arn!r}"
+    )
 
 
 def _extract_nova_id(output: dict[str, Any], execution_arn: str) -> str:
@@ -220,6 +230,19 @@ def _extract_nova_id(output: dict[str, Any], execution_arn: str) -> str:
             extra={"executionArn": execution_arn},
         )
         raise QuarantineError("UNRESOLVABLE_OBJECT_NAME")
+
+    if outcome == "NOT_A_CLASSICAL_NOVA":
+        logger.warning(
+            "initialize_nova returned NOT_A_CLASSICAL_NOVA — ticket targets a non-classical nova",
+            extra={"executionArn": execution_arn},
+        )
+        raise TerminalError(
+            f"Object resolved successfully but is not a classical nova; "
+            f"ticket should be removed or reclassified. arn={execution_arn!r}"
+        )
+
+    # Execution SUCCEEDED but $.finalize.outcome is absent or unrecognized —
+    # coordinate-ambiguity quarantine branch.
 
     # Execution SUCCEEDED but $.finalize.outcome is absent or unrecognized.
     # This is the coordinate-ambiguity quarantine branch: initialize_nova ends
