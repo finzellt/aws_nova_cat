@@ -1166,3 +1166,90 @@ class JobRun(PersistentBase):
         if self.ended_at is not None and self.ended_at < self.started_at:
             raise ValueError("ended_at cannot be earlier than started_at.")
         return self
+
+
+# ---------------------------------------------------------------------------
+# BandRegistryEntry
+# ---------------------------------------------------------------------------
+
+
+class BandRegistryEntry(BaseModel):
+    """
+    Pydantic contract for a single Band Registry entry.
+
+    Mirrors the JSON schema from ADR-017 Decision 3.  Used as the public
+    return type of the band registry Python interface (ADR-017 Decision 8).
+
+    This model carries the fields consumed by application code.  Registry-
+    internal sub-objects (calibration blocks, detector_type, observatory_
+    facility, etc.) are not reflected here; they are not part of the public
+    interface contract.
+
+    The model is frozen (immutable after construction) because the band
+    registry is read-only at runtime (ADR-017 Decision 8).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    band_id: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Stable NovaCat canonical band identifier (ADR-017 Decision 2). "
+            "Globally unique within the registry. Always the first element of aliases."
+        ),
+    )
+    aliases: list[str] = Field(
+        ...,
+        description=(
+            "All known string forms by which this band appears in source files. "
+            "Case-sensitive (ADR-017 Decision 4). band_id is always the first element."
+        ),
+    )
+    regime: str | None = Field(
+        default=None,
+        description=(
+            "Broad wavelength regime. Controlled vocabulary: "
+            "optical, uv, nir, mir, fir, xray, radio, gamma. "
+            "None for excluded entries (ADR-017 §3.3)."
+        ),
+    )
+    svo_filter_id: str | None = Field(
+        default=None,
+        description=(
+            "SVO Filter Profile Service identifier. None if no SVO entry exists for this band."
+        ),
+    )
+    lambda_eff: float | None = Field(
+        default=None,
+        description=(
+            "Effective (flux-weighted mean) wavelength. "
+            "Units given by spectral_coord_unit; None for sparse or excluded entries."
+        ),
+    )
+    spectral_coord_unit: SpectralCoordUnit | None = Field(
+        default=None,
+        description=(
+            "Unit of lambda_eff and bandpass_width. None when both spectral fields are None."
+        ),
+    )
+    bandpass_width: float | None = Field(
+        default=None,
+        description=(
+            "Bandpass width in the units of spectral_coord_unit. "
+            "None for sparse or excluded entries."
+        ),
+    )
+    is_excluded: bool = Field(
+        ...,
+        description=(
+            "True if this entry represents a non-photometric observation mode "
+            "to be rejected at ingestion (e.g. visual estimates, unfiltered)."
+        ),
+    )
+    exclusion_reason: str | None = Field(
+        default=None,
+        description=(
+            "Human-readable rejection reason. Non-None when is_excluded=True; None otherwise."
+        ),
+    )
