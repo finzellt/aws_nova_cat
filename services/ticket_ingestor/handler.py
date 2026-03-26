@@ -4,8 +4,9 @@ Two tasks:
 
   IngestPhotometry — reads the photometry CSV described by the parsed
     PhotometryTicket, resolves each row's filter string against the band
-    registry, constructs PhotometryRow objects, and returns a transform
-    summary.  DDB writes are handled in Chunk 3b (ddb_writer.py).
+    registry, constructs PhotometryRow objects, writes them to DynamoDB,
+    persists any row-level failures to S3, and updates the
+    PRODUCT#PHOTOMETRY_TABLE envelope item.
 
   IngestSpectra — stub only; implemented in Chunk 4.
 
@@ -22,8 +23,10 @@ Input event fields (both tasks):
 
 Output shape (IngestPhotometry):
   {
-      "rows_produced": <int>,
-      "failures":      <int>,
+      "rows_produced":          <int>,
+      "rows_written":           <int>,
+      "rows_skipped_duplicate": <int>,
+      "failures":               <int>,
   }
 
 Failure classification:
@@ -32,14 +35,21 @@ Failure classification:
                                ParseTicket; a bad payload here is an SFN
                                wiring error, not an operator authoring error)
   IngestSpectra (stub)       → TerminalError  (not yet implemented)
+
+Environment variables:
+  PHOTOMETRY_TABLE_NAME — dedicated photometry DynamoDB table
+  NOVA_CAT_TABLE_NAME   — main NovaCat DynamoDB table (envelope items)
+  DIAGNOSTICS_BUCKET    — S3 bucket for row failure diagnostics
 """
 
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 from typing import Any, cast
 
+import boto3
 from nova_common.errors import TerminalError
 from nova_common.logging import configure_logging, logger
 from nova_common.tracing import tracer
@@ -57,7 +67,32 @@ from photometry_ingestor.band_registry import (  # type: ignore[import-not-found
 from pydantic import ValidationError
 
 from contracts.models.tickets import PhotometryTicket
+from ticket_ingestor.ddb_writer import (
+    persist_row_failures,
+    upsert_envelope_item,
+    write_photometry_rows,
+)
 from ticket_ingestor.photometry_reader import BandRegistryProtocol, read_photometry_csv
+
+# ---------------------------------------------------------------------------
+# Module-level AWS clients — created once per cold start.
+# All three env vars are required; missing vars raise at import time so that
+# misconfigured deployments fail fast on the first invocation rather than at
+# write time.
+# ---------------------------------------------------------------------------
+_PHOTOMETRY_TABLE_NAME = os.environ["PHOTOMETRY_TABLE_NAME"]
+_NOVA_CAT_TABLE_NAME = os.environ["NOVA_CAT_TABLE_NAME"]
+_DIAGNOSTICS_BUCKET = os.environ["DIAGNOSTICS_BUCKET"]
+
+_dynamodb = boto3.resource("dynamodb")
+_photometry_table = _dynamodb.Table(_PHOTOMETRY_TABLE_NAME)
+_nova_cat_table = _dynamodb.Table(_NOVA_CAT_TABLE_NAME)
+_s3 = boto3.client("s3")
+
+
+# ---------------------------------------------------------------------------
+# Band registry adapter
+# ---------------------------------------------------------------------------
 
 
 class _RegistryAdapter:
@@ -99,15 +134,18 @@ def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
 
 @tracer.capture_method
 def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
-    """
-    Transform branch for the photometry ticket type.
+    """Transform, write, and summarise one photometry ticket.
 
-    Deserialises the ticket, constructs the CSV path, delegates to the
-    pure-transform photometry_reader, and returns a count summary.
-    DDB writes are not performed in Chunk 3a — they land in ddb_writer.py
-    (Chunk 3b).
+    Stages:
+      1. Deserialise and validate the PhotometryTicket from the event.
+      2. Extract identity / routing fields from the event.
+      3. Delegate to photometry_reader for pure CSV → PhotometryRow transform.
+      4. Write successful rows to the photometry DDB table (ddb_writer).
+      5. Persist row failures to S3 diagnostics (no-op if none).
+      6. Upsert the PRODUCT#PHOTOMETRY_TABLE envelope item.
+      7. Return a summary dict consumed by the Step Functions state machine.
     """
-    # --- Deserialise ticket -----------------------------------------------
+    # --- 1. Deserialise ticket --------------------------------------------
     raw_ticket = event.get("ticket")
     if not isinstance(raw_ticket, dict):
         raise TerminalError("Event field 'ticket' is missing or not a dict — SFN wiring error.")
@@ -118,7 +156,7 @@ def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
             f"PhotometryTicket validation failed — SFN wiring error: {exc}"
         ) from exc
 
-    # --- Extract identity + routing fields --------------------------------
+    # --- 2. Extract identity + routing fields -----------------------------
     try:
         nova_id = uuid.UUID(str(event["nova_id"]))
         primary_name: str = str(event["primary_name"])
@@ -133,7 +171,7 @@ def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
     csv_path = Path(data_dir) / ticket.data_filename
 
     logger.info(
-        "Starting photometry transform",
+        "Starting photometry ingest",
         extra={
             "nova_id": str(nova_id),
             "primary_name": primary_name,
@@ -144,7 +182,7 @@ def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
         },
     )
 
-    # --- Pure transform ---------------------------------------------------
+    # --- 3. Pure transform -----------------------------------------------
     result = read_photometry_csv(
         csv_path=csv_path,
         ticket=ticket,
@@ -155,18 +193,46 @@ def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
         registry=_REGISTRY,
     )
 
+    # --- 4. Write rows to DDB --------------------------------------------
+    write_result = write_photometry_rows(
+        rows=result.rows,
+        nova_id=nova_id,
+        table_name=_PHOTOMETRY_TABLE_NAME,
+        table=_photometry_table,
+    )
+
+    # --- 5. Persist row failures to S3 (no-op if empty) ------------------
+    persist_row_failures(
+        failures=result.failures,
+        nova_id=nova_id,
+        filename=ticket.data_filename,
+        bucket=_DIAGNOSTICS_BUCKET,
+        s3=_s3,
+    )
+
+    # --- 6. Upsert envelope item -----------------------------------------
+    upsert_envelope_item(
+        nova_id=nova_id,
+        rows_written=write_result.rows_written,
+        table=_nova_cat_table,
+    )
+
     logger.info(
-        "Photometry transform complete",
+        "Photometry ingest complete",
         extra={
             "nova_id": str(nova_id),
             "rows_produced": len(result.rows),
+            "rows_written": write_result.rows_written,
+            "rows_skipped_duplicate": write_result.rows_skipped_duplicate,
             "failures": len(result.failures),
         },
     )
 
-    # 3b will consume result.rows and result.failures for DDB writes.
+    # --- 7. Return summary -----------------------------------------------
     return {
         "rows_produced": len(result.rows),
+        "rows_written": write_result.rows_written,
+        "rows_skipped_duplicate": write_result.rows_skipped_duplicate,
         "failures": len(result.failures),
     }
 
@@ -177,8 +243,7 @@ def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _ingest_spectra_stub() -> dict[str, Any]:
-    """
-    Placeholder for the spectra ingestion branch.
+    """Placeholder for the spectra ingestion branch.
 
     Raises TerminalError so that a premature IngestSpectra invocation is
     immediately visible in the SFN execution history as a named, intentional
