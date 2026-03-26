@@ -690,7 +690,7 @@ SK = "PHOT#<row_id>"
 row_id = UUID(hash(nova_id + epoch + band_id + magnitude + filename))
 ```
 
-Participating fields:
+Participating  fields:
 
 - `nova_id` — ensures rows for different novae are isolated even if they share identical
   measurements
