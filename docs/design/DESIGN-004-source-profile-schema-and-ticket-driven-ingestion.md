@@ -18,7 +18,8 @@ binding architectural decisions)
   two-track band_id convention)*
 - `ADR-019` — Photometry Table Model Revision *(`PhotometryRow` v2.0 schema)*
 - `ADR-020` — Photometry Storage Format *(DynamoDB row-level persistence, key structure,
-  envelope items)*
+  envelope items. Note: photometry rows are stored in a dedicated DynamoDB table, not
+  the main NovaCat table — see §8.1)*
 - `ADR-021` — Layer 0 Pre-Ingestion Normalization *(the heuristic path that this
   document's ticket-driven path bypasses)*
 
@@ -470,15 +471,22 @@ Band resolution uses the real band registry (ADR-017). For each row, the reader 
    entry.
 3. **Matched entry has `excluded: true`:** skip this row. Log it. Increment
    `rows_skipped_excluded` counter.
-4. **No match:** unrecognized filter string. Record as a row-level failure. The row is
-   not written to DynamoDB.
+4. **No alias match → Generic fallback:** If no alias match is found, check whether a
+   `Generic_{filter_string}` entry exists in the registry. If it does, resolve to that
+   entry with `band_resolution_confidence = "low"` and
+   `band_resolution_type = "generic_fallback"`. This is the expected path for the
+   majority of the ticket corpus — most tickets reference telescopes that are not in
+   the SVO registry, so their filter strings (e.g. `"V"`, `"B"`, `"R"`) will not match
+   any instrument-specific alias and will fall through to Generic entries.
+5. **No alias match, no Generic entry:** unrecognized filter string. Record as a
+   row-level failure. The row is not written to DynamoDB.
 
-For MVP ticket-driven ingestion, direct alias lookup is the primary resolution
-mechanism. The full three-stage disambiguation funnel (ADR-018) is not required because
-the ticket corpus uses unambiguous filter strings that resolve to single registry
-entries via direct alias match. If future tickets introduce ambiguous filter strings,
-the filter system context signal is available for narrowing, but that logic should be
-implemented as part of ADR-018, not as ad hoc disambiguation in the ticket reader.
+The full three-stage disambiguation funnel (ADR-018) is not required for the
+ticket-driven path. The two-step resolution here (alias lookup → Generic fallback) is
+sufficient because the ticket corpus uses standard broadband filter names that either
+match a specific registry alias or have a corresponding Generic entry. The filter
+system context signal from the ticket is not consumed by this resolution logic but is
+preserved on the `PhotometryRow` for downstream audit purposes.
 
 ### 6.6 PhotometryRow Construction
 
@@ -503,8 +511,8 @@ from three sources:
 | Field | Value | Rationale |
 |---|---|---|
 | `data_origin` | `"literature"` | All ticket-ingested data is from published literature |
-| `band_resolution_type` | `"canonical"` or `"synonym"` | Depends on which alias matched |
-| `band_resolution_confidence` | `"high"` | Ticket provides explicit filter system context |
+| `band_resolution_type` | `"canonical"`, `"synonym"`, or `"generic_fallback"` | Depends on which resolution step matched (§6.5) |
+| `band_resolution_confidence` | `"high"` for alias match, `"low"` for Generic fallback | Generic entries carry low confidence by definition |
 | `sidecar_contributed` | `False` | No sidecar in the ticket-driven path |
 | `data_rights` | `"public"` | Published literature data |
 | `donor_attribution` | `None` | Not donor-submitted |
@@ -600,21 +608,28 @@ For each row in the metadata CSV, the reader:
    | `CTYPE1` | `WAVE` |
    | `CUNIT1` | `Angstrom` |
    | `NAXIS1` | Length of flux array |
-   | `BUNIT` | Flux units from metadata CSV |
+   | `BUNIT` | Flux units from metadata CSV. If unavailable (both metadata CSV and ticket-level `flux_units` are NA), set to empty string `''` — a valid FITS convention meaning "unspecified units" that avoids breaking loaders while honestly signaling missing information. |
    | `BIBCODE` | `ticket.bibcode` |
    | `DEREDDEN` | `ticket.dereddened` |
    | `SNR` | SNR from metadata CSV (if available) |
    | `WAV_MIN` | Wavelength range start (if available) |
    | `WAV_MAX` | Wavelength range end (if available) |
 
-4. **Uploads the FITS file to S3.** The S3 key must be compatible with the existing
-   spectra file layout so that `generate_nova_bundle` can find it. The exact key
-   structure is an open question (OQ-2).
+4. **Uploads the FITS file to S3.** The S3 key follows the existing spectra file layout:
+
+   ```
+   raw/{nova_id}/ticket_ingestion/{data_product_id}.fits
+   ```
+
+   Here `ticket_ingestion` serves as the provider string, analogous to `ESO` or `CFA`
+   in the existing pipeline. The `data_product_id` is derived deterministically per
+   §8.2. This key structure is compatible with the existing `FileObject` role-scoped SK
+   patterns and with `generate_nova_bundle`'s S3 prefix scans.
 
 5. **Inserts DDB reference items.** A `DataProduct` item (spectra type) and a
-   `FileObject` item are created for each spectrum, linking the `nova_id` to the S3
-   artifact. The `data_product_id` is derived deterministically from the spectrum's
-   identity (bibcode + filename + nova_id).
+   `FileObject` item are created in the **main NovaCat DDB table** for each spectrum,
+   linking the `nova_id` to the S3 artifact. The `data_product_id` is derived
+   deterministically from the spectrum's identity (bibcode + filename + nova_id).
 
 ### 7.4 Date Conversion
 
@@ -635,7 +650,30 @@ upload failure) are collected but do not abort the batch. The handler returns:
 
 ## 8. DynamoDB Write Strategy
 
-### 8.1 Photometry Writes
+### 8.1 Table Topology
+
+PhotometryRow and ColorRow items are stored in a **dedicated photometry DynamoDB table**,
+separate from the main NovaCat table that holds Nova items, NameMappings, DataProducts,
+JobRuns, FileObjects, etc. The photometry table has the same PK/SK key structure as
+described in ADR-020 but is physically isolated. This separation reflects different
+access patterns, scale characteristics, and lifecycle concerns.
+
+Spectra DataProduct and FileObject items (§8.3) are written to the **main NovaCat
+table**, consistent with the existing spectra pipeline.
+
+The `PRODUCT#PHOTOMETRY_TABLE` and `PRODUCT#COLOR_TABLE` envelope items remain in the
+**main NovaCat table** alongside other DataProduct items. They are operational metadata
+(ingestion counts, schema versions, last-ingestion timestamps), not scientific data, and
+belong with the rest of the per-nova operational inventory. The photometry reader
+cross-references between the two tables using `nova_id`.
+
+> **Note:** Whether photometry and color rows share one dedicated table or occupy two
+> separate tables is an open implementation decision. The key structure
+> (`SK = "PHOT#<row_id>"` vs `SK = "COLOR#<row_id>"`) supports either model. This
+> document assumes a single dedicated table for both; the decision is deferred to
+> implementation.
+
+### 8.2 Photometry Row Writes
 
 PhotometryRow items are written using the key structure from ADR-020:
 
@@ -644,34 +682,53 @@ PK = "<nova_id>"
 SK = "PHOT#<row_id>"
 ```
 
-`row_id` is a stable UUID derived deterministically from the row's natural identity.
-The exact derivation function is ADR-020 OQ-1 — it must be resolved before
-implementation. The ticket-driven path and the heuristic path **must use the same
-derivation** so that the same observation ingested via either path produces the same
-`row_id` and collides cleanly.
+**`row_id` derivation (resolves ADR-020 OQ-1 for the ticket path):**
+
+`row_id` is a deterministic UUID derived from the row's natural identity:
+
+```
+row_id = UUID(hash(nova_id + epoch + band_id + magnitude + filename))
+```
+
+Participating  fields:
+
+- `nova_id` — ensures rows for different novae are isolated even if they share identical
+  measurements
+- `epoch` — the raw time value from the CSV (pre-conversion), as a string
+- `band_id` — the resolved NovaCat canonical band ID
+- `magnitude` — the raw magnitude/flux value from the CSV, as a string
+- `filename` — the ticket's `data_filename` (source-level traceability)
+
+`regime` is omitted because it is fully determined by `band_id`. The hash function is
+SHA-256 truncated to 128 bits and formatted as a UUID v5-style deterministic identifier.
+
+The ticket-driven path and the future heuristic path **must use the same derivation**
+so that the same observation ingested via either path produces the same `row_id` and
+collides cleanly on write.
 
 **Conditional PutItem:** Each write uses a condition expression that suppresses the
 write if an item with the same `row_id` already exists. This provides row-level
 idempotency — re-running the same ticket produces no duplicate rows.
 
 **Envelope update:** After all rows are written, the
-`PRODUCT#PHOTOMETRY_TABLE` envelope item is updated with `last_ingestion_at`,
-`last_ingestion_source`, `ingestion_count` increment, and updated `row_count`.
+`PRODUCT#PHOTOMETRY_TABLE` envelope item (in the main NovaCat table) is updated with
+`last_ingestion_at`, `last_ingestion_source`, `ingestion_count` increment, and updated
+`row_count`.
 
 If the envelope item does not yet exist (edge case: `initialize_nova` was just
 created and `ingest_new_nova` hasn't run yet), the ingestor creates it with an
 "ensure exists" pattern (conditional PutItem that only writes if the item is absent).
 
-### 8.2 Spectra Writes
+### 8.3 Spectra Writes
 
-Each ingested spectrum produces two DDB items:
+Each ingested spectrum produces two DDB items in the **main NovaCat table**:
 
 - A `DataProduct` item for the spectrum (spectra type, with `data_product_id`,
   provider = `"ticket_ingestion"`, operational status, etc.)
 - A `FileObject` item linking the `nova_id` to the S3 FITS file
 
 The `data_product_id` is derived deterministically from
-`hash(bibcode + spectrum_filename + nova_id)` to ensure idempotency.
+`UUID(hash(bibcode + spectrum_filename + nova_id))` to ensure idempotency.
 
 ---
 
@@ -694,15 +751,24 @@ are reused without modification.
 
 ---
 
-## 10. Open Questions
+## 10. Resolved and Open Questions
+
+### 10.1 Resolved
+
+| # | Question | Resolution |
+|---|---|---|
+| OQ-1 | Deterministic `row_id` derivation for `PhotometryRow` items. | `UUID(hash(nova_id + epoch + band_id + magnitude + filename))`. See §8.2 for full specification. |
+| OQ-2 | S3 key structure for ticket-ingested FITS files. | `raw/{nova_id}/ticket_ingestion/{data_product_id}.fits`. See §7.3. |
+| OQ-3 | Should `ingest_ticket` create envelope items if they don't exist? | Yes — "ensure exists" pattern (conditional PutItem that only writes if absent). See §8.2. |
+| OQ-4 | Are ticket corpus filter strings ambiguous? | Yes — most tickets reference telescopes not in the SVO registry. Generic fallback (`Generic_{BandLabel}`) is the expected resolution path for the majority of the corpus. The two-step resolution sequence (alias lookup → Generic fallback) is specified in §6.5. |
+| OQ-5 | FITS `BUNIT` keyword when flux units are unavailable. | Set to empty string `''` (valid FITS convention for "unspecified units"). See §7.3. |
+
+### 10.2 Remaining Open
 
 | # | Question | Blocking? | Target |
 |---|---|---|---|
-| OQ-1 | Deterministic `row_id` derivation for `PhotometryRow` items. Must be identical to the derivation used by the heuristic path so that the same observation ingested via either path produces the same `row_id`. | Blocks photometry implementation | ADR-020 OQ-1 |
-| OQ-2 | S3 key structure for ticket-ingested FITS files. Must be compatible with the existing spectra file layout so that `generate_nova_bundle` can find them. | Blocks spectra implementation | Spectra S3 layout spec |
-| OQ-3 | Should `ingest_ticket` create `PRODUCT#PHOTOMETRY_TABLE` and `PRODUCT#COLOR_TABLE` envelope items if they don't exist, or require that `initialize_nova` → `ingest_new_nova` has already created them? Proposed resolution: "ensure exists" pattern in the ingestor. | Blocks photometry implementation | Implementation decision |
-| OQ-4 | Are there tickets in the ~100-file corpus where the filter string is ambiguous (resolves to multiple registry entries) and the filter system context signal is needed for disambiguation? If so, minimal disambiguation logic may be needed in the photometry reader from day one. | Informs band resolution complexity | TF to audit |
-| OQ-5 | For spectra tickets with `FLUX UNITS: NA` at the ticket level and per-spectrum flux units in the metadata CSV, should the FITS `BUNIT` keyword be omitted if both are NA, or should it be set to a sentinel? | Blocks spectra implementation | Implementation decision |
+| OQ-6 | Should photometry and color rows share one dedicated DynamoDB table or occupy two separate tables? The key structure supports either model. | Blocks CDK implementation | Implementation decision |
+| OQ-7 | The `row_id` derivation specified here must be adopted identically by the future heuristic path. Should it be promoted to an ADR-020 amendment now, or documented here and reconciled during heuristic path implementation? | Non-blocking | ADR-020 amendment |
 
 ---
 
@@ -726,8 +792,10 @@ The ticket-driven path replaces the need for:
   strings in the heuristic path.
 - **Band registry (ADR-017):** Used directly by the photometry reader. The ticket-driven
   path is a consumer of the registry, not a replacement.
-- **ADR-020 (Persistence):** The DDB key structure, conditional writes, and envelope
-  items are shared between the ticket-driven and heuristic paths.
+- **ADR-020 (Persistence):** The DDB key structure and conditional writes are shared
+  between the ticket-driven and heuristic paths. Note that photometry rows are written
+  to a dedicated DynamoDB table (§8.1), not the main NovaCat table; envelope items
+  remain in the main table.
 
 ### 11.3 Forward Compatibility
 
@@ -743,40 +811,242 @@ The ticket-driven path is the MVP ingestion mechanism. Post-MVP, it coexists wit
 
 ## 12. Work Decomposition
 
+### Branch
+
+`epic/ticket-driven-ingestion`
+
 ### Implementation Chunks
 
-**Chunk 1 — Contracts and Parser:**
-- `contracts/models/tickets.py` (Pydantic models)
-- `services/ticket_parser/` (parser service)
-- Unit tests for both
+Each chunk is a single squashed commit (per project convention). Chunks are listed in
+dependency order. Each chunk description includes the files to create or modify, the
+project knowledge documents to reference, and the acceptance criteria.
 
-**Chunk 2 — Nova Resolution Handler:**
-- `services/nova_resolver_ticket/` (DDB lookup + fire-and-poll)
-- Unit tests (mock DDB + mock SFN)
+---
 
-**Chunk 3 — Photometry Reader:**
-- Photometry branch of `services/ticket_ingestor/`
-- Band registry integration
-- DDB write logic
-- Unit tests (mock DDB, mock band registry)
+**Chunk 1 — Contracts and Ticket Parser**
 
-**Chunk 4 — Spectra Reader:**
-- Spectra branch of `services/ticket_ingestor/`
-- CSV → FITS conversion
-- S3 upload logic
-- DDB reference item creation
-- Unit tests (mock S3, mock DDB)
+*Files to create:*
+- `contracts/models/tickets.py` — `PhotometryTicket`, `SpectraTicket`, `_TicketCommon`,
+  `Ticket` union type. Pydantic models per §3.
+- `services/ticket_parser/__init__.py`
+- `services/ticket_parser/handler.py` — Lambda handler dispatching on `task_name`.
+  Single task: `ParseTicket`.
+- `services/ticket_parser/parser.py` — `parse_ticket_file()` and `validate_ticket()`
+  per §4. Module-level `_PHOTOMETRY_KEY_MAP` and `_SPECTRA_KEY_MAP` dicts. Type
+  coercion logic. `TicketParseError` exception class.
+- `tests/services/test_ticket_parser.py` — Unit tests covering: valid photometry ticket
+  parse, valid spectra ticket parse, malformed line (no delimiter), duplicate key,
+  unknown key rejection, `NA` → `None` coercion, `WAVELENGTH RANGE COLUMN` tuple
+  parsing, discrimination logic (both present / neither present), Pydantic validation
+  failure wrapping, case normalization of `wavelength_regime` and `ticket_status`.
 
-**Chunk 5 — ASL and CDK:**
-- State machine definition (`ingest_ticket.asl.json`)
-- CDK construct additions (Lambda handlers, IAM permissions, SFN state machine)
-- Integration test
+*Reference documents:*
+- This document §3 (ticket models) and §4 (parser spec)
+- `contracts/models/entities.py` for Pydantic conventions (`ConfigDict`,
+  `extra="forbid"`, `Field` usage)
 
-### Dependencies
+*Acceptance criteria:*
+- All models pass `mypy --strict`
+- All code passes `ruff check`
+- Both sample tickets (V4739 Sgr photometry, GQ Mus spectra) parse successfully in
+  unit tests
+- `extra="forbid"` enforced on all models
+- `ticket_type` discriminator works correctly for union deserialization
 
-Chunk 1 has no dependencies. Chunk 2 depends on the existing `initialize_nova`
-infrastructure. Chunks 3 and 4 depend on Chunk 1 (contracts) and Chunk 2 (nova
-resolution). Chunk 5 depends on all preceding chunks.
+---
 
-Chunk 3 additionally depends on the band registry artifact (`band_registry.json`)
-being committed — this is an Epic A deliverable that may be completed in parallel.
+**Chunk 2 — Nova Resolution Handler**
+
+*Files to create:*
+- `services/nova_resolver_ticket/__init__.py`
+- `services/nova_resolver_ticket/handler.py` — Lambda handler. Single task:
+  `ResolveNova`. Implements the resolution sequence from §5.1: DynamoDB `NameMapping`
+  preflight check, `initialize_nova` fire-and-poll if not found, coordinate fetch from
+  Nova item.
+- `tests/services/test_nova_resolver_ticket.py` — Unit tests covering: existing nova
+  found via NameMapping (no workflow invocation), new nova requiring `initialize_nova`
+  (mock SFN `start_execution` + `describe_execution` poll loop), `NOT_FOUND` outcome →
+  `QuarantineError`, `QUARANTINED` outcome → `QuarantineError`, SFN failure →
+  `TerminalError`.
+
+*Reference documents:*
+- This document §5 (nova resolution strategy)
+- `services/nova_resolver/handler.py` for NameMapping query patterns
+- `docs/workflows/initialize-nova.md` for `initialize_nova` outcomes
+- `docs/storage/dynamodb-access-patterns.md` for NameMapping access pattern
+
+*Environment variables required:*
+- `TABLE_NAME` — main NovaCat DynamoDB table
+- `INITIALIZE_NOVA_STATE_MACHINE_ARN` — ARN of the `initialize_nova` SFN
+
+*Acceptance criteria:*
+- Passes `mypy --strict` and `ruff check`
+- Poll loop uses 2-second interval with configurable max attempts
+- `QuarantineError` and `TerminalError` raised from `nova_common.errors`
+- No modifications to `initialize_nova` or any existing handler
+
+---
+
+**Chunk 3 — Photometry Reader (Ticket Ingestor, Photometry Branch)**
+
+*Files to create:*
+- `services/ticket_ingestor/__init__.py`
+- `services/ticket_ingestor/handler.py` — Lambda handler dispatching on `task_name`.
+  Two tasks: `IngestPhotometry`, `IngestSpectra` (spectra branch is a stub in this
+  chunk, implemented in Chunk 4).
+- `services/ticket_ingestor/photometry.py` — Photometry ingestion logic per §6:
+  CSV reading (§6.2), per-row field extraction (§6.3), time conversion (§6.4), band
+  resolution with Generic fallback (§6.5), `PhotometryRow` construction (§6.6),
+  row-level failure collection (§6.7).
+- `services/ticket_ingestor/ddb_writer.py` — Conditional `PutItem` for photometry
+  rows to the dedicated photometry DDB table. Envelope item update/ensure-exists
+  logic against the main NovaCat table. Per §8.1–8.2.
+- `tests/services/test_ticket_ingestor_photometry.py` — Unit tests covering: CSV row
+  extraction with column indices, time conversion (JD → MJD, HJD → MJD, BJD → MJD),
+  band resolution (alias match, Generic fallback, excluded band skip, unrecognized
+  band failure), `PhotometryRow` construction with all field sources, upper limit flag
+  coercion (`"0"` → `False`, `"1"` → `True`), row-level failure collection (bad row
+  doesn't abort batch), conditional PutItem idempotency (duplicate suppression).
+
+*Reference documents:*
+- This document §6 (photometry reader) and §8.1–8.2 (DDB write strategy)
+- `contracts/models/entities.py` for `PhotometryRow` schema
+- `docs/adr/ADR-017-band-registry-design.md` for registry interface
+  (`lookup_band_id`, `get_entry`, `is_excluded`)
+- `docs/adr/ADR-019-photometry-table-model-revision.md` for PhotometryRow v2.0 fields
+- `docs/adr/ADR-020-photometry-storage-format.md` for DDB key structure and
+  conditional write semantics
+- `docs/specs/photometry_table_model.md` for field definitions and cross-regime
+  guidance
+- `services/photometry_ingestor/band_registry/` for registry module (if committed)
+
+*Environment variables required:*
+- `PHOTOMETRY_TABLE_NAME` — dedicated photometry DynamoDB table
+- `NOVACAT_TABLE_NAME` — main NovaCat DynamoDB table (for envelope items)
+- `DIAGNOSTICS_BUCKET` — S3 bucket for row failure diagnostics
+
+*Acceptance criteria:*
+- Passes `mypy --strict` and `ruff check`
+- V4739 Sgr sample data produces valid `PhotometryRow` items in unit tests
+- Generic fallback path exercised (filter string with no alias match but matching
+  Generic entry)
+- Row-level failures persisted to S3 diagnostics path
+- Envelope item created with "ensure exists" when absent
+
+---
+
+**Chunk 4 — Spectra Reader (Ticket Ingestor, Spectra Branch)**
+
+*Files to create:*
+- `services/ticket_ingestor/spectra.py` — Spectra ingestion logic per §7: metadata
+  CSV reading (§7.2), per-spectrum processing loop (§7.3), CSV → FITS conversion with
+  header reconstruction, S3 upload, DDB reference item creation.
+- `services/ticket_ingestor/fits_builder.py` — FITS file construction from wavelength
+  array, flux array, and header keyword dict. Uses `astropy.io.fits`. Handles the
+  `BUNIT` empty-string convention for missing flux units.
+- `tests/services/test_ticket_ingestor_spectra.py` — Unit tests covering: metadata CSV
+  parsing with two-hop column index indirection, FITS header keyword population from
+  ticket + metadata CSV fields, date conversion (JD → ISO 8601 for `DATE-OBS`), BUNIT
+  handling (available units → set, both NA → empty string), S3 key generation
+  (`raw/{nova_id}/ticket_ingestion/{data_product_id}.fits`), deterministic
+  `data_product_id` derivation, DDB DataProduct and FileObject item creation,
+  per-spectrum failure collection.
+
+*Reference documents:*
+- This document §7 (spectra reader) and §8.3 (spectra DDB writes)
+- `docs/specs/spectra-fits-profiles.md` for FITS header conventions
+- `docs/storage/dynamodb-item-model.md` §3 (DataProduct) and §5 (FileObject) for
+  item shapes and SK patterns
+- `services/spectra_acquirer/handler.py` for existing S3 upload patterns
+- GQ Mus sample files for integration reference
+
+*Dependencies:*
+- `astropy` (FITS I/O) — this Lambda must be container-based, consistent with
+  the existing Docker-based Lambda pattern for services requiring astropy/numpy
+
+*Environment variables required:*
+- `NOVACAT_TABLE_NAME` — main NovaCat DynamoDB table
+- `PUBLIC_BUCKET_NAME` — S3 bucket for FITS uploads (or private bucket, depending on
+  publication gate design)
+
+*Acceptance criteria:*
+- Passes `mypy --strict` and `ruff check`
+- GQ Mus sample data produces valid FITS files with correct header keywords in unit
+  tests
+- Two-hop indirection verified: ticket column indices → metadata CSV values →
+  spectrum CSV column indices
+- FITS files loadable by `astropy.io.fits.open()` without warnings
+- Empty `BUNIT` does not produce loader warnings
+
+---
+
+**Chunk 5 — ASL, CDK, and Integration Test**
+
+*Files to create:*
+- `infra/workflows/ingest_ticket.asl.json` — Step Functions ASL definition per the
+  workflow spec (`docs/workflows/ingest-ticket.md`). States: ValidateInput,
+  EnsureCorrelationId, BeginJobRun, AcquireIdempotencyLock, ParseTicket, ResolveNova,
+  TicketTypeBranch (Choice), IngestPhotometry, IngestSpectra, FinalizeJobRunSuccess,
+  QuarantineHandler, FinalizeJobRunQuarantined, TerminalFailHandler,
+  FinalizeJobRunFailed.
+- CDK additions to `infra/nova_constructs/compute.py` — three new Lambda constructs
+  (`ticket_parser`, `nova_resolver_ticket`, `ticket_ingestor`). Note:
+  `ticket_ingestor` must be container-based (astropy dependency).
+- CDK additions to `infra/nova_constructs/workflows.py` — `ingest_ticket` state
+  machine construct with substitutions for all Lambda ARNs. IAM grants for
+  `sfn:StartExecution` and `sfn:DescribeExecution` on the `initialize_nova` state
+  machine (for `nova_resolver_ticket`).
+- CDK additions to `infra/nova_constructs/storage.py` — dedicated photometry DynamoDB
+  table (if not already provisioned by a preceding epic).
+- `tests/integration/test_ingest_ticket_integration.py` — Integration test executing
+  the full workflow against localstack or deployed smoke stack, using the V4739 Sgr
+  photometry sample as input.
+- `schemas/events/ingest_ticket/latest.json` — JSON Schema for the input event.
+
+*Files to modify:*
+- `infra/nova_constructs/workflows.py` — add `ingest_ticket` state machine
+- `infra/nova_constructs/compute.py` — add three Lambda constructs
+
+*Reference documents:*
+- `docs/workflows/ingest-ticket.md` (workflow spec)
+- `infra/workflows/initialize_nova.asl.json` for ASL patterns and conventions
+- `infra/nova_constructs/workflows.py` for `_create_state_machine` pattern
+- `infra/nova_constructs/compute.py` for Lambda construct patterns (zip vs container)
+
+*Acceptance criteria:*
+- State machine deploys successfully to smoke stack
+- End-to-end test: V4739 Sgr ticket → ParseTicket → ResolveNova → IngestPhotometry →
+  PhotometryRow items in dedicated DDB table
+- All IAM permissions are least-privilege scoped
+- Passes `mypy --strict` and `ruff check` on all new infra code
+
+---
+
+### Dependency Graph
+
+```
+Chunk 1 (Contracts + Parser)
+    │
+    ├──→ Chunk 2 (Nova Resolution)
+    │        │
+    │        ├──→ Chunk 3 (Photometry Reader)
+    │        │        │
+    │        └──→ Chunk 4 (Spectra Reader)
+    │                 │
+    └────────────────→ Chunk 5 (ASL + CDK + Integration)
+```
+
+Chunk 1 has no dependencies. Chunks 2, 3, and 4 can proceed in parallel after Chunk 1,
+though Chunk 3 additionally depends on the band registry artifact
+(`band_registry.json`) being committed. Chunk 5 depends on all preceding chunks.
+
+### Estimated Scope
+
+| Chunk | New files | Test files | Approx. lines |
+|---|---|---|---|
+| 1 | 4 | 1 | ~400 |
+| 2 | 2 | 1 | ~250 |
+| 3 | 3 | 1 | ~500 |
+| 4 | 2 | 1 | ~450 |
+| 5 | 3–4 | 1 | ~600 |
+| **Total** | **14–15** | **5** | **~2200** |
