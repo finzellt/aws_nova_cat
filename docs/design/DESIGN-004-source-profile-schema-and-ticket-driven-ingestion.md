@@ -876,7 +876,7 @@ project knowledge documents to reference, and the acceptance criteria.
 - `docs/storage/dynamodb-access-patterns.md` for NameMapping access pattern
 
 *Environment variables required:*
-- `TABLE_NAME` — main NovaCat DynamoDB table
+- `NOVA_CAT_TABLE_NAME` — main NovaCat DynamoDB table
 - `INITIALIZE_NOVA_STATE_MACHINE_ARN` — ARN of the `initialize_nova` SFN
 
 *Acceptance criteria:*
