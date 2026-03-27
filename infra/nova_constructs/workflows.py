@@ -50,6 +50,7 @@ class NovaCatWorkflows(Construct):
       refresh_references         — the refresh_references state machine
       discover_spectra_products  — the discover_spectra_products state machine
       acquire_and_validate_spectra — the acquire_and_validate_spectra state machine (placeholder stub)
+      ingest_ticket              — the ingest_ticket state machine
     """
 
     def __init__(
@@ -232,6 +233,85 @@ class NovaCatWorkflows(Construct):
         )
 
         # ------------------------------------------------------------------
+        # ingest_ticket state machine
+        # ------------------------------------------------------------------
+        self.ingest_ticket = self._create_state_machine(
+            name="ingest-ticket",
+            asl_file="ingest_ticket.asl.json",
+            substitutions={
+                # job_run_manager handles BeginJobRun, FinalizeJobRunSuccess_*,
+                # FinalizeJobRunQuarantined, TerminalFailHandler, FinalizeJobRunFailed
+                # via its internal task dispatch table.
+                "JobRunManagerFunctionArn": compute.job_run_manager.function_arn,
+                "AcquireIdempotencyLockFunctionArn": compute.idempotency_guard.function_arn,
+                "TicketParserFunctionArn": compute.ticket_parser.function_arn,
+                "NovaResolverTicketFunctionArn": compute.nova_resolver_ticket.function_arn,
+                "TicketIngestorFunctionArn": compute.ticket_ingestor.function_arn,
+                "QuarantineHandlerFunctionArn": compute.quarantine_handler.function_arn,
+            },
+            invokable_functions=[
+                compute.job_run_manager,
+                compute.idempotency_guard,
+                compute.ticket_parser,
+                compute.nova_resolver_ticket,
+                compute.ticket_ingestor,
+                compute.quarantine_handler,
+            ],
+        )
+
+        # ------------------------------------------------------------------
+        # SFN grants for nova_resolver_ticket
+        #
+        # nova_resolver_ticket polls initialize_nova when a name is not found
+        # in NameMapping — it needs StartExecution to fire the workflow and
+        # DescribeExecution to poll for the terminal outcome.
+        #
+        # These grants live here (not compute.py) because NovaCatWorkflows
+        # owns the state machine ARNs. The same pattern is used for
+        # workflow_launcher's StartExecution grant above.
+        #
+        # Scope: deliberately narrowed to initialize_nova only (not the
+        # broad nova-cat-* wildcard used by workflow_launcher), because
+        # nova_resolver_ticket has no legitimate reason to start any other
+        # state machine.
+        # ------------------------------------------------------------------
+        stack = cdk.Stack.of(self)
+
+        initialize_nova_arn = stack.format_arn(
+            service="states",
+            resource="stateMachine",
+            resource_name=f"{env_prefix}-initialize-nova",
+            arn_format=cdk.ArnFormat.COLON_RESOURCE_NAME,
+        )
+        initialize_nova_executions_arn = stack.format_arn(
+            service="states",
+            resource="execution",
+            resource_name=f"{env_prefix}-initialize-nova:*",
+            arn_format=cdk.ArnFormat.COLON_RESOURCE_NAME,
+        )
+
+        compute.nova_resolver_ticket.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["states:StartExecution"],
+                resources=[initialize_nova_arn],
+            )
+        )
+        compute.nova_resolver_ticket.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["states:DescribeExecution"],
+                resources=[initialize_nova_executions_arn],
+            )
+        )
+
+        # Inject the initialize_nova ARN as an environment variable so
+        # nova_resolver_ticket can call StartExecution without hardcoding
+        # ARN construction logic (same pattern as workflow_launcher above).
+        compute.nova_resolver_ticket.add_environment(
+            "INITIALIZE_NOVA_STATE_MACHINE_ARN",
+            initialize_nova_arn,
+        )
+
+        # ------------------------------------------------------------------
         # Stack outputs
         # ------------------------------------------------------------------
         cdk.CfnOutput(
@@ -268,6 +348,13 @@ class NovaCatWorkflows(Construct):
             value=self.acquire_and_validate_spectra.attr_arn,
             description="acquire_and_validate_spectra Step Functions state machine ARN (placeholder stub)",
             export_name=f"{cf_prefix}-AcquireAndValidateSpectraStateMachineArn",
+        )
+        cdk.CfnOutput(
+            self,
+            "IngestTicketStateMachineArn",
+            value=self.ingest_ticket.attr_arn,
+            description="ingest_ticket Step Functions state machine ARN",
+            export_name=f"{cf_prefix}-IngestTicketStateMachineArn",
         )
 
     def _create_state_machine(

@@ -1,0 +1,416 @@
+{
+    "Comment": "ingest_ticket — Ticket-driven ingestion of photometry and spectra. See docs/workflows/ingest-ticket.md",
+    "StartAt": "ValidateInput",
+    "States": {
+
+        "ValidateInput": {
+            "Type": "Pass",
+            "Comment": "Structural validation only. All semantic validation is deferred to ParseTicket (Pydantic). Exists as an explicit hook for future ASL-level checks.",
+            "Next": "EnsureCorrelationId"
+        },
+
+        "EnsureCorrelationId": {
+            "Type": "Choice",
+            "Comment": "Generate a correlation_id if the caller did not supply one. Per execution-governance.md, all workflows must propagate a correlation_id.",
+            "Choices": [
+                {
+                    "Variable": "$.correlation_id",
+                    "IsPresent": true,
+                    "Next": "BeginJobRun"
+                }
+            ],
+            "Default": "GenerateCorrelationId"
+        },
+
+        "GenerateCorrelationId": {
+            "Type": "Pass",
+            "Comment": "Inject null placeholder so $.correlation_id is always defined when BeginJobRun Parameters are evaluated.",
+            "Result": null,
+            "ResultPath": "$.correlation_id",
+            "Next": "BeginJobRun"
+        },
+
+        "BeginJobRun": {
+            "Type": "Task",
+            "Comment": "Emit JobRun STARTED record. Returns job_run_id and confirmed correlation_id (generated if missing).",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "BeginJobRun",
+                "workflow_name": "ingest_ticket",
+                "ticket_path.$": "$.ticket_path",
+                "correlation_id.$": "$.correlation_id"
+            },
+            "ResultPath": "$.job_run",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "BeginJobRunFailed",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "AcquireIdempotencyLock"
+        },
+
+        "BeginJobRunFailed": {
+            "Type": "Fail",
+            "Error": "BeginJobRunFailed",
+            "Cause": "Fatal error before JobRun record was established. No finalization possible."
+        },
+
+        "AcquireIdempotencyLock": {
+            "Type": "Task",
+            "Comment": "Acquire idempotency lock keyed on IngestTicket:{ticket_filename}:{schema_version}. Re-execution of the same ticket within the lock window is suppressed here.",
+            "Resource": "${AcquireIdempotencyLockFunctionArn}",
+            "Parameters": {
+                "task_name": "AcquireIdempotencyLock",
+                "workflow_name": "ingest_ticket",
+                "ticket_path.$": "$.ticket_path",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.idempotency",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "ParseTicket"
+        },
+
+        "ParseTicket": {
+            "Type": "Task",
+            "Comment": "Read .txt ticket file from ticket_path, parse key-value pairs, discriminate type (photometry: DATA FILENAME / spectra: METADATA FILENAME), validate with Pydantic. Parse failures are deterministic authoring errors — no retry.",
+            "Resource": "${TicketParserFunctionArn}",
+            "Parameters": {
+                "task_name": "ParseTicket",
+                "workflow_name": "ingest_ticket",
+                "ticket_path.$": "$.ticket_path",
+                "data_dir.$": "$.data_dir",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.parsed_ticket",
+            "TimeoutSeconds": 30,
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "ResolveNova"
+        },
+
+        "ResolveNova": {
+            "Type": "Task",
+            "Comment": "Look up object_name in NameMapping. If absent, invoke initialize_nova (StartExecution + poll until terminal) to create the nova_id. Raises UNRESOLVABLE_OBJECT_NAME (initialize_nova NOT_FOUND) or IDENTITY_AMBIGUITY (initialize_nova QUARANTINED). Exception class name is the NovaQuarantineReasonCode value, so $.quarantine.Error is the reason code string directly.",
+            "Resource": "${NovaResolverTicketFunctionArn}",
+            "Parameters": {
+                "task_name": "ResolveNova",
+                "workflow_name": "ingest_ticket",
+                "object_name.$": "$.parsed_ticket.object_name",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.nova",
+            "TimeoutSeconds": 120,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 2,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "UNRESOLVABLE_OBJECT_NAME",
+                        "IDENTITY_AMBIGUITY"
+                    ],
+                    "Next": "QuarantineHandler",
+                    "ResultPath": "$.quarantine"
+                },
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "TicketTypeBranch"
+        },
+
+        "TicketTypeBranch": {
+            "Type": "Choice",
+            "Comment": "Route to IngestPhotometry (ticket_type == photometry) or IngestSpectra (all others, currently only spectra). Default covers future ticket types without an explicit guard.",
+            "Choices": [
+                {
+                    "Variable": "$.parsed_ticket.ticket_type",
+                    "StringEquals": "photometry",
+                    "Next": "IngestPhotometry"
+                }
+            ],
+            "Default": "IngestSpectra"
+        },
+
+        "IngestPhotometry": {
+            "Type": "Task",
+            "Comment": "Read headerless CSV at data_dir/data_filename using ticket column indices. Resolve filter strings against band registry (ADR-017). Write PhotometryRow items via conditional PutItem (ADR-020). Update PRODUCT#PHOTOMETRY_TABLE envelope item.",
+            "Resource": "${TicketIngestorFunctionArn}",
+            "Parameters": {
+                "task_name": "IngestPhotometry",
+                "workflow_name": "ingest_ticket",
+                "ticket.$": "$.parsed_ticket.ticket",
+                "nova_id.$": "$.nova.nova_id",
+                "data_dir.$": "$.data_dir",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.ingest",
+            "TimeoutSeconds": 300,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 2,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunSuccess_Photometry"
+        },
+
+        "IngestSpectra": {
+            "Type": "Task",
+            "Comment": "Read metadata CSV (two-hop: ticket → metadata CSV → per-spectrum data CSVs). Convert each spectrum CSV to FITS with reconstructed headers (OBJECT, DATE-OBS, TELESCOP, INSTRUME, OBSERVER, CRVAL1, CDELT1, NAXIS1, BUNIT, BIBCODE). Upload to public S3 bucket. Insert DynamoDB DataProduct + FileObject reference items.",
+            "Resource": "${TicketIngestorFunctionArn}",
+            "Parameters": {
+                "task_name": "IngestSpectra",
+                "workflow_name": "ingest_ticket",
+                "ticket.$": "$.parsed_ticket.ticket",
+                "nova_id.$": "$.nova.nova_id",
+                "data_dir.$": "$.data_dir",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.ingest",
+            "TimeoutSeconds": 600,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 2,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "TerminalFailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunSuccess_Spectra"
+        },
+
+        "FinalizeJobRunSuccess_Photometry": {
+            "Type": "Task",
+            "Comment": "Emit JobRun SUCCEEDED with outcome INGESTED_PHOTOMETRY.",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "FinalizeJobRunSuccess",
+                "workflow_name": "ingest_ticket",
+                "outcome": "INGESTED_PHOTOMETRY",
+                "nova_id.$": "$.nova.nova_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "End": true
+        },
+
+        "FinalizeJobRunSuccess_Spectra": {
+            "Type": "Task",
+            "Comment": "Emit JobRun SUCCEEDED with outcome INGESTED_SPECTRA.",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "FinalizeJobRunSuccess",
+                "workflow_name": "ingest_ticket",
+                "outcome": "INGESTED_SPECTRA",
+                "nova_id.$": "$.nova.nova_id",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "End": true
+        },
+
+        "QuarantineHandler": {
+            "Type": "Task",
+            "Comment": "Persist quarantine diagnostic fields onto the JobRun. $.quarantine.Error is the NovaQuarantineReasonCode string (UNRESOLVABLE_OBJECT_NAME or IDENTITY_AMBIGUITY) — the exception class name raised by nova_resolver_ticket. SNS failure is swallowed inside the handler.",
+            "Resource": "${QuarantineHandlerFunctionArn}",
+            "Parameters": {
+                "task_name": "QuarantineHandler",
+                "workflow_name": "ingest_ticket",
+                "quarantine_reason_code.$": "$.quarantine.Error",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id"
+            },
+            "ResultPath": "$.quarantine_result",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "FinalizeJobRunQuarantined",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunQuarantined"
+        },
+
+        "FinalizeJobRunQuarantined": {
+            "Type": "Task",
+            "Comment": "Emit JobRun QUARANTINED status. Passes quarantine_result (fingerprint + reason code) from QuarantineHandler output.",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "FinalizeJobRunQuarantined",
+                "workflow_name": "ingest_ticket",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "quarantine.$": "$.quarantine_result"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "End": true
+        },
+
+        "TerminalFailHandler": {
+            "Type": "Task",
+            "Comment": "Classify the error and persist error_classification + error_fingerprint onto the JobRun before the final FAILED status is written.",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "TerminalFailHandler",
+                "workflow_name": "ingest_ticket",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "error.$": "$.error"
+            },
+            "ResultPath": "$.terminal_fail",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "FinalizeJobRunFailed",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "FinalizeJobRunFailed"
+        },
+
+        "FinalizeJobRunFailed": {
+            "Type": "Task",
+            "Comment": "Emit JobRun FAILED status. Best-effort: if this state itself fails, the execution terminates without a clean FAILED record.",
+            "Resource": "${JobRunManagerFunctionArn}",
+            "Parameters": {
+                "task_name": "FinalizeJobRunFailed",
+                "workflow_name": "ingest_ticket",
+                "correlation_id.$": "$.job_run.correlation_id",
+                "job_run_id.$": "$.job_run.job_run_id",
+                "terminal_fail.$": "$.terminal_fail"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 10,
+            "Retry": [
+                {
+                    "ErrorEquals": ["RetryableError"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "End": true
+        }
+
+    }
+}
