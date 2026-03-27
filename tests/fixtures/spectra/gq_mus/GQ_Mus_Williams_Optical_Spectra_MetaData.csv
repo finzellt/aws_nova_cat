@@ -1,0 +1,7 @@
+#FILENAME,WAVELENGTH COL NUM,FLUX COL NUM,FLUX ERR COL NUM,FLUX UNITS,DATE,OBSERVER,TELESCOPE,INSTRUMENT,DISPERSION,WAVELENGTH RANGE 1,WAVELENGTH RANGE 2
+GQMUSC_Williams_Optical_Spectra.csv,0,1,NA,ergs/cm^2/sec,2.4481e+06,Williams,CTIO 1 m,2D-Frutti,5.0,3300.00000,9570.00000
+GQMUSD_Williams_Optical_Spectra.csv,0,1,NA,ergs/cm^2/sec,2.44832e+06,Williams,CTIO 1 m,2D-Frutti,5.0,3245.00000,9175.00000
+GQMUSF_Williams_Optical_Spectra.csv,0,1,NA,ergs/cm^2/sec,2.44939e+06,Williams,CTIO 1 m,2D-Frutti,3.57784787297839,3197.01472,7479.69862
+GQMUSE_Williams_Optical_Spectra.csv,0,1,NA,ergs/cm^2/sec,2.44866e+06,Williams,CTIO 1 m,2D-Frutti,3.566938,3266.00000,9711.45697
+GQMUSA_Williams_Optical_Spectra.csv,0,1,NA,ergs/cm^2/sec,2.44732e+06,Williams,CTIO 1 m,2D-Frutti,3.0,3100.00000,7450.00000
+GQMUSB_Williams_Optical_Spectra.csv,0,1,NA,ergs/cm^2/sec,2.44804e+06,Williams,CTIO 1 m,2D-Frutti,8.518655,3222.00000,9551.36067
