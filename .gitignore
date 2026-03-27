@@ -11,6 +11,7 @@ tools/diagrams/node_modules/
 docs/_epic5/
 tools/svo-filter-analysis/svo_fps.db
 tools/svo-filter-analysis/checkpoints/
+tools/filter_band_reg/vizier_data/
 
 .DS_Store
 .idea/
