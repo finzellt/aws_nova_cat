@@ -51,8 +51,8 @@ def template() -> assertions.Template:
 
 
 class TestDynamoDb:
-    def test_single_table_exists(self, template: assertions.Template) -> None:
-        template.resource_count_is("AWS::DynamoDB::Table", 1)
+    def test_double_table_exists(self, template: assertions.Template) -> None:
+        template.resource_count_is("AWS::DynamoDB::Table", 2)
 
     def test_table_name(self, template: assertions.Template) -> None:
         template.has_resource_properties(

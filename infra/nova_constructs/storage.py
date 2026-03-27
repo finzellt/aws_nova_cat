@@ -3,6 +3,7 @@ Nova Cat Storage Construct
 
 Provisions:
   - Single DynamoDB table (NovaCat) with EligibilityIndex GSI
+  - Dedicated DynamoDB table (NovaCatPhotometry) for PhotometryRow items (ADR-020)
   - Private data S3 bucket (raw bytes, quarantine, derived artifacts, bundles)
   - Public site S3 bucket (static site releases)
   - Quarantine notifications SNS topic
@@ -40,6 +41,7 @@ class NovaCatStorage(Construct):
       private_bucket      — nova-cat-private-data (raw bytes, derived, quarantine, bundles)
       public_site_bucket  — nova-cat-public-site (static site releases)
       quarantine_topic    — SNS topic for quarantine notifications (all workflows)
+      photometry_table    — dedicated DynamoDB table for PhotometryRow items (ADR-020)
     """
 
     def __init__(
@@ -99,6 +101,45 @@ class NovaCatStorage(Construct):
                 type=dynamodb.AttributeType.STRING,
             ),
             projection_type=dynamodb.ProjectionType.ALL,
+        )
+
+        # ------------------------------------------------------------------
+        # DynamoDB — Dedicated photometry table (PhotometryRows)
+        #
+        # Stores individual PhotometryRow items for all novae. Kept separate
+        # from the main NovaCat table (ADR-020 Decision 1) because:
+        #   - PhotometryRow has a distinct schema and independent lifecycle
+        #   - ticket_ingestor and ingest_photometry need a narrowly scoped
+        #     IAM grant that does not extend to all NovaCat entities
+        #   - Separate table simplifies future GSI design for cross-nova
+        #     photometry queries without touching the main table
+        #
+        # Primary key (ADR-020 Decision 2):
+        #   PK (String) = "<nova_id>"
+        #   SK (String) = "PHOT#<row_id>"
+        #
+        # No GSI provisioned at this time. A future GSI on band + epoch
+        # fields will enable cross-nova queries (ADR-020 OQ-5); it can be
+        # added without any storage migration.
+        #
+        # Billing mode and removal policy match the main table.
+        # PITR follows the same enable_pitr parameter (prod-only by default).
+        # ------------------------------------------------------------------
+        self.photometry_table = dynamodb.Table(
+            self,
+            "PhotometryTable",
+            table_name=f"{cf_prefix}Photometry",
+            partition_key=dynamodb.Attribute(
+                name="PK",
+                type=dynamodb.AttributeType.STRING,
+            ),
+            sort_key=dynamodb.Attribute(
+                name="SK",
+                type=dynamodb.AttributeType.STRING,
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            point_in_time_recovery=enable_pitr,
+            removal_policy=removal_policy,
         )
 
         # ------------------------------------------------------------------
@@ -218,4 +259,11 @@ class NovaCatStorage(Construct):
             value=self.quarantine_topic.topic_arn,
             description="Nova Cat quarantine notifications SNS topic ARN",
             export_name=f"{cf_prefix}-QuarantineTopicArn",
+        )
+        cdk.CfnOutput(
+            self,
+            "PhotometryTableName",
+            value=self.photometry_table.table_name,
+            description="NovaCat dedicated photometry DynamoDB table name",
+            export_name=f"{cf_prefix}-PhotometryTableName",
         )

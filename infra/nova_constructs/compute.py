@@ -185,6 +185,28 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
         ),
         timeout=cdk.Duration.seconds(90),  # External authority queries
     ),
+    # ------------------------------------------------------------------
+    # ingest_ticket workflow functions (Chunk 5a)
+    # ------------------------------------------------------------------
+    "ticket_parser": _FunctionSpec(
+        service_dir="ticket_parser",
+        description=(
+            "Reads a .txt ticket file from S3, parses key-value pairs, discriminates "
+            "ticket type (photometry: DATA FILENAME / spectra: METADATA FILENAME), and "
+            "validates with Pydantic. Handles ParseTicket. Used by: ingest_ticket."
+        ),
+        timeout=cdk.Duration.seconds(30),
+    ),
+    "nova_resolver_ticket": _FunctionSpec(
+        service_dir="nova_resolver_ticket",
+        description=(
+            "Resolves OBJECT NAME to nova_id via NameMapping. Invokes initialize_nova "
+            "if absent (StartExecution + poll). Raises UNRESOLVABLE_OBJECT_NAME or "
+            "IDENTITY_AMBIGUITY for quarantine outcomes. "
+            "Handles ResolveNova. Used by: ingest_ticket."
+        ),
+        timeout=cdk.Duration.seconds(120),  # Accounts for initialize_nova execution + polling
+    ),
 }
 
 
@@ -210,6 +232,10 @@ class NovaCatCompute(Construct):
     photometry_ingestor: lambda_.Function
     quarantine_handler: lambda_.Function
     name_reconciler: lambda_.Function
+    # ingest_ticket workflow (Chunk 5a)
+    ticket_parser: lambda_.Function
+    nova_resolver_ticket: lambda_.Function
+    ticket_ingestor: lambda_.DockerImageFunction
 
     def __init__(
         self,
@@ -217,6 +243,7 @@ class NovaCatCompute(Construct):
         construct_id: str,
         *,
         table: dynamodb.Table,
+        photometry_table: dynamodb.Table,
         private_bucket: s3.Bucket,
         public_site_bucket: s3.Bucket,
         quarantine_topic: sns.Topic,
@@ -376,10 +403,47 @@ class NovaCatCompute(Construct):
         self._functions["spectra_discoverer"] = spectra_discoverer
 
         # ------------------------------------------------------------------
+        # ticket_ingestor — DockerImageFunction
+        #
+        # Handles both the photometry and spectra branches of ingest_ticket.
+        # astropy is required for FITS construction (spectra branch), so
+        # container deployment is mandatory — same reason as spectra_validator.
+        # Memory sized for FITS assembly + per-row DDB writes across a full
+        # ticket; timeout covers the spectra branch (multiple FITS + S3 uploads).
+        # ------------------------------------------------------------------
+        ticket_ingestor = lambda_.DockerImageFunction(
+            self,
+            "TicketIngestor",
+            function_name=f"{env_prefix}-ticket-ingestor",
+            architecture=lambda_.Architecture.ARM_64,
+            code=lambda_.DockerImageCode.from_image_asset(
+                self._services_root,
+                file="ticket_ingestor/Dockerfile",
+            ),
+            description=(
+                "Ingests photometry (CSV → PhotometryRow DDB items) and spectra "
+                "(CSV → FITS → S3 + DDB refs) for ticket-driven workflows. "
+                "Handles IngestPhotometry, IngestSpectra. Used by: ingest_ticket. "
+                "Container-bundled: astropy required for FITS I/O."
+            ),
+            memory_size=512,
+            timeout=cdk.Duration.minutes(10),
+            environment=shared_env,
+            log_retention=_LOG_RETENTION,
+            tracing=lambda_.Tracing.ACTIVE,
+        )
+        self._functions["ticket_ingestor"] = ticket_ingestor
+
+        # ------------------------------------------------------------------
         # IAM grants — least-privilege
         # ------------------------------------------------------------------
         self._grant_permissions(
-            table, private_bucket, public_site_bucket, quarantine_topic, ads_secret
+            table,
+            photometry_table,
+            private_bucket,
+            public_site_bucket,
+            quarantine_topic,
+            ads_secret,
         )
 
         # ------------------------------------------------------------------
@@ -393,9 +457,25 @@ class NovaCatCompute(Construct):
             "ADS_SECRET_NAME", ads_secret.secret_name
         )
 
+        # Photometry table name and diagnostics bucket injected only into
+        # ticket_ingestor — these are not in shared_env because no other
+        # Lambda currently requires them.
+        self._functions["ticket_ingestor"].add_environment(
+            "PHOTOMETRY_TABLE_NAME", photometry_table.table_name
+        )
+        self._functions["ticket_ingestor"].add_environment(
+            # Row-failure diagnostics land in the private bucket under
+            # diagnostics/photometry/<nova_id>/row_failures/<sha256>.json.
+            # DIAGNOSTICS_BUCKET is a separate env var (not NOVA_CAT_PRIVATE_BUCKET)
+            # so the handler can be tested with a distinct moto bucket.
+            "DIAGNOSTICS_BUCKET",
+            private_bucket.bucket_name,
+        )
+
     def _grant_permissions(
         self,
         table: dynamodb.Table,
+        photometry_table: dynamodb.Table,
         private_bucket: s3.Bucket,
         public_site_bucket: s3.Bucket,
         quarantine_topic: sns.Topic,
@@ -457,6 +537,47 @@ class NovaCatCompute(Construct):
         quarantine_topic.grant_publish(self._functions["quarantine_handler"])
 
         table.grant_read_write_data(self._functions["name_reconciler"])
+
+        # ------------------------------------------------------------------
+        # ingest_ticket workflow grants (Chunk 5a)
+        # ------------------------------------------------------------------
+
+        # ticket_parser: reads .txt ticket file from private bucket (S3 key
+        # supplied as ticket_path in the workflow event).
+        private_bucket.grant_read(
+            self._functions["ticket_parser"],
+            "raw/*",
+        )
+
+        # nova_resolver_ticket: reads NameMapping items (name → nova_id lookup);
+        # may write NameMapping on alias upsert path within initialize_nova.
+        # sfn:StartExecution + sfn:DescribeExecution on initialize_nova are
+        # granted in workflows.py (NovaCatWorkflows owns the SFN ARNs).
+        table.grant_read_write_data(self._functions["nova_resolver_ticket"])
+
+        # ticket_ingestor (photometry branch):
+        #   - Read data CSV from private bucket (raw/*)
+        #   - Write PhotometryRow items to dedicated photometry table
+        #   - Read/write PRODUCT#PHOTOMETRY_TABLE envelope in main table
+        #   - Write row-failure diagnostics to private bucket (diagnostics/*)
+        # ticket_ingestor (spectra branch):
+        #   - Read metadata CSV + spectrum CSVs from private bucket (raw/*)
+        #   - Write FITS files to public site bucket (raw/<nova_id>/ticket_ingestion/*)
+        #   - Write DataProduct + FileObject items to main table
+        private_bucket.grant_read(
+            self._functions["ticket_ingestor"],
+            "raw/*",
+        )
+        private_bucket.grant_write(
+            self._functions["ticket_ingestor"],
+            "diagnostics/*",
+        )
+        photometry_table.grant_write_data(self._functions["ticket_ingestor"])
+        table.grant_read_write_data(self._functions["ticket_ingestor"])
+        public_site_bucket.grant_write(
+            self._functions["ticket_ingestor"],
+            "raw/*",
+        )
 
 
 def _to_pascal(snake: str) -> str:
