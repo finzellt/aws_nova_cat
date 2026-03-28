@@ -1,3 +1,4 @@
+# tests/services/test_ticket_parser_handler.py
 """Unit tests for services/ticket_parser/handler.py.
 
 Coverage:
@@ -15,6 +16,7 @@ real file I/O is performed.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -29,8 +31,14 @@ from contracts.models.tickets import PhotometryTicket, SpectraTicket
 # Constants
 # ---------------------------------------------------------------------------
 
-_TICKET_PATH = "/tmp/test_ticket.txt"
-
+# _TICKET_PATH = "/tmp/test_ticket.txt"
+_TICKET_PATH = (
+    Path(__file__).parent.parent
+    / "fixtures"
+    / "photometry"
+    / "v4739_sgr"
+    / "V4739_Sgr_Livingston_optical_Photometry.txt"
+)
 # A 19-character bibcode, as required by the Pydantic model.
 _BIBCODE = "2012AJ....144...98W"
 
@@ -124,8 +132,10 @@ class TestParseTicketPhotometry:
         ):
             result = handle(_base_event(), None)
 
-        assert result == ticket.model_dump(mode="json")
+        expected = ticket.model_dump(mode="json")
         assert result["ticket_type"] == "photometry"
+        assert result["object_name"] == expected.get("object_name")
+        assert result["ticket"] == expected
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +158,10 @@ class TestParseTicketSpectra:
         ):
             result = handle(_base_event(), None)
 
-        assert result == ticket.model_dump(mode="json")
+        expected = ticket.model_dump(mode="json")
         assert result["ticket_type"] == "spectra"
+        assert result["object_name"] == expected.get("object_name")
+        assert result["ticket"] == expected
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +173,7 @@ class TestParseTicketErrors:
     def test_parse_file_error_raises_quarantine(self, _env: None) -> None:
         """TicketParseError from stage 1 (raw parse) → QuarantineError."""
         exc = TicketParseError(
-            path=_TICKET_PATH,
+            path=str(_TICKET_PATH),
             reason="No ':' delimiter found",
             line_number=3,
         )
@@ -174,7 +186,7 @@ class TestParseTicketErrors:
     def test_validate_ticket_error_raises_quarantine(self, _env: None) -> None:
         """TicketParseError from stage 2 (validation) → QuarantineError."""
         exc = TicketParseError(
-            path=_TICKET_PATH,
+            path=str(_TICKET_PATH),
             reason="Missing required field: time_col",
         )
         with (

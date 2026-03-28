@@ -47,7 +47,7 @@ from __future__ import annotations
 import os
 import uuid
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import boto3
 from nova_common.errors import TerminalError
@@ -57,12 +57,17 @@ from nova_common.tracing import tracer
 # ---------------------------------------------------------------------------
 # Band registry — loaded once at module initialisation.
 # ---------------------------------------------------------------------------
-from photometry_ingestor.band_registry import (  # type: ignore[import-not-found]
+from photometry_ingestor.band_registry import (
     registry as _registry_module,
 )
 from pydantic import ValidationError
 
 from contracts.models.tickets import PhotometryTicket, SpectraTicket
+from ticket_ingestor.ddb_writer import (
+    persist_row_failures,
+    upsert_envelope_item,
+    write_photometry_rows,
+)
 from ticket_ingestor.photometry_reader import BandRegistryProtocol, read_photometry_csv
 from ticket_ingestor.spectra_reader import read_spectra
 from ticket_ingestor.spectra_writer import write_spectrum
@@ -72,10 +77,13 @@ from ticket_ingestor.spectra_writer import write_spectrum
 # ---------------------------------------------------------------------------
 
 _TABLE_NAME = os.environ["NOVA_CAT_TABLE_NAME"]
+_PHOTOMETRY_TABLE_NAME = os.environ["PHOTOMETRY_TABLE_NAME"]
 _PUBLIC_BUCKET_NAME = os.environ["PUBLIC_BUCKET_NAME"]
+_DIAGNOSTICS_BUCKET_NAME = os.environ["DIAGNOSTICS_BUCKET"]
 
 _dynamodb = boto3.resource("dynamodb")
 _TABLE = _dynamodb.Table(_TABLE_NAME)
+_PHOTOMETRY_TABLE = _dynamodb.Table(_PHOTOMETRY_TABLE_NAME)
 _s3 = boto3.client("s3")
 
 
@@ -88,13 +96,13 @@ class _RegistryAdapter:
     """Thin adapter that presents the registry module as BandRegistryProtocol."""
 
     def lookup_band_id(self, alias: str) -> str | None:
-        return cast("str | None", _registry_module.lookup_band_id(alias))
+        return _registry_module.lookup_band_id(alias)
 
     def get_entry(self, band_id: str) -> Any:
         return _registry_module.get_entry(band_id)
 
     def is_excluded(self, band_id: str) -> bool:
-        return cast(bool, _registry_module.is_excluded(band_id))
+        return _registry_module.is_excluded(band_id)
 
 
 _REGISTRY: BandRegistryProtocol = _RegistryAdapter()
@@ -188,7 +196,26 @@ def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
         },
     )
 
-    # 3b will consume result.rows and result.failures for DDB writes.
+    # --- DDB writes (Chunk 3b) --------------------------------------------
+    write_result = write_photometry_rows(
+        rows=result.rows,
+        nova_id=nova_id,
+        table_name=_PHOTOMETRY_TABLE_NAME,
+        table=_PHOTOMETRY_TABLE,
+    )
+    persist_row_failures(
+        failures=result.failures,
+        nova_id=nova_id,
+        filename=ticket.data_filename,
+        bucket=_DIAGNOSTICS_BUCKET_NAME,
+        s3=_s3,
+    )
+    upsert_envelope_item(
+        nova_id=nova_id,
+        rows_written=write_result.rows_written,
+        table=_TABLE,
+    )
+
     return {
         "rows_produced": len(result.rows),
         "failures": len(result.failures),

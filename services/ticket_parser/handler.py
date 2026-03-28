@@ -94,12 +94,16 @@ def _parse_ticket(event: dict[str, Any]) -> dict[str, Any]:
         )
         raise QuarantineError(str(exc)) from exc
 
-    result: dict[str, Any] = ticket.model_dump(mode="json")
+    ticket_dump: dict[str, Any] = ticket.model_dump(mode="json")
     logger.info(
         "Ticket parsed successfully",
         extra={
-            "ticket_type": result["ticket_type"],
-            "object_name": result.get("object_name"),
+            "ticket_type": ticket_dump["ticket_type"],
+            "object_name": ticket_dump.get("object_name"),
         },
     )
-    return result
+    return {
+        "ticket_type": ticket_dump["ticket_type"],
+        "object_name": ticket_dump.get("object_name"),
+        "ticket": ticket_dump,
+    }
