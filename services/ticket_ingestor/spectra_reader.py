@@ -87,7 +87,7 @@ def _jd_to_iso(jd: float) -> str:
     (e.g. test-time mocking), and to avoid a hard module-load dependency
     for callers that only use other helpers.
     """
-    from astropy.time import Time  # type: ignore[import-untyped]
+    from astropy.time import Time
 
     return str(Time(jd, format="jd").to_value("iso", subfmt="date"))
 

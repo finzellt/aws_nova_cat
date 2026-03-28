@@ -90,7 +90,7 @@ def build_fits(
         hdr.set(key, value)
 
     # --- Optional flux-error extension ------------------------------------
-    hdu_list: list[fits.HDU] = [primary_hdu]  # type: ignore[type-arg]
+    hdu_list: list[fits.HDU] = [primary_hdu]
     if flux_err is not None:
         err_hdu = fits.ImageHDU(data=flux_err.astype(np.float64))
         err_hdu.header.set("EXTNAME", "FLUX_ERR")
