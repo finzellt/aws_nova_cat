@@ -121,6 +121,8 @@ def aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIAGNOSTICS_BUCKET", _DIAGNOSTICS_BUCKET)
     monkeypatch.setenv("INITIALIZE_NOVA_STATE_MACHINE_ARN", _INITIALIZE_NOVA_SM_ARN)
     monkeypatch.setenv("NOVA_CAT_QUARANTINE_TOPIC_ARN", _QUARANTINE_TOPIC_ARN)
+    monkeypatch.setenv("NOVA_CAT_PRIVATE_BUCKET", _DIAGNOSTICS_BUCKET)
+    monkeypatch.setenv("NOVA_CAT_PUBLIC_SITE_BUCKET", _PUBLIC_BUCKET)
     monkeypatch.setenv("AWS_DEFAULT_REGION", _REGION)
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
@@ -310,8 +312,8 @@ def _make_sfn_not_found() -> MagicMock:
     This exercises the quarantine path through nova_resolver_ticket._extract_nova_id.
     """
     mock_sfn = MagicMock()
-    mock_sfn.start_execution.return_value = {"executionArn": _FAKE_EXEC_ARN}
-    mock_sfn.describe_execution.return_value = {
+    mock_sfn.start_sync_execution.return_value = {
+        "executionArn": _FAKE_EXEC_ARN,
         "status": "SUCCEEDED",
         "output": json.dumps({"finalize": {"outcome": "NOT_FOUND"}}),
     }
@@ -883,10 +885,7 @@ class TestQuarantinePath:
             # _sfn is configured to report NOT_FOUND so that _extract_nova_id
             # raises the appropriate QuarantineError subclass.
             mock_sfn = _make_sfn_not_found()
-            with (
-                patch.object(h["nova_resolver_ticket"], "_sfn", mock_sfn),
-                patch.object(h["nova_resolver_ticket"], "_sleep", lambda _: None),
-            ):
+            with patch.object(h["nova_resolver_ticket"], "_sfn", mock_sfn):
                 state = _run_prefix(h, ticket_path=str(ticket_path), data_dir=str(data_dir))
 
                 # --- ParseTicket -------------------------------------------
@@ -971,4 +970,4 @@ class TestQuarantinePath:
         assert "error_fingerprint" in job_run_item
 
         # Confirm SFN was actually invoked (the quarantine was not a NameMapping hit)
-        mock_sfn.start_execution.assert_called_once()
+        mock_sfn.start_sync_execution.assert_called_once()

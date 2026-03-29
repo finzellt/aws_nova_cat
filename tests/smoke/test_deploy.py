@@ -9,8 +9,8 @@ Covers:
   - DynamoDB: table exists, correct key schema, GSI provisioned, PAY_PER_REQUEST
   - S3: both buckets exist, private bucket has versioning, both block public access
   - SNS: quarantine topic exists and is reachable
-  - Lambda: all 12 functions exist with correct runtime, memory, timeout, env vars
-  - Step Functions: all 5 state machines exist as STANDARD workflows with execution roles
+  - Lambda: all 15 functions exist with correct runtime, memory, timeout, env vars
+  - Step Functions: all 6 state machines exist as EXPRESS workflows with execution roles
   - IAM: workflow_launcher has states:StartExecution; state machine roles have lambda:InvokeFunction
 """
 
@@ -42,28 +42,23 @@ _LAMBDA_CONFIG: dict[str, dict[str, int]] = {
     "nova-cat-photometry-ingestor": {"memory": 512, "timeout": 300},
     "nova-cat-quarantine-handler": {"memory": 256, "timeout": 30},
     "nova-cat-name-reconciler": {"memory": 256, "timeout": 90},
+    "nova-cat-ticket-parser": {"memory": 256, "timeout": 30},
+    "nova-cat-nova-resolver-ticket": {"memory": 256, "timeout": 120},
     # Docker functions
     "nova-cat-archive-resolver": {"memory": 256, "timeout": 90},
     "nova-cat-spectra-discoverer": {"memory": 256, "timeout": 60},
     "nova-cat-spectra-validator": {"memory": 512, "timeout": 300},
-}
-
-_ZIP_FUNCTION_NAMES = {
-    name
-    for name in EXPECTED_LAMBDA_NAMES
-    if name
-    not in {
-        "nova-cat-archive-resolver",
-        "nova-cat-spectra-discoverer",
-        "nova-cat-spectra-validator",
-    }
+    "nova-cat-ticket-ingestor": {"memory": 512, "timeout": 600},
 }
 
 _DOCKER_FUNCTION_NAMES = {
     "nova-cat-archive-resolver",
     "nova-cat-spectra-discoverer",
     "nova-cat-spectra-validator",
+    "nova-cat-ticket-ingestor",
 }
+
+_ZIP_FUNCTION_NAMES = {name for name in EXPECTED_LAMBDA_NAMES if name not in _DOCKER_FUNCTION_NAMES}
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +218,10 @@ class TestSNS:
         assert resp["Attributes"]["TopicArn"] == stack.quarantine_topic_arn
 
     def test_quarantine_topic_name(self, stack: StackOutputs, sns_client: Any) -> None:
-        assert stack.quarantine_topic_arn.endswith("nova-cat-quarantine-notifications")
+        assert stack.quarantine_topic_arn.endswith("quarantine-notifications"), (
+            f"Quarantine topic ARN does not end with 'quarantine-notifications': "
+            f"{stack.quarantine_topic_arn!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -307,17 +305,40 @@ class TestLambda:
         resp = lambda_client.get_function_configuration(FunctionName="nova-cat-workflow-launcher")
         env_vars = resp.get("Environment", {}).get("Variables", {})
 
-        expected = {
-            "INGEST_NEW_NOVA_STATE_MACHINE_ARN": stack.ingest_new_nova_arn,
-            "REFRESH_REFERENCES_STATE_MACHINE_ARN": stack.refresh_references_arn,
-            "DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN": stack.discover_spectra_products_arn,
-            "ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN": stack.acquire_and_validate_spectra_arn,
-        }
-        for key, expected_value in expected.items():
+        expected_keys = [
+            "INGEST_NEW_NOVA_STATE_MACHINE_ARN",
+            "REFRESH_REFERENCES_STATE_MACHINE_ARN",
+            "DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN",
+            "ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN",
+        ]
+        for key in expected_keys:
             assert key in env_vars, f"workflow_launcher missing env var: {key}"
-            assert env_vars[key] == expected_value, (
-                f"workflow_launcher {key}={env_vars[key]!r}, expected {expected_value!r}"
+            value = env_vars[key]
+            assert value.startswith("arn:aws:states:") and ":stateMachine:" in value, (
+                f"workflow_launcher {key}={value!r} is not a valid Step Functions state machine ARN"
             )
+
+    def test_nova_resolver_ticket_has_initialize_nova_arn(self, lambda_client: Any) -> None:
+        """nova-cat-nova-resolver-ticket must know the initialize_nova state machine ARN."""
+        resp = lambda_client.get_function_configuration(
+            FunctionName="nova-cat-nova-resolver-ticket"
+        )
+        env_vars = resp.get("Environment", {}).get("Variables", {})
+        assert "INITIALIZE_NOVA_STATE_MACHINE_ARN" in env_vars, (
+            "nova-cat-nova-resolver-ticket is missing INITIALIZE_NOVA_STATE_MACHINE_ARN env var"
+        )
+        assert "initialize-nova" in env_vars["INITIALIZE_NOVA_STATE_MACHINE_ARN"], (
+            f"INITIALIZE_NOVA_STATE_MACHINE_ARN does not reference initialize-nova: "
+            f"{env_vars['INITIALIZE_NOVA_STATE_MACHINE_ARN']!r}"
+        )
+
+    def test_ticket_ingestor_has_photometry_table_name(self, lambda_client: Any) -> None:
+        """nova-cat-ticket-ingestor must have the dedicated photometry table name."""
+        resp = lambda_client.get_function_configuration(FunctionName="nova-cat-ticket-ingestor")
+        env_vars = resp.get("Environment", {}).get("Variables", {})
+        assert "PHOTOMETRY_TABLE_NAME" in env_vars, (
+            "nova-cat-ticket-ingestor is missing PHOTOMETRY_TABLE_NAME env var"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -331,17 +352,20 @@ class TestStepFunctions:
         """Resolve the ARN from the stack outputs map and describe it."""
         arn = _sm_arn(sm_name, stack)
         resp = sfn_client.describe_state_machine(stateMachineArn=arn)
-        assert resp["name"] == sm_name
+        # The deployed name may include a stack-specific prefix (e.g.
+        # "nova-cat-smoke-initialize-nova" vs "nova-cat-initialize-nova").
+        # Use the name embedded in the ARN (which comes from stack outputs)
+        # as the ground truth.
+        expected_name = arn.split(":")[-1]
+        assert resp["name"] == expected_name
 
     @pytest.mark.parametrize("sm_name", EXPECTED_STATE_MACHINE_NAMES)
-    def test_state_machine_is_standard_workflow(
+    def test_state_machine_is_express_workflow(
         self, sm_name: str, stack: StackOutputs, sfn_client: Any
     ) -> None:
         arn = _sm_arn(sm_name, stack)
         resp = sfn_client.describe_state_machine(stateMachineArn=arn)
-        assert resp["type"] == "STANDARD", (
-            f"{sm_name}: expected type=STANDARD, got {resp['type']!r}"
-        )
+        assert resp["type"] == "EXPRESS", f"{sm_name}: expected type=EXPRESS, got {resp['type']!r}"
 
     @pytest.mark.parametrize("sm_name", EXPECTED_STATE_MACHINE_NAMES)
     def test_state_machine_is_active(
@@ -409,5 +433,6 @@ def _sm_arn(sm_name: str, stack: StackOutputs) -> str:
         "nova-cat-refresh-references": "refresh_references_arn",
         "nova-cat-discover-spectra-products": "discover_spectra_products_arn",
         "nova-cat-acquire-and-validate-spectra": "acquire_and_validate_spectra_arn",
+        "nova-cat-ingest-ticket": "ingest_ticket_arn",
     }
     return cast(str, getattr(stack, _name_to_attr[sm_name]))

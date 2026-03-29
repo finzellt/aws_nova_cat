@@ -1,8 +1,8 @@
 """
 Tier 2 smoke tests — per-workflow execution validation.
 
-Starts each Step Functions state machine individually against the live deployed
-stack, polls for completion, and asserts on:
+Starts each Express Step Functions state machine individually against the live
+deployed stack via start_sync_execution, and asserts on:
   - Execution terminal status (SUCCEEDED / expected outcome)
   - Output payload schema (model_validate against contracts/models/outputs.py)
   - Output payload field presence per outcome path
@@ -64,7 +64,7 @@ from contracts.models.outputs import (
     RefreshReferencesFinalizeOutput,
     RefreshReferencesTerminalOutput,
 )
-from tests.smoke.conftest import StackOutputs, poll_execution
+from tests.smoke.conftest import StackOutputs
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -212,23 +212,6 @@ def _query_partition(table: Any, pk: str, sk_prefix: str) -> list[dict[str, Any]
 # ---------------------------------------------------------------------------
 
 
-def _start_execution(
-    sfn_client: Any,
-    state_machine_arn: str,
-    payload: dict[str, Any],
-    name_suffix: str,
-) -> str:
-    """Start a Step Functions execution and return the execution ARN."""
-    sm_short = state_machine_arn.split(":")[-1][:30]
-    execution_name = f"smoke-{sm_short}-{name_suffix}"
-    resp = sfn_client.start_execution(
-        stateMachineArn=state_machine_arn,
-        name=execution_name,
-        input=json.dumps(payload),
-    )
-    return cast(str, resp["executionArn"])
-
-
 def _run_and_wait(
     sfn_client: Any,
     state_machine_arn: str,
@@ -236,9 +219,22 @@ def _run_and_wait(
     suffix: str,
     timeout: int = 60,
 ) -> dict[str, Any]:
-    """Start an execution, poll until terminal, return describe_execution response."""
-    arn = _start_execution(sfn_client, state_machine_arn, payload, suffix)
-    return poll_execution(sfn_client, arn, timeout_seconds=timeout)
+    """Start a synchronous Express execution and return the response.
+
+    All NovaCat state machines are Express workflows. Express workflows use
+    start_sync_execution which blocks until the execution completes and
+    returns status + output directly — no polling required.
+    """
+    sm_short = state_machine_arn.split(":")[-1][:30]
+    execution_name = f"smoke-{sm_short}-{suffix}"
+    return cast(
+        dict[str, Any],
+        sfn_client.start_sync_execution(
+            stateMachineArn=state_machine_arn,
+            name=execution_name,
+            input=json.dumps(payload),
+        ),
+    )
 
 
 def _output(resp: dict[str, Any]) -> dict[str, Any]:

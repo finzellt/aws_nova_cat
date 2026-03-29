@@ -74,7 +74,7 @@
             "Parameters": {
                 "task_name": "AcquireIdempotencyLock",
                 "workflow_name": "ingest_ticket",
-                "ticket_path.$": "$.ticket_path",
+                "primary_id.$": "$.ticket_path",
                 "correlation_id.$": "$.job_run.correlation_id",
                 "job_run_id.$": "$.job_run.job_run_id"
             },
@@ -185,6 +185,9 @@
                 "workflow_name": "ingest_ticket",
                 "ticket.$": "$.parsed_ticket.ticket",
                 "nova_id.$": "$.nova.nova_id",
+                "primary_name.$": "$.nova.primary_name",
+                "ra_deg.$": "$.nova.ra_deg",
+                "dec_deg.$": "$.nova.dec_deg",
                 "data_dir.$": "$.data_dir",
                 "correlation_id.$": "$.job_run.correlation_id",
                 "job_run_id.$": "$.job_run.job_run_id"
@@ -307,7 +310,8 @@
                 "workflow_name": "ingest_ticket",
                 "quarantine_reason_code.$": "$.quarantine.Error",
                 "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id"
+                "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.quarantine_result",
             "TimeoutSeconds": 10,
@@ -339,6 +343,7 @@
                 "workflow_name": "ingest_ticket",
                 "correlation_id.$": "$.job_run.correlation_id",
                 "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run",
                 "quarantine.$": "$.quarantine_result"
             },
             "ResultPath": "$.finalize",
@@ -362,9 +367,10 @@
             "Parameters": {
                 "task_name": "TerminalFailHandler",
                 "workflow_name": "ingest_ticket",
+                "error.$": "$.error",
                 "correlation_id.$": "$.job_run.correlation_id",
                 "job_run_id.$": "$.job_run.job_run_id",
-                "error.$": "$.error"
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.terminal_fail",
             "TimeoutSeconds": 10,
@@ -394,9 +400,8 @@
             "Parameters": {
                 "task_name": "FinalizeJobRunFailed",
                 "workflow_name": "ingest_ticket",
-                "correlation_id.$": "$.job_run.correlation_id",
-                "job_run_id.$": "$.job_run.job_run_id",
-                "terminal_fail.$": "$.terminal_fail"
+                "error.$": "$.error",
+                "job_run.$": "$.job_run"
             },
             "ResultPath": "$.finalize",
             "TimeoutSeconds": 10,
