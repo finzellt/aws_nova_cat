@@ -28,8 +28,8 @@ expertise in nova astronomy.
   JSON Schemas are auto-generated from contracts. Services are developed and tested
   against typed interfaces, not ad hoc payloads
 - **Infrastructure as code:** Full AWS CDK deployment (Python) with two isolated stacks
-  (production and smoke test), 12 Lambda functions, 5 Step Functions workflows, and
-  single-table DynamoDB design
+  (production and smoke test), 15 Lambda functions, 6 Step Functions workflows, and
+  single-table-plus-dedicated-photometry DynamoDB design
 - **Domain-driven data modeling:** Multi-regime photometry (optical through radio),
   IVOA-aligned spectral normalization, deterministic identity resolution with coordinate
   deduplication, and a seven-layer ingestion pipeline designed to handle real-world data
@@ -64,7 +64,7 @@ operator maintenance.
 │  ingest_new_nova → initialize_nova → discover_spectra →      │
 │  acquire_and_validate_spectra → refresh_references           │
 │                                                              │
-│  12 Lambda services · FITS profile validation · quarantine   │
+│  15 Lambda services · FITS profile validation · quarantine   │
 │  semantics · deterministic identity resolution               │
 └──────────────────────┬───────────────────────────────────────┘
                        │
@@ -190,7 +190,7 @@ frontend/           React/Next.js web application
 infra/              AWS CDK infrastructure (Python)
   nova_constructs/  CDK constructs (compute, storage, workflows)
   workflows/        Step Functions ASL definitions
-services/           12 Lambda services (3 Docker-based for astropy/numpy)
+services/           15 Lambda services (4 Docker-based for astropy/numpy)
 tests/
   services/         Unit tests
   integration/      Workflow integration tests
@@ -204,9 +204,9 @@ tools/              Operator tooling and research scripts
 
 - **CDK (Python):** Two-stack deployment — `NovaCat` (production) and `NovaCatSmoke`
   (isolated smoke test)
-- **Lambda:** 12 functions; 3 Docker-based (astropy/numpy compiled dependencies)
-- **Step Functions:** 5 workflows orchestrating the ingestion pipeline
-- **DynamoDB:** Single-table design with namespaced partition keys and one GSI
+- **Lambda:** 15 functions; 4 Docker-based (astropy/numpy compiled dependencies)
+- **Step Functions:** 6 workflows orchestrating the ingestion pipeline
+- **DynamoDB:** Main table (single-table design with namespaced partition keys and one GSI) plus dedicated photometry table
 - **S3:** Private bucket (raw data, derived artifacts, quarantine) and public site
   bucket (published frontend artifacts)
 - **SNS:** Quarantine notification topic

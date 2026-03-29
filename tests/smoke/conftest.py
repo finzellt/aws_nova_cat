@@ -19,8 +19,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
-import time
-from typing import Any, cast
+from typing import Any
 
 import boto3
 import pytest
@@ -202,38 +201,6 @@ def s3_client() -> Any:
 @pytest.fixture(scope="session")
 def sns_client() -> Any:
     return boto3.client("sns", region_name=_REGION)
-
-
-# ---------------------------------------------------------------------------
-# Execution polling helper (used by test_workflows.py and test_e2e.py)
-# ---------------------------------------------------------------------------
-
-
-def poll_execution(
-    sfn_client: Any,
-    execution_arn: str,
-    timeout_seconds: int = 60,
-    poll_interval: int = _POLL_INTERVAL_SECONDS,
-) -> dict[str, Any]:
-    """
-    Poll a Step Functions execution until it reaches a terminal status
-    (SUCCEEDED, FAILED, TIMED_OUT, ABORTED) or the timeout is exceeded.
-
-    Returns the describe_execution response dict on terminal status.
-    Raises TimeoutError if the execution has not completed within timeout_seconds.
-    """
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        resp = sfn_client.describe_execution(executionArn=execution_arn)
-        status = resp["status"]
-        if status != "RUNNING":
-            return cast(dict[str, Any], resp)
-        time.sleep(poll_interval)
-
-    raise TimeoutError(
-        f"Execution {execution_arn} did not complete within {timeout_seconds}s. "
-        "Increase timeout or check CloudWatch Logs for the state machine."
-    )
 
 
 # ---------------------------------------------------------------------------

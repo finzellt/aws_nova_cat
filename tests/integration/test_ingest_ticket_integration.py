@@ -41,7 +41,6 @@ For the existing-nova cases the NameMapping preflight short-circuits before
 any SFN call is made; the stub raises AssertionError on unexpected contact.
 For the quarantine path _sfn is configured to return a SUCCEEDED execution
 whose output encodes outcome="NOT_FOUND".
-_sleep is also patched to a no-op for the quarantine path to avoid delays.
 """
 
 from __future__ import annotations
@@ -117,7 +116,6 @@ def aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Inject all environment variables consumed by ingest_ticket handlers."""
     monkeypatch.setenv("NOVA_CAT_TABLE_NAME", _MAIN_TABLE)
     monkeypatch.setenv("PHOTOMETRY_TABLE_NAME", _PHOTOMETRY_TABLE)
-    monkeypatch.setenv("PUBLIC_BUCKET_NAME", _PUBLIC_BUCKET)
     monkeypatch.setenv("DIAGNOSTICS_BUCKET", _DIAGNOSTICS_BUCKET)
     monkeypatch.setenv("INITIALIZE_NOVA_STATE_MACHINE_ARN", _INITIALIZE_NOVA_SM_ARN)
     monkeypatch.setenv("NOVA_CAT_QUARANTINE_TOPIC_ARN", _QUARANTINE_TOPIC_ARN)

@@ -69,8 +69,8 @@ path — it reads source data and writes to DynamoDB and/or S3 directly.
 6. **ResolveNova** (Task)
    - Extracts `object_name` from the parsed ticket
    - Checks DynamoDB `NameMapping` for an existing `nova_id`
-   - If not found: fires `initialize_nova` via `sfn:StartExecution`, polls
-     `describe_execution` until terminal
+   - If not found: fires `initialize_nova` synchronously via
+     `sfn:StartSyncExecution` and reads the result from the response
    - Returns: `nova_id`, `primary_name`, `ra_deg`, `dec_deg`
    - Failure modes:
      - `initialize_nova` returns `NOT_FOUND` → quarantine with
@@ -137,7 +137,7 @@ path — it reads source data and writes to DynamoDB and/or S3 directly.
   - Retry: none (deterministic — a parse failure is an authoring error, not transient)
 
 - ResolveNova:
-  - Timeout 120s (accounts for `initialize_nova` execution + polling)
+  - Timeout 120s (accounts for `initialize_nova` Express execution)
   - Retry MaxAttempts 2 for transient failures (throttling, network)
 
 - IngestPhotometry:
@@ -154,7 +154,7 @@ path — it reads source data and writes to DynamoDB and/or S3 directly.
 
 - **Retryable:**
   - Transient DDB/S3 failures, throttling, network timeouts
-  - `initialize_nova` transient failures during polling
+  - `initialize_nova` transient failures
 
 - **Terminal:**
   - Ticket parse failure (malformed ticket — operator authoring error)
@@ -185,24 +185,27 @@ path — it reads source data and writes to DynamoDB and/or S3 directly.
 
 ## Nova Resolution Strategy
 
-Nova resolution uses Lambda-encapsulated polling against `initialize_nova`:
+Nova resolution uses Lambda-encapsulated synchronous invocation of `initialize_nova`:
 
 1. **Preflight check:** Query DynamoDB `NameMapping` partition
    (`PK = "NAME#<normalized_object_name>"`) for an existing `nova_id`.
 2. **If found:** Return the existing `nova_id` immediately. Fetch `ra_deg`, `dec_deg`
    from the `Nova` item.
-3. **If not found:** Fire `initialize_nova` via `sfn:StartExecution` with
-   `candidate_name = object_name`. Poll `describe_execution` at 2s intervals until
-   the execution reaches a terminal state.
+3. **If not found:** Fire `initialize_nova` synchronously via
+   `sfn:StartSyncExecution` with `candidate_name = object_name`. The call blocks
+   until the Express workflow reaches a terminal state and returns the result
+   inline.
 4. **On `CREATED_AND_LAUNCHED` or `EXISTS_AND_LAUNCHED`:** Extract `nova_id` from the
-   execution output. Fetch coordinates from the `Nova` item.
+   synchronous execution response. Fetch coordinates from the `Nova` item.
 5. **On `NOT_FOUND`:** Raise `QuarantineError` with reason `UNRESOLVABLE_OBJECT_NAME`.
 6. **On `QUARANTINED`:** Raise `QuarantineError` with reason `IDENTITY_AMBIGUITY`.
 7. **On failure:** Raise `TerminalError`.
 
-This approach requires zero modifications to `initialize_nova`. The polling overhead is
-minimal — `initialize_nova` completes in 5–15s for the happy path, and each ticket
-contains exactly one `OBJECT NAME`.
+This approach requires zero modifications to `initialize_nova`. Because
+`initialize_nova` is an Express Workflow, `StartSyncExecution` blocks until
+completion and returns the output directly — no polling loop is needed.
+`initialize_nova` completes in 5–15s for the happy path, and each ticket contains
+exactly one `OBJECT NAME`.
 
 ---
 
@@ -212,7 +215,7 @@ contains exactly one `OBJECT NAME`.
 ticket.txt ──→ ParseTicket ──→ ResolveNova ──→ TicketTypeBranch
                                   │                    │
                           initialize_nova          ┌───┴───┐
-                          (fire + poll)            │       │
+                          (sync invocation)        │       │
                                                photometry  spectra
                                                    │       │
                                               CSV rows   metadata CSV
@@ -234,7 +237,7 @@ for JobRun management, idempotency, quarantine, and finalization):
 | Handler | Task States | Description |
 |---|---|---|
 | `ticket_parser` | ParseTicket | Reads `.txt` file, validates into typed Pydantic model |
-| `nova_resolver_ticket` | ResolveNova | DDB lookup + `initialize_nova` fire-and-poll |
+| `nova_resolver_ticket` | ResolveNova | DDB lookup + `initialize_nova` sync invocation |
 | `ticket_ingestor` | IngestPhotometry, IngestSpectra | Dispatches on ticket type; reads data, transforms, persists |
 
 `ticket_ingestor` is a single Lambda with internal dispatch based on `ticket_type`.
@@ -247,7 +250,7 @@ artifact and entry point for operational simplicity.
 
 | Workflow | Relationship |
 |---|---|
-| `initialize_nova` | Called (fire-and-poll) by `ResolveNova` for unknown object names. Not modified. |
+| `initialize_nova` | Called synchronously (`StartSyncExecution`) by `ResolveNova` for unknown object names. Not modified. |
 | `ingest_photometry` | Not called. `ingest_ticket` writes `PhotometryRow` items directly using the same DDB schema (ADR-020) but through a different code path (ticket-driven vs. heuristic). |
 | `acquire_and_validate_spectra` | Not called. `ingest_ticket` produces FITS files and DDB references directly, bypassing the discovery/acquisition/validation pipeline. The output artifacts are compatible. |
 
