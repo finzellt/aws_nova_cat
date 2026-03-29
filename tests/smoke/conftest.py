@@ -46,6 +46,8 @@ _CF_EXPORT_MAP: dict[str, str] = {
     "refresh_references_arn": "NovaCatSmoke-RefreshReferencesStateMachineArn",
     "discover_spectra_products_arn": "NovaCatSmoke-DiscoverSpectraProductsStateMachineArn",
     "acquire_and_validate_spectra_arn": "NovaCatSmoke-AcquireAndValidateSpectraStateMachineArn",
+    "ingest_ticket_arn": "NovaCatSmoke-IngestTicketStateMachineArn",
+    "photometry_table_name": "NovaCatSmoke-PhotometryTableName",
 }
 
 # Lambda function names as provisioned by NovaCatCompute.
@@ -63,6 +65,9 @@ EXPECTED_LAMBDA_NAMES: list[str] = [
     "nova-cat-archive-resolver",
     "nova-cat-spectra-discoverer",
     "nova-cat-spectra-validator",
+    "nova-cat-ticket-parser",
+    "nova-cat-nova-resolver-ticket",
+    "nova-cat-ticket-ingestor",
 ]
 
 # Expected Step Functions state machines.
@@ -72,6 +77,7 @@ EXPECTED_STATE_MACHINE_NAMES: list[str] = [
     "nova-cat-refresh-references",
     "nova-cat-discover-spectra-products",
     "nova-cat-acquire-and-validate-spectra",
+    "nova-cat-ingest-ticket",
 ]
 
 # Required env vars injected into every Lambda (from compute.py shared_env).
@@ -103,6 +109,8 @@ class StackOutputs:
     refresh_references_arn: str
     discover_spectra_products_arn: str
     acquire_and_validate_spectra_arn: str
+    ingest_ticket_arn: str
+    photometry_table_name: str
 
 
 def _resolve_stack_outputs(cf_client: Any) -> StackOutputs:
@@ -228,6 +236,11 @@ def poll_execution(
     )
 
 
+# ---------------------------------------------------------------------------
+# DynamoDB wipe helpers
+# ---------------------------------------------------------------------------
+
+
 @pytest.fixture(scope="session")
 def dynamodb_resource() -> Any:
     return boto3.resource("dynamodb", region_name=_REGION)
@@ -249,6 +262,7 @@ def purge_smoke_items_before_session(stack: StackOutputs, dynamodb_resource: Any
     test; this fixture just ensures the session starts with a known-clean state.
     """
     _wipe_smoke_test_table(dynamodb_resource.Table(stack.table_name))
+    _wipe_smoke_test_table(dynamodb_resource.Table(stack.photometry_table_name))
 
 
 def _wipe_smoke_test_table(table: Any) -> None:
@@ -260,6 +274,9 @@ def _wipe_smoke_test_table(table: Any) -> None:
     replaces the previous multi-pass targeted scan approach, which was
     fragile (required tagging every item type) and dangerous (could have
     nuked real data if pointed at a shared table by mistake).
+
+    Works for any table with a PK (String) + SK (String) key schema,
+    including both the main NovaCat table and the dedicated photometry table.
     """
     response = table.scan(ProjectionExpression="PK, SK")
     with table.batch_writer() as batch:
@@ -278,6 +295,7 @@ def _wipe_smoke_test_table(table: Any) -> None:
 
 @pytest.fixture(autouse=True)
 def cleanup_smoke_items(stack: StackOutputs, dynamodb_resource: Any) -> Any:
-    """Wipe the smoke test table after each test."""
+    """Wipe both smoke test tables after each test."""
     yield  # test runs here
     _wipe_smoke_test_table(dynamodb_resource.Table(stack.table_name))
+    _wipe_smoke_test_table(dynamodb_resource.Table(stack.photometry_table_name))

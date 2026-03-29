@@ -262,9 +262,10 @@ class NovaCatWorkflows(Construct):
         # ------------------------------------------------------------------
         # SFN grants for nova_resolver_ticket
         #
-        # nova_resolver_ticket polls initialize_nova when a name is not found
-        # in NameMapping — it needs StartExecution to fire the workflow and
-        # DescribeExecution to poll for the terminal outcome.
+        # nova_resolver_ticket invokes initialize_nova via StartSyncExecution
+        # when a name is not found in NameMapping. initialize_nova is an
+        # Express workflow — StartSyncExecution is the correct API (
+        # StartExecution + DescribeExecution is not supported for Express).
         #
         # These grants live here (not compute.py) because NovaCatWorkflows
         # owns the state machine ARNs. The same pattern is used for
@@ -283,28 +284,16 @@ class NovaCatWorkflows(Construct):
             resource_name=f"{env_prefix}-initialize-nova",
             arn_format=cdk.ArnFormat.COLON_RESOURCE_NAME,
         )
-        initialize_nova_executions_arn = stack.format_arn(
-            service="states",
-            resource="execution",
-            resource_name=f"{env_prefix}-initialize-nova:*",
-            arn_format=cdk.ArnFormat.COLON_RESOURCE_NAME,
-        )
 
         compute.nova_resolver_ticket.add_to_role_policy(
             iam.PolicyStatement(
-                actions=["states:StartExecution"],
+                actions=["states:StartSyncExecution"],
                 resources=[initialize_nova_arn],
-            )
-        )
-        compute.nova_resolver_ticket.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=["states:DescribeExecution"],
-                resources=[initialize_nova_executions_arn],
             )
         )
 
         # Inject the initialize_nova ARN as an environment variable so
-        # nova_resolver_ticket can call StartExecution without hardcoding
+        # nova_resolver_ticket can call StartSyncExecution without hardcoding
         # ARN construction logic (same pattern as workflow_launcher above).
         compute.nova_resolver_ticket.add_environment(
             "INITIALIZE_NOVA_STATE_MACHINE_ARN",

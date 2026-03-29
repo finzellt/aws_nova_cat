@@ -86,6 +86,81 @@ class _LocalPipBundler:
             return False
 
 
+@jsii.implements(cdk.ILocalBundling)
+class _PackagedLocalBundler:
+    """
+    Local bundling for services whose handler imports from a same-named package.
+
+    Some services (e.g. ticket_parser) have the structure:
+      services/<name>/handler.py        — Lambda entry point
+      services/<name>/<other>.py        — importable as <name>.<other> in tests
+                                          (because services/ is in sys.path)
+
+    When deployed flat to /var/task/, the sub-module import fails because there
+    is no <name>/ directory.  This bundler creates the correct layout:
+
+      /asset-output/handler.py          — Lambda entry point at root
+      /asset-output/<package_name>/     — Python package directory
+        <all non-handler .py files>
+
+    So "from <package_name>.parser import ..." resolves to
+    /var/task/<package_name>/parser.py in the Lambda runtime.
+    """
+
+    def __init__(self, service_path: str, package_name: str) -> None:
+        self._service_path = service_path
+        self._package_name = package_name
+
+    def try_bundle(self, output_dir: str, *, image: object = None, **kwargs: object) -> bool:
+        try:
+            pkg_dir = os.path.join(output_dir, self._package_name)
+            os.makedirs(pkg_dir, exist_ok=True)
+
+            for item in os.listdir(self._service_path):
+                if item == "__pycache__" or item == "requirements.txt":
+                    continue
+                src = os.path.join(self._service_path, item)
+                if item == "handler.py":
+                    shutil.copy2(src, output_dir)
+                elif os.path.isdir(src):
+                    shutil.copytree(src, os.path.join(pkg_dir, item), dirs_exist_ok=True)
+                else:
+                    shutil.copy2(src, pkg_dir)
+
+            # Copy contracts/ package (shared models, repo root sibling of services/)
+            contracts_dir = os.path.normpath(os.path.join(self._service_path, "../../contracts"))
+            if os.path.exists(contracts_dir):
+                shutil.copytree(
+                    contracts_dir, os.path.join(output_dir, "contracts"), dirs_exist_ok=True
+                )
+
+            req_file = os.path.join(self._service_path, "requirements.txt")
+            if os.path.exists(req_file):
+                subprocess.run(
+                    [
+                        "pip",
+                        "install",
+                        "-r",
+                        req_file,
+                        "-t",
+                        output_dir,
+                        "--quiet",
+                        "--platform",
+                        "manylinux2014_x86_64",
+                        "--only-binary",
+                        ":all:",
+                        "--implementation",
+                        "cp",
+                        "--python-version",
+                        "311",
+                    ],
+                    check=True,
+                )
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+
 # Default Lambda settings — tuned for Nova Cat's low-throughput, cost-aware profile.
 _DEFAULT_MEMORY_MB = 256
 _DEFAULT_TIMEOUT = cdk.Duration.seconds(30)
@@ -101,6 +176,7 @@ class _FunctionSpec:
     description: str
     memory_mb: int = _DEFAULT_MEMORY_MB
     timeout: cdk.Duration = _DEFAULT_TIMEOUT
+    package_name: str | None = None  # if set, use _PackagedLocalBundler
 
 
 # spectra_validator, archive_resolver, and spectra_discoverer are intentionally
@@ -196,16 +272,17 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
             "validates with Pydantic. Handles ParseTicket. Used by: ingest_ticket."
         ),
         timeout=cdk.Duration.seconds(30),
+        package_name="ticket_parser",
     ),
     "nova_resolver_ticket": _FunctionSpec(
         service_dir="nova_resolver_ticket",
         description=(
             "Resolves OBJECT NAME to nova_id via NameMapping. Invokes initialize_nova "
-            "if absent (StartExecution + poll). Raises UNRESOLVABLE_OBJECT_NAME or "
-            "IDENTITY_AMBIGUITY for quarantine outcomes. "
+            "if absent (StartSyncExecution — Express workflow). Raises UNRESOLVABLE_OBJECT_NAME "
+            "or IDENTITY_AMBIGUITY for quarantine outcomes. "
             "Handles ResolveNova. Used by: ingest_ticket."
         ),
-        timeout=cdk.Duration.seconds(120),  # Accounts for initialize_nova execution + polling
+        timeout=cdk.Duration.seconds(120),  # initialize_nova may take up to ~60s
     ),
 }
 
@@ -287,6 +364,28 @@ class NovaCatCompute(Construct):
         self._functions: dict[str, lambda_.Function | lambda_.DockerImageFunction] = {}
 
         for name, spec in _FUNCTION_SPECS.items():
+            service_path = os.path.join(self._services_root, spec.service_dir)
+            if spec.package_name:
+                # Services whose handler.py imports from a same-named package
+                # (e.g. ticket_parser.parser) need a nested directory layout in
+                # the Lambda deployment.  _PackagedLocalBundler copies handler.py
+                # to the root and all other module files into <package_name>/.
+                pkg = spec.package_name
+                docker_cmd = (
+                    f"mkdir -p /asset-output/{pkg} && "
+                    f"cp handler.py /asset-output/ && "
+                    f'for f in *.py; do [ "$f" != handler.py ] && '
+                    f'cp "$f" /asset-output/{pkg}/; done && '
+                    f"if [ -f requirements.txt ]; then "
+                    f"pip install -r requirements.txt -t /asset-output --quiet; fi"
+                )
+                local_bundler: cdk.ILocalBundling = _PackagedLocalBundler(service_path, pkg)
+            else:
+                docker_cmd = (
+                    "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output"
+                )
+                local_bundler = _LocalPipBundler(service_path)
+
             fn = lambda_.Function(
                 self,
                 _to_pascal(name),
@@ -294,15 +393,11 @@ class NovaCatCompute(Construct):
                 runtime=_PYTHON_RUNTIME,
                 handler="handler.handle",
                 code=lambda_.Code.from_asset(
-                    os.path.join(self._services_root, spec.service_dir),
+                    service_path,
                     bundling=cdk.BundlingOptions(
                         image=_PYTHON_RUNTIME.bundling_image,
-                        command=[
-                            "bash",
-                            "-c",
-                            "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output",
-                        ],
-                        local=_LocalPipBundler(os.path.join(self._services_root, spec.service_dir)),
+                        command=["bash", "-c", docker_cmd],
+                        local=local_bundler,
                     ),
                 ),
                 description=spec.description,

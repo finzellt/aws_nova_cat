@@ -3,13 +3,12 @@ Unit tests for services/nova_resolver_ticket/handler.py
 
 Strategy
 --------
-All three patchable module-level names are targeted by dotted string path so
+All patchable module-level names are targeted by dotted string path so
 that each test patches the name *where the handler uses it*, not where it is
 defined:
 
   nova_resolver_ticket.handler._table  — DDB Table resource
   nova_resolver_ticket.handler._sfn    — SFN boto3 client
-  nova_resolver_ticket.handler._sleep  — patchable sleep alias
 
 No moto. No real AWS calls.  The handler module is evicted from sys.modules
 and re-imported fresh for each test via the ``handler`` fixture so that
@@ -29,7 +28,7 @@ Coverage
  9. TestNovaItemAbsentAfterResolution    — get_item empty post-resolution
 10. TestWrongTaskName                    — bad task_name → TerminalError
 11. TestNormalization                    — whitespace/case → "NAME#gq mus"
-12. TestPollLoop                         — RUNNING×2 then SUCCEEDED; sleep×2
+12. TestNotAClassicalNovaOutcome         — SFN → NOT_A_CLASSICAL_NOVA → TerminalError
 """
 
 from __future__ import annotations
@@ -39,10 +38,10 @@ import json
 import sys
 from decimal import Decimal
 from typing import Any
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import pytest
-from nova_common.errors import QuarantineError, TerminalError
+from nova_common.errors import TerminalError
 
 # ---------------------------------------------------------------------------
 # Module-level constants
@@ -51,7 +50,7 @@ from nova_common.errors import QuarantineError, TerminalError
 _MODULE = "nova_resolver_ticket.handler"
 _TABLE_NAME = "NovaCat-Test"
 _SFN_ARN = "arn:aws:states:us-east-1:123456789012:stateMachine:nova-cat-init-nova-test"
-_EXEC_ARN = "arn:aws:states:us-east-1:123456789012:execution:nova-cat-init-nova-test:run-1"
+_EXEC_ARN = "arn:aws:states:us-east-1:123456789012:express:nova-cat-init-nova-test:run-1"
 _NOVA_ID = "aaaaaaaa-0000-0000-0000-000000000001"
 
 # Decimal values mirror how nova_resolver stores coordinates in DDB.
@@ -108,9 +107,10 @@ def handler(_env: None) -> Any:
 
 def _sfn_output(outcome: str | None, nova_id: str | None = None) -> str:
     """
-    Build the JSON string placed in a DescribeExecution response's ``output``
-    field.
+    Build the JSON string placed in a start_sync_execution response's ``output``
+    field, matching the actual initialize_nova output structure.
 
+    nova_id is written to $.launch.nova_id (not $.finalize.nova_id).
     ``outcome=None`` produces an empty ``finalize`` dict, simulating the
     coordinate-ambiguity quarantine path: initialize_nova ends via
     FinalizeJobRunQuarantined which does not populate $.finalize.outcome.
@@ -118,14 +118,15 @@ def _sfn_output(outcome: str | None, nova_id: str | None = None) -> str:
     finalize: dict[str, Any] = {}
     if outcome is not None:
         finalize["outcome"] = outcome
+    output: dict[str, Any] = {"finalize": finalize}
     if nova_id is not None:
-        finalize["nova_id"] = nova_id
-    return json.dumps({"finalize": finalize})
+        output["launch"] = {"nova_id": nova_id}
+    return json.dumps(output)
 
 
-def _sfn_describe(status: str, output: str | None = None) -> dict[str, Any]:
-    """Minimal DescribeExecution response dict."""
-    resp: dict[str, Any] = {"status": status}
+def _sfn_sync(status: str, output: str | None = None) -> dict[str, Any]:
+    """Minimal start_sync_execution response dict."""
+    resp: dict[str, Any] = {"status": status, "executionArn": _EXEC_ARN}
     if output is not None:
         resp["output"] = output
     return resp
@@ -198,7 +199,7 @@ class TestPreflightHitWithCoordinates:
         assert isinstance(result["dec_deg"], float)
 
     def test_sfn_not_called(self, handler: Any) -> None:
-        """start_execution is never invoked when the preflight DDB query hits."""
+        """start_sync_execution is never invoked when the preflight DDB query hits."""
         with (
             patch(f"{_MODULE}._table") as mock_table,
             patch(f"{_MODULE}._sfn") as mock_sfn,
@@ -208,7 +209,7 @@ class TestPreflightHitWithCoordinates:
 
             handler.handle(self._make_event(), None)
 
-            mock_sfn.start_execution.assert_not_called()
+            mock_sfn.start_sync_execution.assert_not_called()
 
 
 # ===========================================================================
@@ -259,11 +260,9 @@ class TestPreflightMissCreatedAndLaunched:
         with (
             patch(f"{_MODULE}._table") as mock_table,
             patch(f"{_MODULE}._sfn") as mock_sfn,
-            patch(f"{_MODULE}._sleep"),
         ):
             mock_table.query.return_value = {"Items": []}
-            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
-            mock_sfn.describe_execution.return_value = _sfn_describe("SUCCEEDED", sfn_out)
+            mock_sfn.start_sync_execution.return_value = _sfn_sync("SUCCEEDED", sfn_out)
             mock_table.get_item.return_value = _nova_item()
 
             result: dict[str, Any] = handler.handle(self._make_event(), None)
@@ -293,11 +292,9 @@ class TestPreflightMissExistsAndLaunched:
         with (
             patch(f"{_MODULE}._table") as mock_table,
             patch(f"{_MODULE}._sfn") as mock_sfn,
-            patch(f"{_MODULE}._sleep"),
         ):
             mock_table.query.return_value = {"Items": []}
-            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
-            mock_sfn.describe_execution.return_value = _sfn_describe("SUCCEEDED", sfn_out)
+            mock_sfn.start_sync_execution.return_value = _sfn_sync("SUCCEEDED", sfn_out)
             mock_table.get_item.return_value = _nova_item()
 
             result: dict[str, Any] = handler.handle(self._make_event(), None)
@@ -327,13 +324,11 @@ class TestNotFoundOutcome:
         with (
             patch(f"{_MODULE}._table") as mock_table,
             patch(f"{_MODULE}._sfn") as mock_sfn,
-            patch(f"{_MODULE}._sleep"),
         ):
             mock_table.query.return_value = {"Items": []}
-            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
-            mock_sfn.describe_execution.return_value = _sfn_describe("SUCCEEDED", sfn_out)
+            mock_sfn.start_sync_execution.return_value = _sfn_sync("SUCCEEDED", sfn_out)
 
-            with pytest.raises(QuarantineError, match="UNRESOLVABLE_OBJECT_NAME"):
+            with pytest.raises(handler.UNRESOLVABLE_OBJECT_NAME):
                 handler.handle(self._make_event(), None)
 
 
@@ -363,13 +358,11 @@ class TestQuarantinedPathAbsentOutcome:
         with (
             patch(f"{_MODULE}._table") as mock_table,
             patch(f"{_MODULE}._sfn") as mock_sfn,
-            patch(f"{_MODULE}._sleep"),
         ):
             mock_table.query.return_value = {"Items": []}
-            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
-            mock_sfn.describe_execution.return_value = _sfn_describe("SUCCEEDED", sfn_out)
+            mock_sfn.start_sync_execution.return_value = _sfn_sync("SUCCEEDED", sfn_out)
 
-            with pytest.raises(QuarantineError, match="IDENTITY_AMBIGUITY"):
+            with pytest.raises(handler.IDENTITY_AMBIGUITY):
                 handler.handle(self._make_event(), None)
 
 
@@ -379,7 +372,7 @@ class TestQuarantinedPathAbsentOutcome:
 
 
 class TestSfnExecutionFailed:
-    """DescribeExecution returns status FAILED → TerminalError."""
+    """start_sync_execution returns status FAILED → TerminalError."""
 
     @staticmethod
     def _make_event() -> dict[str, Any]:
@@ -390,11 +383,9 @@ class TestSfnExecutionFailed:
         with (
             patch(f"{_MODULE}._table") as mock_table,
             patch(f"{_MODULE}._sfn") as mock_sfn,
-            patch(f"{_MODULE}._sleep"),
         ):
             mock_table.query.return_value = {"Items": []}
-            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
-            mock_sfn.describe_execution.return_value = _sfn_describe("FAILED")
+            mock_sfn.start_sync_execution.return_value = _sfn_sync("FAILED")
 
             with pytest.raises(TerminalError):
                 handler.handle(self._make_event(), None)
@@ -406,7 +397,7 @@ class TestSfnExecutionFailed:
 
 
 class TestSfnExecutionTimedOut:
-    """DescribeExecution returns status TIMED_OUT → TerminalError."""
+    """start_sync_execution returns status TIMED_OUT → TerminalError."""
 
     @staticmethod
     def _make_event() -> dict[str, Any]:
@@ -417,11 +408,9 @@ class TestSfnExecutionTimedOut:
         with (
             patch(f"{_MODULE}._table") as mock_table,
             patch(f"{_MODULE}._sfn") as mock_sfn,
-            patch(f"{_MODULE}._sleep"),
         ):
             mock_table.query.return_value = {"Items": []}
-            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
-            mock_sfn.describe_execution.return_value = _sfn_describe("TIMED_OUT")
+            mock_sfn.start_sync_execution.return_value = _sfn_sync("TIMED_OUT")
 
             with pytest.raises(TerminalError):
                 handler.handle(self._make_event(), None)
@@ -452,11 +441,9 @@ class TestNovaItemAbsentAfterResolution:
         with (
             patch(f"{_MODULE}._table") as mock_table,
             patch(f"{_MODULE}._sfn") as mock_sfn,
-            patch(f"{_MODULE}._sleep"),
         ):
             mock_table.query.return_value = {"Items": []}
-            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
-            mock_sfn.describe_execution.return_value = _sfn_describe("SUCCEEDED", sfn_out)
+            mock_sfn.start_sync_execution.return_value = _sfn_sync("SUCCEEDED", sfn_out)
             # Simulate get_item returning a response with no "Item" key.
             mock_table.get_item.return_value = {}
 
@@ -479,7 +466,7 @@ class TestWrongTaskName:
     def test_raises_terminal_error(self, handler: Any) -> None:
         """
         TerminalError raised immediately on task_name mismatch.
-        No DDB query and no SFN start_execution call must be made.
+        No DDB query and no SFN start_sync_execution call must be made.
         """
         with (
             patch(f"{_MODULE}._table") as mock_table,
@@ -489,7 +476,7 @@ class TestWrongTaskName:
                 handler.handle(self._make_event(), None)
 
             mock_table.query.assert_not_called()
-            mock_sfn.start_execution.assert_not_called()
+            mock_sfn.start_sync_execution.assert_not_called()
 
 
 # ===========================================================================
@@ -532,53 +519,7 @@ class TestNormalization:
 
 
 # ===========================================================================
-# 12. Poll loop — RUNNING × 2 then SUCCEEDED
-# ===========================================================================
-
-
-class TestPollLoop:
-    """
-    _poll_until_terminal loops until a terminal SFN status.
-    When describe_execution returns RUNNING twice before SUCCEEDED, the
-    patchable _sleep alias must be called exactly twice, each time with the
-    argument 2 (seconds).
-    """
-
-    @staticmethod
-    def _make_event() -> dict[str, Any]:
-        return {"task_name": "ResolveNova", "object_name": "GQ Mus"}
-
-    def test_sleep_called_twice_with_two_seconds(self, handler: Any) -> None:
-        """
-        _sleep(2) invoked exactly twice: once after each RUNNING poll response.
-
-        Uses side_effect list on describe_execution to deliver the sequence:
-          RUNNING → RUNNING → SUCCEEDED
-        then asserts call_count == 2 and call_args_list == [call(2), call(2)].
-        """
-        sfn_out = _sfn_output("CREATED_AND_LAUNCHED", _NOVA_ID)
-        with (
-            patch(f"{_MODULE}._table") as mock_table,
-            patch(f"{_MODULE}._sfn") as mock_sfn,
-            patch(f"{_MODULE}._sleep") as mock_sleep,
-        ):
-            mock_table.query.return_value = {"Items": []}
-            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
-            mock_sfn.describe_execution.side_effect = [
-                _sfn_describe("RUNNING"),
-                _sfn_describe("RUNNING"),
-                _sfn_describe("SUCCEEDED", sfn_out),
-            ]
-            mock_table.get_item.return_value = _nova_item()
-
-            handler.handle(self._make_event(), None)
-
-        assert mock_sleep.call_count == 2
-        assert mock_sleep.call_args_list == [call(2), call(2)]
-
-
-# ===========================================================================
-# 13. NOT_A_CLASSICAL_NOVA outcome
+# 12. NOT_A_CLASSICAL_NOVA outcome
 # ===========================================================================
 
 
@@ -603,59 +544,9 @@ class TestNotAClassicalNovaOutcome:
         with (
             patch(f"{_MODULE}._table") as mock_table,
             patch(f"{_MODULE}._sfn") as mock_sfn,
-            patch(f"{_MODULE}._sleep"),
         ):
             mock_table.query.return_value = {"Items": []}
-            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
-            mock_sfn.describe_execution.return_value = _sfn_describe("SUCCEEDED", sfn_out)
+            mock_sfn.start_sync_execution.return_value = _sfn_sync("SUCCEEDED", sfn_out)
 
             with pytest.raises(TerminalError):
                 handler.handle(self._make_event(), None)
-
-
-# ===========================================================================
-# 14. Poll loop exhausted — _MAX_POLL_ATTEMPTS reached
-# ===========================================================================
-
-
-class TestPollLoopExhausted:
-    """
-    _poll_until_terminal raises TerminalError after _MAX_POLL_ATTEMPTS
-    consecutive non-terminal responses, rather than looping forever.
-
-    The test drives the mock to return RUNNING for every describe_execution
-    call (using side_effect=repeat) and asserts that:
-      - TerminalError is raised
-      - _sleep was called exactly _MAX_POLL_ATTEMPTS times (once per RUNNING
-        response before the cap is hit and the loop exits without a final
-        sleep)
-
-    Note: the loop structure is ``for attempt in range(1, _MAX_POLL_ATTEMPTS + 1)``,
-    calling _sleep inside the loop body when status is non-terminal, so
-    _sleep is called _MAX_POLL_ATTEMPTS times total before the post-loop
-    TerminalError is raised.
-    """
-
-    @staticmethod
-    def _make_event() -> dict[str, Any]:
-        return {"task_name": "ResolveNova", "object_name": "GQ Mus"}
-
-    def test_raises_terminal_error_after_max_attempts(self, handler: Any) -> None:
-        """TerminalError raised when RUNNING persists for _MAX_POLL_ATTEMPTS calls."""
-        from itertools import repeat
-
-        with (
-            patch(f"{_MODULE}._table") as mock_table,
-            patch(f"{_MODULE}._sfn") as mock_sfn,
-            patch(f"{_MODULE}._sleep") as mock_sleep,
-            patch(f"{_MODULE}._MAX_POLL_ATTEMPTS", 3),  # keep the test fast
-        ):
-            mock_table.query.return_value = {"Items": []}
-            mock_sfn.start_execution.return_value = {"executionArn": _EXEC_ARN}
-            mock_sfn.describe_execution.side_effect = repeat(_sfn_describe("RUNNING"))
-
-            with pytest.raises(TerminalError):
-                handler.handle(self._make_event(), None)
-
-        # _sleep called once per loop iteration (3 iterations at patched cap).
-        assert mock_sleep.call_count == 3

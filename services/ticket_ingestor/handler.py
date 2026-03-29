@@ -19,7 +19,10 @@ Input event fields (both tasks):
   primary_name    — resolved primary name (output of ResolveNova)
   ra_deg          — right ascension in decimal degrees
   dec_deg         — declination in decimal degrees
-  data_dir        — filesystem path to the directory containing data files
+  data_dir        — bare S3 prefix or local filesystem path to the directory
+                    containing data files.  In the deployed stack this is a
+                    bare S3 prefix resolved against NOVA_CAT_PRIVATE_BUCKET;
+                    in integration tests it is a local path and is used as-is.
   correlation_id  — request-scoped correlation identifier (for logging)
   job_run_id      — JobRun UUID (for logging and FileObject provenance)
 
@@ -46,11 +49,11 @@ from __future__ import annotations
 
 import os
 import uuid
-from pathlib import Path
 from typing import Any
 
 import boto3
 from nova_common.errors import TerminalError
+from nova_common.file_io import resolve_dir
 from nova_common.logging import configure_logging, logger
 from nova_common.tracing import tracer
 
@@ -78,8 +81,9 @@ from ticket_ingestor.spectra_writer import write_spectrum
 
 _TABLE_NAME = os.environ["NOVA_CAT_TABLE_NAME"]
 _PHOTOMETRY_TABLE_NAME = os.environ["PHOTOMETRY_TABLE_NAME"]
-_PUBLIC_BUCKET_NAME = os.environ["PUBLIC_BUCKET_NAME"]
+_PUBLIC_BUCKET_NAME = os.environ["NOVA_CAT_PUBLIC_SITE_BUCKET"]
 _DIAGNOSTICS_BUCKET_NAME = os.environ["DIAGNOSTICS_BUCKET"]
+_PRIVATE_BUCKET = os.environ["NOVA_CAT_PRIVATE_BUCKET"]
 
 _dynamodb = boto3.resource("dynamodb")
 _TABLE = _dynamodb.Table(_TABLE_NAME)
@@ -134,10 +138,10 @@ def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
     """
     Transform branch for the photometry ticket type.
 
-    Deserialises the ticket, constructs the CSV path, delegates to the
-    pure-transform photometry_reader, and returns a count summary.
-    DDB writes are not performed in Chunk 3a — they land in ddb_writer.py
-    (Chunk 3b).
+    Resolves ``data_dir`` to a local directory via ``resolve_dir`` (S3
+    download when deployed; pass-through for local paths in integration
+    tests), then reads the photometry CSV, runs the pure transform, and
+    performs DDB writes.
     """
     # --- Deserialise ticket -----------------------------------------------
     raw_ticket = event.get("ticket")
@@ -156,13 +160,20 @@ def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
         primary_name: str = str(event["primary_name"])
         ra_deg: float = float(event["ra_deg"])
         dec_deg: float = float(event["dec_deg"])
-        data_dir: str = str(event["data_dir"])
+        data_dir_spec: str = str(event["data_dir"])
     except (KeyError, ValueError, TypeError) as exc:
         raise TerminalError(
             f"Malformed event — missing or invalid identity/routing field: {exc}"
         ) from exc
 
-    csv_path = Path(data_dir) / ticket.data_filename
+    # --- Resolve data directory (S3 prefix → /tmp in deployed Lambda) -----
+    local_data_dir = resolve_dir(
+        data_dir_spec,
+        s3_client=_s3,
+        bucket=_PRIVATE_BUCKET,
+    )
+
+    csv_path = local_data_dir / ticket.data_filename
 
     logger.info(
         "Starting photometry transform",
@@ -196,7 +207,7 @@ def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
         },
     )
 
-    # --- DDB writes (Chunk 3b) --------------------------------------------
+    # --- DDB writes -------------------------------------------------------
     write_result = write_photometry_rows(
         rows=result.rows,
         nova_id=nova_id,
@@ -232,9 +243,11 @@ def _ingest_spectra(event: dict[str, Any]) -> dict[str, Any]:
     """
     Ingestion branch for the spectra ticket type.
 
-    Deserialises the SpectraTicket, reads the metadata CSV, converts each
-    referenced spectrum CSV to a FITS file, uploads to S3, and writes
-    DataProduct + FileObject reference items to DDB.
+    Resolves ``data_dir`` to a local directory via ``resolve_dir`` (S3
+    download when deployed; pass-through for local paths in integration
+    tests).  The resolved local directory is passed to both ``read_spectra``
+    (for the metadata CSV and spectrum data CSVs) and the per-spectrum write
+    loop.
 
     Per-spectrum failures collected by read_spectra (missing data file,
     malformed CSV, FITS construction error) are counted and returned without
@@ -254,14 +267,21 @@ def _ingest_spectra(event: dict[str, Any]) -> dict[str, Any]:
     # --- Extract identity + routing fields --------------------------------
     try:
         nova_id = uuid.UUID(str(event["nova_id"]))
-        data_dir: str = str(event["data_dir"])
+        data_dir_spec: str = str(event["data_dir"])
         job_run_id: str = str(event.get("job_run_id", "unknown"))
     except (KeyError, ValueError, TypeError) as exc:
         raise TerminalError(
             f"Malformed event — missing or invalid identity/routing field: {exc}"
         ) from exc
 
-    metadata_csv_path = Path(data_dir) / ticket.metadata_filename
+    # --- Resolve data directory (S3 prefix → /tmp in deployed Lambda) -----
+    local_data_dir = resolve_dir(
+        data_dir_spec,
+        s3_client=_s3,
+        bucket=_PRIVATE_BUCKET,
+    )
+
+    metadata_csv_path = local_data_dir / ticket.metadata_filename
 
     logger.info(
         "Starting spectra ingest",
@@ -277,7 +297,7 @@ def _ingest_spectra(event: dict[str, Any]) -> dict[str, Any]:
     # --- Pure transform (no S3/DDB) ---------------------------------------
     read_result = read_spectra(
         metadata_csv_path=metadata_csv_path,
-        data_dir=Path(data_dir),
+        data_dir=local_data_dir,
         ticket=ticket,
         nova_id=nova_id,
     )

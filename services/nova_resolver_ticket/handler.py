@@ -11,9 +11,8 @@ Resolution sequence (DESIGN-004 §5.1 / ingest-ticket.md):
   2. Preflight DDB query: PK = "NAME#<normalized>" — NameMapping lookup.
      If a NameMapping item is found, return nova_id immediately and fetch
      ra_deg / dec_deg from the Nova item (PK = <nova_id>, SK = "NOVA").
-  3. If not found: fire initialize_nova via sfn:StartExecution with
-     candidate_name = object_name. Poll sfn:DescribeExecution at 2-second
-     intervals until the execution reaches a terminal state.
+  3. If not found: fire initialize_nova via sfn:StartSyncExecution (Express
+     workflow — StartExecution + DescribeExecution is unsupported).
   4. On CREATED_AND_LAUNCHED / EXISTS_AND_LAUNCHED: extract nova_id from
      $.finalize in the execution output; fetch coordinates from the Nova item.
   5. On NOT_FOUND: raise QuarantineError("UNRESOLVABLE_OBJECT_NAME").
@@ -43,13 +42,11 @@ from __future__ import annotations
 import json
 import os
 import re
-import time
-from collections.abc import Callable
 from typing import Any, cast
 
 import boto3
 from boto3.dynamodb.conditions import Key
-from nova_common.errors import QuarantineError, TerminalError
+from nova_common.errors import TerminalError
 from nova_common.logging import configure_logging, logger
 from nova_common.tracing import tracer
 
@@ -60,20 +57,19 @@ _dynamodb = boto3.resource("dynamodb")
 _table = _dynamodb.Table(_TABLE_NAME)
 _sfn = boto3.client("stepfunctions")
 
-# Patchable sleep alias — tests patch nova_resolver_ticket.handler._sleep
-# without touching the stdlib.
-_sleep: Callable[[float], None] = time.sleep
-
-# SFN execution statuses that mean the execution has stopped running.
-_TERMINAL_STATUSES: frozenset[str] = frozenset({"SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"})
-
 # initialize_nova outcomes that confirm a nova_id was assigned.
 _RESOLVED_OUTCOMES: frozenset[str] = frozenset({"CREATED_AND_LAUNCHED", "EXISTS_AND_LAUNCHED"})
 
-# Maximum number of DescribeExecution calls before giving up.
-# initialize_nova completes in 5–15s; at 2s intervals this allows ~60s of
-# polling before the ResolveNova Lambda's 120s task timeout takes over.
-_MAX_POLL_ATTEMPTS: int = 30
+
+# Exception class names matched by the ingest_ticket ASL Catch blocks.
+# Step Functions matches on the Python exception class __name__, so these
+# classes must be named exactly as they appear in ErrorEquals.
+class UNRESOLVABLE_OBJECT_NAME(Exception):  # noqa: N818
+    """Object name not found in any archive — ticket cannot be ingested."""
+
+
+class IDENTITY_AMBIGUITY(Exception):  # noqa: N818
+    """Coordinate ambiguity prevents unambiguous nova identification."""
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +98,7 @@ def _resolve_nova(event: dict[str, Any]) -> dict[str, Any]:
 
     Implements the two-phase strategy from DESIGN-004 §5.1:
       Phase 1 — cheap preflight DDB read (hits the common case).
-      Phase 2 — fire-and-poll against initialize_nova (new or unknown names).
+      Phase 2 — start_sync_execution against initialize_nova (new/unknown names).
     """
     object_name: str = event["object_name"]
     normalized = _normalize(object_name)
@@ -125,19 +121,37 @@ def _resolve_nova(event: dict[str, Any]) -> dict[str, Any]:
         ra_deg, dec_deg = _fetch_coordinates(nova_id)
         return _build_result(nova_id, object_name, ra_deg, dec_deg)
 
-    # ── Phase 2: fire initialize_nova and poll ─────────────────────────────
+    # ── Phase 2: fire initialize_nova synchronously ─────────────────────────
+    # initialize_nova is an Express workflow; start_sync_execution is the only
+    # supported API (describe_execution is not available for Express workflows).
     logger.info(
         "Preflight miss — firing initialize_nova",
         extra={"object_name": object_name},
     )
-    start_resp = _sfn.start_execution(
+    start_resp = _sfn.start_sync_execution(
         stateMachineArn=_SFN_ARN,
-        input=json.dumps({"candidate_name": object_name}),
+        input=json.dumps(
+            {
+                "candidate_name": object_name,
+                "source": "ingest_ticket",
+                "correlation_id": event.get("correlation_id"),
+            }
+        ),
     )
-    execution_arn: str = start_resp["executionArn"]
-    logger.info("initialize_nova started", extra={"executionArn": execution_arn})
 
-    output = _poll_until_terminal(execution_arn)
+    execution_arn: str = start_resp["executionArn"]
+    status: str = start_resp["status"]
+    logger.info(
+        "initialize_nova completed", extra={"executionArn": execution_arn, "status": status}
+    )
+
+    if status != "SUCCEEDED":
+        raise TerminalError(
+            f"initialize_nova execution terminated with status={status!r} arn={execution_arn!r}"
+        )
+
+    raw_output: str = start_resp.get("output", "{}")
+    output = cast(dict[str, Any], json.loads(raw_output))
     nova_id = _extract_nova_id(output, execution_arn)
 
     ra_deg, dec_deg = _fetch_coordinates(nova_id)
@@ -152,38 +166,6 @@ def _resolve_nova(event: dict[str, Any]) -> dict[str, Any]:
 def _normalize(name: str) -> str:
     """Strip, lowercase, and collapse internal whitespace — identical to nova_resolver."""
     return re.sub(r"\s+", " ", name.strip().lower())
-
-
-def _poll_until_terminal(execution_arn: str) -> dict[str, Any]:
-    """
-    Poll sfn:DescribeExecution at 2-second intervals until a terminal status
-    or _MAX_POLL_ATTEMPTS is reached.
-    ...
-    """
-    for attempt in range(1, _MAX_POLL_ATTEMPTS + 1):
-        resp = _sfn.describe_execution(executionArn=execution_arn)
-        status: str = resp["status"]
-
-        if status not in _TERMINAL_STATUSES:
-            logger.debug(
-                "initialize_nova still running",
-                extra={"attempt": attempt, "executionArn": execution_arn},
-            )
-            _sleep(2)
-            continue
-
-        if status != "SUCCEEDED":
-            raise TerminalError(
-                f"initialize_nova execution terminated with status={status!r} arn={execution_arn!r}"
-            )
-
-        raw_output: str = resp.get("output", "{}")
-        return cast(dict[str, Any], json.loads(raw_output))
-
-    raise TerminalError(
-        f"initialize_nova did not reach a terminal state after "
-        f"{_MAX_POLL_ATTEMPTS} attempts; arn={execution_arn!r}"
-    )
 
 
 def _extract_nova_id(output: dict[str, Any], execution_arn: str) -> str:
@@ -212,7 +194,13 @@ def _extract_nova_id(output: dict[str, Any], execution_arn: str) -> str:
     outcome: str | None = finalize.get("outcome")
 
     if outcome in _RESOLVED_OUTCOMES:
-        nova_id: str | None = finalize.get("nova_id")
+        # nova_id is written to $.launch.nova_id (or $.upsert.nova_id) by
+        # initialize_nova — it is NOT in $.finalize.
+        nova_id: str | None = (
+            output.get("launch", {}).get("nova_id")
+            or output.get("upsert", {}).get("nova_id")
+            or output.get("nova_creation", {}).get("nova_id")
+        )
         if not nova_id:
             raise TerminalError(
                 f"initialize_nova returned outcome={outcome!r} but nova_id is absent "
@@ -229,7 +217,7 @@ def _extract_nova_id(output: dict[str, Any], execution_arn: str) -> str:
             "initialize_nova returned NOT_FOUND — object name unresolvable",
             extra={"executionArn": execution_arn},
         )
-        raise QuarantineError("UNRESOLVABLE_OBJECT_NAME")
+        raise UNRESOLVABLE_OBJECT_NAME(f"Object name unresolvable; arn={execution_arn!r}")
 
     if outcome == "NOT_A_CLASSICAL_NOVA":
         logger.warning(
@@ -241,9 +229,6 @@ def _extract_nova_id(output: dict[str, Any], execution_arn: str) -> str:
             f"ticket should be removed or reclassified. arn={execution_arn!r}"
         )
 
-    # Execution SUCCEEDED but $.finalize.outcome is absent or unrecognized —
-    # coordinate-ambiguity quarantine branch.
-
     # Execution SUCCEEDED but $.finalize.outcome is absent or unrecognized.
     # This is the coordinate-ambiguity quarantine branch: initialize_nova ends
     # via FinalizeJobRunQuarantined, which does not populate $.finalize.outcome.
@@ -251,7 +236,7 @@ def _extract_nova_id(output: dict[str, Any], execution_arn: str) -> str:
         "initialize_nova completed without a recognized outcome — treating as quarantined",
         extra={"outcome": outcome, "executionArn": execution_arn},
     )
-    raise QuarantineError("IDENTITY_AMBIGUITY")
+    raise IDENTITY_AMBIGUITY(f"Coordinate ambiguity; arn={execution_arn!r}")
 
 
 def _fetch_coordinates(nova_id: str) -> tuple[float | None, float | None]:

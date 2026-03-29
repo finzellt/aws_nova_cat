@@ -1,5 +1,5 @@
 """
-End-to-end pipeline smoke test.
+End-to-end pipeline smoke test (outcome-driven).
 
 Runs the full NovaCat ingestion chain against NovaCatSmoke for V1324 Sco:
 
@@ -9,30 +9,36 @@ Runs the full NovaCat ingestion chain against NovaCatSmoke for V1324 Sco:
             → discover_spectra_products   (parallel)
                 → acquire_and_validate_spectra  (one per product)
 
-Each workflow is polled to completion and asserted individually as it
-finishes, giving streaming progress output. The final assertion is that
-at least one ESO spectra product reaches validation_status = VALID.
+Unlike the previous version that tracked downstream execution ARNs, this
+test verifies **outcomes** by polling DynamoDB for the records each
+workflow writes. The only workflow started directly is initialize_nova;
+everything else is detected through its side-effects.
+
+Stages and what they verify:
+  Stage 1–2: Nova item exists in DDB
+             (confirms initialize_nova + ingest_new_nova)
+  Stage 3:   At least one NOVAREF# item exists
+             (confirms refresh_references)
+  Stage 4:   At least one PRODUCT#SPECTRA# stub exists
+             (confirms discover_spectra_products)
+  Stage 5:   At least one stub has validation_status != UNVALIDATED
+             (confirms acquire_and_validate_spectra)
 
 Design notes:
   - Uses the real V1324 Sco name so the full archive resolution pipeline
     runs (SIMBAD → ESO SSAP → ESO download + FITS validation).
-  - Does NOT pass suppress_downstream=True to discover_spectra_products —
-    this is what distinguishes e2e from the per-workflow smoke tests.
-  - Child executions are found by listing recent executions on each state
-    machine and matching by nova_id in the input payload. This is
-    intentionally simple: the smoke stack is low-traffic, so a recent
-    execution for the right nova_id is unambiguous.
-  - Acquire/validate executions may be many (one per product). We poll
-    all of them to completion before asserting final DDB state.
-  - Generous timeouts: ESO downloads add real latency.
+  - Does NOT pass suppress_downstream to any workflow — downstream
+    workflows fire naturally and their DDB side-effects are polled.
+  - Each stage polls independently with its own timeout. Timeouts are
+    generous to account for external archive latency (SIMBAD, ADS, ESO).
+  - On timeout, pytest.fail includes the nova_id and what was/wasn't
+    found in DynamoDB so failures are immediately diagnosable.
 
 Timeouts:
-  initialize_nova                 120s
-  ingest_new_nova                  45s
-  refresh_references              120s
-  discover_spectra_products        90s
-  acquire_and_validate_spectra    180s per product (real FITS download)
-  total wall-clock budget         ~15 min (generous; normal < 5 min)
+  Stage 1–2 (Nova item)                120s  (SIMBAD + TNS resolution)
+  Stage 3   (NOVAREF# items)           120s  (ADS API)
+  Stage 4   (PRODUCT#SPECTRA# stubs)    90s  (ESO SSAP)
+  Stage 5   (validation_status change)  180s  (ESO FITS download + validation)
 """
 
 from __future__ import annotations
@@ -43,133 +49,99 @@ import uuid
 from typing import Any
 
 import pytest
+from boto3.dynamodb.conditions import Key
 
-from contracts.models.outputs import (
-    AcquireAndValidateSpectraFinalizeOutput,
-    AcquireAndValidateSpectraTerminalOutput,
-    DiscoverSpectraProductsFinalizeOutput,
-    DiscoverSpectraProductsTerminalOutput,
-    IngestNewNovaFinalizeOutput,
-    IngestNewNovaTerminalOutput,
-    InitializeNovaFinalizeOutput,
-    InitializeNovaTerminalOutput,
-    RefreshReferencesFinalizeOutput,
-    RefreshReferencesTerminalOutput,
-)
-from tests.smoke.conftest import StackOutputs, poll_execution
-from tests.smoke.test_workflows import (
-    _TEST_NOVA_NAME,
-    _assert_output,
-    _get_item,
-    _output,
-    _query_partition,
-    _run_and_wait,
-)
+from tests.smoke.conftest import StackOutputs
 
 # ---------------------------------------------------------------------------
-# E2E-specific constants
+# Constants
 # ---------------------------------------------------------------------------
 
-# How long to search backward when listing executions to find a child run.
-_CHILD_SEARCH_WINDOW_SECONDS = 600  # 10 minutes
+# V1324 Sco — classical nova, unambiguous in SIMBAD/TNS, two UVES spectra
+# in the ESO archive (~June 2012). Same test nova as test_workflows.py.
+_TEST_NOVA_NAME = "V1324 Sco"
 
-# How long to wait for all acquire_and_validate executions to finish.
-_ACQUIRE_TIMEOUT_PER_PRODUCT = 180  # seconds
-
-# How many seconds to sleep between polling acquire_and_validate executions.
-_ACQUIRE_POLL_INTERVAL = 10  # seconds
-
-# Maximum total time to wait for all acquire_and_validate executions.
-_ACQUIRE_TOTAL_TIMEOUT = 900  # 15 minutes
+_POLL_INTERVAL = 5  # seconds — matches conftest._POLL_INTERVAL_SECONDS
 
 
 # ---------------------------------------------------------------------------
-# Child execution discovery helpers
+# DDB polling helpers
 # ---------------------------------------------------------------------------
 
 
-def _find_child_executions(
-    sfn_client: Any,
-    state_machine_arn: str,
+def _get_item(table: Any, pk: str, sk: str) -> dict[str, Any] | None:
+    """Fetch a single item by exact PK + SK."""
+    resp = table.get_item(Key={"PK": pk, "SK": sk})
+    return resp.get("Item")
+
+
+def _query_prefix(table: Any, pk: str, sk_prefix: str) -> list[dict[str, Any]]:
+    """Query all items under a PK with SK beginning with sk_prefix."""
+    resp = table.query(
+        KeyConditionExpression=(Key("PK").eq(pk) & Key("SK").begins_with(sk_prefix)),
+    )
+    items: list[dict[str, Any]] = resp.get("Items", [])
+    while "LastEvaluatedKey" in resp:
+        resp = table.query(
+            KeyConditionExpression=(Key("PK").eq(pk) & Key("SK").begins_with(sk_prefix)),
+            ExclusiveStartKey=resp["LastEvaluatedKey"],
+        )
+        items.extend(resp.get("Items", []))
+    return items
+
+
+def _poll_ddb(
+    check_fn: Any,
+    timeout_seconds: int,
+    label: str,
     nova_id: str,
-    max_results: int = 20,
-) -> list[str]:
+) -> Any:
+    """Poll a DDB check function until it returns a truthy value or timeout.
+
+    Parameters
+    ----------
+    check_fn:
+        Callable returning a truthy result when the condition is met,
+        or a falsy value to keep polling.
+    timeout_seconds:
+        Maximum wall-clock seconds to poll.
+    label:
+        Human-readable label for the stage (used in failure messages).
+    nova_id:
+        Nova UUID string (included in failure messages for diagnosis).
+
+    Returns the truthy result from check_fn.
+    Calls pytest.fail on timeout.
     """
-    List recent executions of a state machine and return ARNs whose input
-    payload contains nova_id. Returns all matches, most recent first.
-
-    We list the most recent `max_results` executions (both RUNNING and
-    terminal) to avoid missing a fast-completing execution.
-    """
-    matching = []
-    for status_filter in ("RUNNING", "SUCCEEDED", "FAILED"):
-        try:
-            resp = sfn_client.list_executions(
-                stateMachineArn=state_machine_arn,
-                statusFilter=status_filter,
-                maxResults=max_results,
-            )
-            for execution in resp.get("executions", []):
-                arn = execution["executionArn"]
-                try:
-                    detail = sfn_client.describe_execution(executionArn=arn)
-                    payload = json.loads(detail.get("input", "{}"))
-                    if payload.get("nova_id") == nova_id:
-                        matching.append(arn)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-    # Deduplicate while preserving order
-    seen: set[str] = set()
-    unique = []
-    for arn in matching:
-        if arn not in seen:
-            seen.add(arn)
-            unique.append(arn)
-    return unique
-
-
-def _wait_for_child(
-    sfn_client: Any,
-    state_machine_arn: str,
-    nova_id: str,
-    timeout: int,
-    poll_interval: int = 5,
-    label: str = "",
-) -> str:
-    """
-    Wait until at least one child execution for nova_id appears on
-    state_machine_arn, then poll it to completion. Returns the execution ARN.
-
-    Raises AssertionError if no execution is found within timeout.
-    """
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        arns = _find_child_executions(sfn_client, state_machine_arn, nova_id)
-        if arns:
-            arn = arns[0]
-            print(f"\n  ✓ Found {label} execution: {arn}")
-            return arn
-        print(f"  ... waiting for {label} execution to appear", end="\r", flush=True)
-        time.sleep(poll_interval)
+    deadline = time.monotonic() + timeout_seconds
+    result = None
+    while time.monotonic() < deadline:
+        result = check_fn()
+        if result:
+            return result
+        time.sleep(_POLL_INTERVAL)
 
     pytest.fail(
-        f"No {label} execution found for nova_id={nova_id!r} "
-        f"within {timeout}s on {state_machine_arn}"
+        f"{label} not satisfied within {timeout_seconds}s for "
+        f"nova_id={nova_id!r}. Last check returned: {result!r}"
     )
 
 
-def _poll_to_terminal(
-    sfn_client: Any,
-    arn: str,
-    timeout: int,
-    label: str = "",
-) -> dict[str, Any]:
-    """Poll an execution ARN to completion. Wraps conftest.poll_execution."""
-    print(f"  Polling {label} ({arn.split(':')[-1][:40]})...")
-    return poll_execution(sfn_client, arn, timeout_seconds=timeout)
+# ---------------------------------------------------------------------------
+# Console output helpers
+# ---------------------------------------------------------------------------
+
+
+def _section(title: str) -> None:
+    """Print a section header for streaming test output (-s flag)."""
+    print(f"\n{'─' * 60}")
+    print(f"  {title}")
+    print(f"{'─' * 60}")
+
+
+def _ok(msg: str) -> None:
+    """Print a green-ish success marker."""
+    print(f"  ✓ {msg}")
 
 
 # ---------------------------------------------------------------------------
@@ -181,24 +153,10 @@ class TestEndToEnd:
     """
     Full pipeline smoke test: initialize → ingest → refresh + discover → acquire.
 
-    One test method per pipeline stage, ordered explicitly. Each stage
-    depends on state written by the previous one (nova_id propagates via
-    the `e2e_state` fixture).
+    Verifies outcomes via DynamoDB polling rather than tracking execution ARNs.
+    The only workflow started directly is initialize_nova; all downstream
+    workflows are confirmed by their DDB side-effects.
     """
-
-    # ── Shared mutable state fixture ──────────────────────────────────────────
-
-    @pytest.fixture
-    def e2e_state(self) -> dict[str, Any]:
-        """
-        Mutable dict passed between test stages within a single test.
-        Keys populated progressively:
-          nova_id, ingest_arn, refresh_arn, discover_arn,
-          acquire_arns, acquire_results
-        """
-        return {}
-
-    # ── Main e2e test ─────────────────────────────────────────────────────────
 
     def test_v1324_sco_full_pipeline(
         self,
@@ -209,354 +167,238 @@ class TestEndToEnd:
         """
         Full end-to-end pipeline for V1324 Sco.
 
-        Asserts at each stage as it completes. A failure at any stage
-        reports the exact workflow that broke and its execution ARN,
-        so you know immediately which link in the chain is broken.
+        Polls DynamoDB at each stage for the records written by the
+        corresponding workflow. A timeout at any stage reports exactly
+        what was expected and what was found.
         """
         execution_suffix = str(uuid.uuid4())[:8]
+        correlation_id = f"e2e-{execution_suffix}"
         table = dynamodb_resource.Table(stack.table_name)
 
-        # ── Stage 1: initialize_nova ──────────────────────────────────────────
-        _section("Stage 1 — initialize_nova")
+        # ══════════════════════════════════════════════════════════════════
+        # Stage 0: Start initialize_nova (the only directly-started SFN)
+        # ══════════════════════════════════════════════════════════════════
+        _section("Stage 0 — start initialize_nova")
 
-        resp = _run_and_wait(
-            sfn_client,
-            stack.initialize_nova_arn,
-            payload={
-                "candidate_name": _TEST_NOVA_NAME,
-                "correlation_id": f"e2e-{execution_suffix}",
-                "source": "e2e_smoke_test",
-            },
-            suffix=execution_suffix,
-            timeout=120,
+        # All NovaCat state machines are Express workflows.
+        # start_sync_execution blocks until the execution completes and
+        # returns status + output directly — no polling needed.
+        init_resp = sfn_client.start_sync_execution(
+            stateMachineArn=stack.initialize_nova_arn,
+            name=f"e2e-{execution_suffix}",
+            input=json.dumps(
+                {
+                    "candidate_name": _TEST_NOVA_NAME,
+                    "correlation_id": correlation_id,
+                    "source": "e2e_smoke_test",
+                }
+            ),
         )
 
-        assert resp["status"] == "SUCCEEDED", (
+        init_arn = init_resp.get("executionArn", "unknown")
+        print(f"  Execution ARN: {init_arn}")
+        print(f"  correlation_id: {correlation_id}")
+
+        assert init_resp["status"] == "SUCCEEDED", (
             f"initialize_nova FAILED.\n"
-            f"Execution: {resp['executionArn']}\n"
-            f"Check CloudWatch logs for correlation_id=e2e-{execution_suffix}"
+            f"Execution: {init_arn}\n"
+            f"Status: {init_resp['status']}\n"
+            f"Check CloudWatch Logs for correlation_id={correlation_id}"
         )
 
-        init_model = _assert_output(InitializeNovaTerminalOutput, _output(resp))
+        init_output = json.loads(init_resp["output"])
 
-        assert isinstance(init_model.finalize, InitializeNovaFinalizeOutput), (
-            f"initialize_nova finalize is not InitializeNovaFinalizeOutput — "
-            f"workflow likely failed. Got: {type(init_model.finalize).__name__}"
-        )
-        assert init_model.finalize.outcome in {"CREATED_AND_LAUNCHED", "EXISTS_AND_LAUNCHED"}, (
-            f"Unexpected initialize_nova outcome: {init_model.finalize.outcome!r}.\n"
-            f"Expected CREATED_AND_LAUNCHED or EXISTS_AND_LAUNCHED."
-        )
-        assert init_model.launch is not None, (
-            "initialize_nova: launch output absent — ingest_new_nova was not triggered"
+        # Extract nova_id — available on both CREATED_AND_LAUNCHED and
+        # EXISTS_AND_LAUNCHED outcome paths.
+        finalize = init_output.get("finalize", {})
+        outcome = finalize.get("outcome", "")
+        assert outcome in {"CREATED_AND_LAUNCHED", "EXISTS_AND_LAUNCHED"}, (
+            f"Unexpected initialize_nova outcome: {outcome!r}"
         )
 
-        nova_id = init_model.launch.nova_id
-        assert nova_id, "initialize_nova: nova_id missing from launch output"
-
-        print(f"\n  nova_id:  {nova_id}")
-        print(f"  outcome:  {init_model.finalize.outcome}")
-        _ok("initialize_nova")
-
-        # ── DDB: Nova item ────────────────────────────────────────────────────
-        nova_item = _get_item(table, nova_id, "NOVA")
-        assert nova_item is not None, f"Nova item not found in DynamoDB for nova_id={nova_id}"
-        assert nova_item["status"] == "ACTIVE", (
-            f"Nova item status is {nova_item['status']!r}, expected ACTIVE"
-        )
-        assert "ra_deg" in nova_item and "dec_deg" in nova_item, (
-            "Nova item missing coordinates — archive resolution may have failed"
-        )
-        print(f"  DDB Nova: ACTIVE | RA={nova_item['ra_deg']} Dec={nova_item['dec_deg']}")
-
-        # ── Stage 2: ingest_new_nova ──────────────────────────────────────────
-        _section("Stage 2 — ingest_new_nova")
-
-        ingest_arn = _wait_for_child(
-            sfn_client,
-            stack.ingest_new_nova_arn,
-            nova_id,
-            timeout=60,
-            label="ingest_new_nova",
-        )
-        ingest_resp = _poll_to_terminal(sfn_client, ingest_arn, timeout=45, label="ingest_new_nova")
-
-        assert ingest_resp["status"] == "SUCCEEDED", (
-            f"ingest_new_nova FAILED.\n"
-            f"Execution: {ingest_arn}\n"
-            f"Check CloudWatch logs for nova_id={nova_id}"
+        launch = init_output.get("launch", {})
+        nova_id: str = launch.get("nova_id", "")
+        assert nova_id, (
+            f"nova_id not found in initialize_nova output.\n"
+            f"Output keys: {sorted(init_output.keys())}\n"
+            f"launch keys: {sorted(launch.keys())}"
         )
 
-        ingest_model = _assert_output(IngestNewNovaTerminalOutput, _output(ingest_resp))
+        print(f"  outcome: {outcome}")
+        print(f"  nova_id: {nova_id}")
+        _ok("initialize_nova SUCCEEDED")
 
-        assert isinstance(ingest_model.finalize, IngestNewNovaFinalizeOutput), (
-            f"ingest_new_nova finalize is not IngestNewNovaFinalizeOutput. "
-            f"Got: {type(ingest_model.finalize).__name__}"
-        )
-        assert ingest_model.finalize.outcome == "LAUNCHED", (
-            f"ingest_new_nova outcome={ingest_model.finalize.outcome!r}, expected LAUNCHED"
-        )
-        assert ingest_model.downstream is not None and len(ingest_model.downstream) == 2, (
-            f"ingest_new_nova: downstream Parallel output malformed — "
-            f"expected 2 branch outputs, got: {ingest_model.downstream}"
-        )
-        _ok("ingest_new_nova")
+        # ══════════════════════════════════════════════════════════════════
+        # Stage 1–2: Poll for Nova item in DDB
+        # Confirms: initialize_nova wrote the Nova record, and
+        # ingest_new_nova was triggered (it reads and potentially updates
+        # the Nova item, and fires downstream workflows).
+        # ══════════════════════════════════════════════════════════════════
+        _section("Stage 1–2 — Poll for Nova item")
 
-        # ── Stage 3: refresh_references ──────────────────────────────────────
-        _section("Stage 3 — refresh_references")
+        def _check_nova_item() -> dict[str, Any] | None:
+            item = _get_item(table, nova_id, "NOVA")
+            if item and item.get("status") == "ACTIVE":
+                return item
+            return None
 
-        refresh_arn = _wait_for_child(
-            sfn_client,
-            stack.refresh_references_arn,
-            nova_id,
-            timeout=30,
-            label="refresh_references",
-        )
-        refresh_resp = _poll_to_terminal(
-            sfn_client, refresh_arn, timeout=120, label="refresh_references"
+        nova_item = _poll_ddb(
+            _check_nova_item,
+            timeout_seconds=120,
+            label="Nova item with status=ACTIVE",
+            nova_id=nova_id,
         )
 
-        assert refresh_resp["status"] == "SUCCEEDED", (
-            f"refresh_references FAILED.\n"
-            f"Execution: {refresh_arn}\n"
-            f"Check CloudWatch logs for nova_id={nova_id}"
+        primary_name = nova_item.get("primary_name", "")
+        ra = nova_item.get("ra_deg")
+        dec = nova_item.get("dec_deg")
+        print(f"  primary_name: {primary_name}")
+        print(f"  ra_deg: {ra}")
+        print(f"  dec_deg: {dec}")
+
+        assert ra is not None and dec is not None, (
+            f"Nova item missing coordinates: ra_deg={ra}, dec_deg={dec}.\n"
+            f"SIMBAD resolution may have failed silently."
+        )
+        _ok("Nova item exists with ACTIVE status and coordinates")
+
+        # ══════════════════════════════════════════════════════════════════
+        # Stage 3: Poll for NOVAREF# items
+        # Confirms: refresh_references ran, queried ADS, and wrote at
+        # least one NovaReference link item.
+        # ══════════════════════════════════════════════════════════════════
+        _section("Stage 3 — Poll for NOVAREF# items (refresh_references)")
+
+        def _check_novarefs() -> list[dict[str, Any]] | None:
+            items = _query_prefix(table, nova_id, "NOVAREF#")
+            return items if items else None
+
+        novarefs = _poll_ddb(
+            _check_novarefs,
+            timeout_seconds=120,
+            label="At least one NOVAREF# item",
+            nova_id=nova_id,
         )
 
-        refresh_model = _assert_output(RefreshReferencesTerminalOutput, _output(refresh_resp))
+        print(f"  NOVAREF# items found: {len(novarefs)}")
 
-        assert isinstance(refresh_model.finalize, RefreshReferencesFinalizeOutput), (
-            f"refresh_references finalize is not RefreshReferencesFinalizeOutput. "
-            f"Got: {type(refresh_model.finalize).__name__}"
-        )
-        assert refresh_model.finalize.outcome == "SUCCEEDED"
-        assert refresh_model.fetch is not None
-        print(f"  ADS candidates fetched: {refresh_model.fetch.candidate_count}")
-
-        # ── DDB: NOVAREF items ────────────────────────────────────────────────
-        novarefs = _query_partition(table, nova_id, "NOVAREF#")
-        assert len(novarefs) >= 1, (
-            f"No NOVAREF items written for nova_id={nova_id} after refresh_references.\n"
-            f"ADS returned {refresh_model.fetch.candidate_count} candidate(s) — "
-            f"check reference_manager handler."
-        )
-        print(f"  NOVAREF items in DDB: {len(novarefs)}")
-
-        # ── DDB: discovery_date ───────────────────────────────────────────────
-        nova_item = _get_item(table, nova_id, "NOVA")
-        discovery_date = (nova_item or {}).get("discovery_date")
+        # discovery_date must be derived from ADS references for V1324 Sco.
+        nova_item_refreshed = _get_item(table, nova_id, "NOVA")
+        discovery_date = (nova_item_refreshed or {}).get("discovery_date")
         assert discovery_date is not None, (
-            "discovery_date not written to Nova item after refresh_references"
+            f"discovery_date not written to Nova item after refresh_references.\n"
+            f"nova_id={nova_id}, NOVAREF# count={len(novarefs)}.\n"
+            f"ADS may have returned references without a derivable discovery date, "
+            f"or the discovery_date extraction logic has a bug."
         )
         print(f"  discovery_date: {discovery_date}")
-        _ok("refresh_references")
 
-        # ── Stage 4: discover_spectra_products ────────────────────────────────
-        _section("Stage 4 — discover_spectra_products")
+        _ok(f"refresh_references — {len(novarefs)} reference(s) found")
 
-        discover_arn = _wait_for_child(
-            sfn_client,
-            stack.discover_spectra_products_arn,
-            nova_id,
-            timeout=30,
-            label="discover_spectra_products",
-        )
-        discover_resp = _poll_to_terminal(
-            sfn_client, discover_arn, timeout=90, label="discover_spectra_products"
-        )
+        # ══════════════════════════════════════════════════════════════════
+        # Stage 4: Poll for PRODUCT#SPECTRA# stubs
+        # Confirms: discover_spectra_products ran, queried the ESO SSAP
+        # archive, and wrote DataProduct stubs for discovered spectra.
+        # ══════════════════════════════════════════════════════════════════
+        _section("Stage 4 — Poll for PRODUCT#SPECTRA# stubs (discover_spectra_products)")
 
-        assert discover_resp["status"] == "SUCCEEDED", (
-            f"discover_spectra_products FAILED.\n"
-            f"Execution: {discover_arn}\n"
-            f"Check CloudWatch logs for nova_id={nova_id}"
-        )
+        def _check_spectra_stubs() -> list[dict[str, Any]] | None:
+            items = _query_prefix(table, nova_id, "PRODUCT#SPECTRA#")
+            return items if items else None
 
-        discover_model = _assert_output(
-            DiscoverSpectraProductsTerminalOutput, _output(discover_resp)
-        )
-
-        assert isinstance(discover_model.finalize, DiscoverSpectraProductsFinalizeOutput), (
-            f"discover_spectra_products finalize is not DiscoverSpectraProductsFinalizeOutput. "
-            f"Got: {type(discover_model.finalize).__name__}"
-        )
-        assert discover_model.finalize.outcome == "COMPLETED"
-        assert discover_model.providers == [{"provider": "ESO"}], (
-            f"Unexpected providers list: {discover_model.providers!r}"
-        )
-
-        # ── DDB: spectra stubs ────────────────────────────────────────────────
-        stubs = _query_partition(table, nova_id, "PRODUCT#SPECTRA#")
-        print(f"  ESO spectra stubs written: {len(stubs)}")
-
-        if not stubs:
-            pytest.skip(
-                f"ESO returned no spectra products for V1324 Sco "
-                f"(nova_id={nova_id}). "
-                f"The cone search may have missed — check the coordinates "
-                f"in the Nova item and the ESO adapter search radius."
-            )
-
-        for stub in stubs:
-            assert stub["acquisition_status"] in {
-                "STUB",
-                "ACQUIRED",
-                "FAILED_RETRYABLE",
-            }, f"Unexpected acquisition_status on stub: {stub['acquisition_status']!r}"
-            assert "data_product_id" in stub
-            assert "GSI1PK" in stub or stub.get("eligibility") == "NONE", (
-                f"Stub {stub['data_product_id']} has eligibility=ACQUIRE but GSI1PK is absent"
-            )
-
-        _ok("discover_spectra_products")
-
-        # ── Stage 5: acquire_and_validate_spectra (all products) ─────────────
-        _section("Stage 5 — acquire_and_validate_spectra")
-
-        # Find all acquire_and_validate executions triggered for this nova.
-        # There is one execution per data_product_id. We poll all of them.
-        print(f"  Waiting for {len(stubs)} acquire_and_validate execution(s)...")
-
-        acquire_arns = _collect_acquire_executions(
-            sfn_client=sfn_client,
-            state_machine_arn=stack.acquire_and_validate_spectra_arn,
+        stubs = _poll_ddb(
+            _check_spectra_stubs,
+            timeout_seconds=90,
+            label="At least one PRODUCT#SPECTRA# stub",
             nova_id=nova_id,
-            expected_count=len(stubs),
-            timeout=_ACQUIRE_TOTAL_TIMEOUT,
-            poll_interval=_ACQUIRE_POLL_INTERVAL,
         )
 
-        assert len(acquire_arns) > 0, (
-            f"No acquire_and_validate_spectra executions found for nova_id={nova_id}.\n"
-            f"{len(stubs)} stub(s) were written — check that "
-            f"discover_spectra_products published the acquisition events "
-            f"and that the CDK stack wires the event to the state machine."
+        print(f"  PRODUCT#SPECTRA# stubs found: {len(stubs)}")
+        for stub in stubs:
+            dp_id = stub.get("data_product_id", "?")
+            vs = stub.get("validation_status", "?")
+            print(f"    {dp_id[:12]}…  validation_status={vs}")
+
+        _ok(f"discover_spectra_products — {len(stubs)} stub(s) written")
+
+        # ══════════════════════════════════════════════════════════════════
+        # Stage 5: Poll for validation_status != UNVALIDATED
+        # Confirms: acquire_and_validate_spectra ran for at least one
+        # product and reached a terminal validation state (VALID,
+        # QUARANTINED, or TERMINAL_INVALID).
+        # ══════════════════════════════════════════════════════════════════
+        _section("Stage 5 — Poll for spectra validation (acquire_and_validate_spectra)")
+
+        expected_count = len(stubs)
+        print(f"  Waiting for {expected_count} stub(s) to leave UNVALIDATED state…")
+
+        def _check_validation_progress() -> list[dict[str, Any]] | None:
+            current = _query_prefix(table, nova_id, "PRODUCT#SPECTRA#")
+            resolved = [s for s in current if s.get("validation_status") != "UNVALIDATED"]
+            if resolved:
+                return resolved
+            return None
+
+        _poll_ddb(
+            _check_validation_progress,
+            timeout_seconds=180,
+            label="At least one stub with validation_status != UNVALIDATED",
+            nova_id=nova_id,
         )
 
-        print(f"  Found {len(acquire_arns)} acquire_and_validate execution(s)")
-
-        # Poll all executions to terminal state
-        acquire_results = []
-        for arn in acquire_arns:
-            resp = _poll_to_terminal(
-                sfn_client,
-                arn,
-                timeout=_ACQUIRE_TIMEOUT_PER_PRODUCT,
-                label=f"acquire_and_validate ({arn.split(':')[-1][-12:]})",
-            )
-            assert resp["status"] == "SUCCEEDED", (
-                f"acquire_and_validate_spectra FAILED.\n"
-                f"Execution: {arn}\n"
-                f"Check CloudWatch logs for nova_id={nova_id}"
-            )
-            model = _assert_output(AcquireAndValidateSpectraTerminalOutput, _output(resp))
-            assert isinstance(model.finalize, AcquireAndValidateSpectraFinalizeOutput), (
-                f"acquire_and_validate finalize type unexpected: {type(model.finalize).__name__}"
-            )
-            assert model.finalize.outcome == "COMPLETED"
-            acquire_results.append(model)
-
-        # ── Final DDB assertions ──────────────────────────────────────────────
-        _section("Final DynamoDB assertions")
-
-        final_stubs = _query_partition(table, nova_id, "PRODUCT#SPECTRA#")
+        # Collect final state of all stubs (some may still be UNVALIDATED
+        # if acquire_and_validate hasn't reached them yet — that's fine as
+        # long as at least one has been processed).
+        final_stubs = _query_prefix(table, nova_id, "PRODUCT#SPECTRA#")
 
         validation_statuses = [s.get("validation_status") for s in final_stubs]
-        print(f"  Spectra validation statuses: {validation_statuses}")
-
         valid_count = validation_statuses.count("VALID")
         quarantined_count = validation_statuses.count("QUARANTINED")
         terminal_count = validation_statuses.count("TERMINAL_INVALID")
+        unvalidated_count = validation_statuses.count("UNVALIDATED")
 
-        print(f"  VALID:            {valid_count}")
-        print(f"  QUARANTINED:      {quarantined_count}")
-        print(f"  TERMINAL_INVALID: {terminal_count}")
+        print("  Final validation statuses:")
+        print(f"    VALID:            {valid_count}")
+        print(f"    QUARANTINED:      {quarantined_count}")
+        print(f"    TERMINAL_INVALID: {terminal_count}")
+        print(f"    UNVALIDATED:      {unvalidated_count}")
 
-        # At least one product must reach VALID for first light to be declared.
+        # At least one product must reach VALID for first light.
         assert valid_count >= 1, (
-            f"No spectra products reached VALID for V1324 Sco (nova_id={nova_id}).\n"
+            f"No spectra products reached VALID for V1324 Sco "
+            f"(nova_id={nova_id}).\n"
             f"Statuses: {validation_statuses}\n"
             f"Check acquire_and_validate_spectra CloudWatch logs and the "
             f"ESO FITS profile registry. All products may be quarantined "
             f"(UNKNOWN_PROFILE) if the profile hasn't been registered."
         )
 
-        # All validated products must have eligibility=NONE and no GSI1 attributes.
+        # All resolved products must have eligibility=NONE and no GSI1 keys.
         for stub in final_stubs:
             vs = stub.get("validation_status")
             if vs in {"VALID", "QUARANTINED", "TERMINAL_INVALID"}:
+                dp_id = stub.get("data_product_id", "?")
                 assert stub.get("eligibility") == "NONE", (
-                    f"Product {stub['data_product_id']} has validation_status={vs!r} "
+                    f"Product {dp_id} has validation_status={vs!r} "
                     f"but eligibility={stub.get('eligibility')!r} — "
                     f"GSI1 was not cleared by RecordValidationResult"
                 )
                 assert "GSI1PK" not in stub, (
-                    f"Product {stub['data_product_id']} has validation_status={vs!r} "
-                    f"but GSI1PK is still present — EligibilityIndex was not cleared"
+                    f"Product {dp_id} has validation_status={vs!r} "
+                    f"but GSI1PK is still present — EligibilityIndex "
+                    f"was not cleared"
                 )
 
         _ok(f"acquire_and_validate_spectra — {valid_count} VALID product(s)")
+
+        # ══════════════════════════════════════════════════════════════════
+        # Summary
+        # ══════════════════════════════════════════════════════════════════
         print()
         print("  ══════════════════════════════════════════════════")
         print("  ✓  FIRST LIGHT — V1324 Sco ingested successfully")
-        print(f"     nova_id:       {nova_id}")
+        print(f"     nova_id:        {nova_id}")
         print(f"     discovery_date: {discovery_date}")
-        print(f"     references:    {len(novarefs)}")
-        print(f"     spectra valid: {valid_count} / {len(final_stubs)}")
+        print(f"     references:     {len(novarefs)}")
+        print(f"     spectra valid:  {valid_count} / {len(final_stubs)}")
         print("  ══════════════════════════════════════════════════")
-
-
-# ---------------------------------------------------------------------------
-# acquire_and_validate collection helper
-# ---------------------------------------------------------------------------
-
-
-def _collect_acquire_executions(
-    sfn_client: Any,
-    state_machine_arn: str,
-    nova_id: str,
-    expected_count: int,
-    timeout: int,
-    poll_interval: int,
-) -> list[str]:
-    """
-    Collect acquire_and_validate_spectra execution ARNs for a given nova_id.
-
-    Polls until `expected_count` executions have appeared or timeout is hit.
-    Returns whatever has been found at timeout — the caller asserts on count.
-
-    acquire_and_validate payloads include nova_id directly (unlike
-    ingest_new_nova which has it too), so _find_child_executions works here.
-    """
-    deadline = time.time() + timeout
-    found: set[str] = set()
-
-    while time.time() < deadline:
-        arns = _find_child_executions(sfn_client, state_machine_arn, nova_id, max_results=50)
-        for arn in arns:
-            found.add(arn)
-
-        print(
-            f"  ... {len(found)}/{expected_count} acquire executions found",
-            end="\r",
-            flush=True,
-        )
-
-        if len(found) >= expected_count:
-            break
-
-        time.sleep(poll_interval)
-
-    print()  # clear the \r line
-    return list(found)
-
-
-# ---------------------------------------------------------------------------
-# Print helpers
-# ---------------------------------------------------------------------------
-
-
-def _section(title: str) -> None:
-    print(f"\n  ── {title} {'─' * max(0, 52 - len(title))}")
-
-
-def _ok(label: str) -> None:
-    print(f"  ✓ {label} — PASSED")
