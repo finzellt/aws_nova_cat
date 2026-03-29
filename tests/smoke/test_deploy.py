@@ -305,17 +305,16 @@ class TestLambda:
         resp = lambda_client.get_function_configuration(FunctionName="nova-cat-workflow-launcher")
         env_vars = resp.get("Environment", {}).get("Variables", {})
 
-        expected_keys = [
-            "INGEST_NEW_NOVA_STATE_MACHINE_ARN",
-            "REFRESH_REFERENCES_STATE_MACHINE_ARN",
-            "DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN",
-            "ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN",
-        ]
-        for key in expected_keys:
+        expected = {
+            "INGEST_NEW_NOVA_STATE_MACHINE_ARN": stack.ingest_new_nova_arn,
+            "REFRESH_REFERENCES_STATE_MACHINE_ARN": stack.refresh_references_arn,
+            "DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN": stack.discover_spectra_products_arn,
+            "ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN": stack.acquire_and_validate_spectra_arn,
+        }
+        for key, expected_arn in expected.items():
             assert key in env_vars, f"workflow_launcher missing env var: {key}"
-            value = env_vars[key]
-            assert value.startswith("arn:aws:states:") and ":stateMachine:" in value, (
-                f"workflow_launcher {key}={value!r} is not a valid Step Functions state machine ARN"
+            assert env_vars[key] == expected_arn, (
+                f"workflow_launcher {key}={env_vars[key]!r} != expected {expected_arn!r}"
             )
 
     def test_nova_resolver_ticket_has_initialize_nova_arn(self, lambda_client: Any) -> None:

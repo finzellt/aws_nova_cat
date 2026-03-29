@@ -160,12 +160,14 @@ class NovaCatWorkflows(Construct):
         # Grant workflow_launcher permission to start executions and inject ARNs.
         # This grant lives here (not in NovaCatCompute) because NovaCatWorkflows
         # owns the state machine ARNs — NovaCatCompute has no knowledge of SFN.
-        _grant_start_execution(compute.workflow_launcher, cdk.Stack.of(self))
+        _grant_start_execution(compute.workflow_launcher, cdk.Stack.of(self), env_prefix)
 
-        # Construct ARNs by name rather than referencing attr_arn to avoid a
-        # CDK dependency cycle: ingest_new_nova invokes workflow_launcher
-        # (grant_invoke), and workflow_launcher needs ingest_new_nova's ARN
-        # (env var). Using format_arn breaks the second edge of the cycle.
+        # Construct ARNs via format_arn rather than attr_arn to avoid a CDK
+        # dependency cycle: ingest_new_nova and discover_spectra_products both
+        # invoke workflow_launcher (grant_invoke), and workflow_launcher needs
+        # their ARNs (env var). Using format_arn with env_prefix breaks the
+        # cycle while producing stack-scoped ARNs (e.g. nova-cat-smoke-* in
+        # the smoke stack).
         stack = cdk.Stack.of(self)
 
         def _sfn_arn(name: str) -> str:
