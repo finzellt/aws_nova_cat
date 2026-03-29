@@ -298,8 +298,8 @@ def _make_sfn_stub() -> MagicMock:
     short-circuit before any SFN call.
     """
     mock_sfn = MagicMock()
-    mock_sfn.start_execution.side_effect = AssertionError(
-        "_sfn.start_execution was called unexpectedly — "
+    mock_sfn.start_sync_execution.side_effect = AssertionError(
+        "_sfn.start_sync_execution was called unexpectedly — "
         "NameMapping preflight should have returned a hit."
     )
     return mock_sfn

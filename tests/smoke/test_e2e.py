@@ -72,7 +72,7 @@ _POLL_INTERVAL = 5  # seconds — matches conftest._POLL_INTERVAL_SECONDS
 def _get_item(table: Any, pk: str, sk: str) -> dict[str, Any] | None:
     """Fetch a single item by exact PK + SK."""
     resp = table.get_item(Key={"PK": pk, "SK": sk})
-    return resp.get("Item")
+    return resp.get("Item")  # type: ignore[no-any-return]
 
 
 def _query_prefix(table: Any, pk: str, sk_prefix: str) -> list[dict[str, Any]]:
