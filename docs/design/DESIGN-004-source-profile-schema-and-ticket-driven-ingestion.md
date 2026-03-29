@@ -347,8 +347,8 @@ model.
 
 Nova resolution translates the ticket's `OBJECT NAME` (e.g. `V4739_Sgr`) into a
 `nova_id` UUID plus identity fields (`primary_name`, `ra_deg`, `dec_deg`). This is
-accomplished via Lambda-encapsulated polling against the existing `initialize_nova`
-workflow. No modifications to `initialize_nova` are required.
+accomplished via Lambda-encapsulated synchronous invocation of the existing
+`initialize_nova` Express Workflow. No modifications to `initialize_nova` are required.
 
 ### 5.1 Resolution Sequence
 
@@ -358,12 +358,12 @@ workflow. No modifications to `initialize_nova` are required.
 2. **If found:** Return the existing `nova_id` immediately. Fetch `ra_deg`, `dec_deg`
    from the Nova item (`PK = <nova_id>`, `SK = "NOVA"`).
 
-3. **If not found:** Fire `initialize_nova` via `sfn:StartExecution` with
-   `candidate_name = object_name`. Poll `sfn:DescribeExecution` at 2-second intervals
-   until the execution reaches a terminal state.
+3. **If not found:** Fire `initialize_nova` synchronously via
+   `sfn:StartSyncExecution` with `candidate_name = object_name`. The call blocks
+   until the Express workflow reaches a terminal state and returns the result inline.
 
 4. **On `CREATED_AND_LAUNCHED` or `EXISTS_AND_LAUNCHED`:** Extract `nova_id` from the
-   execution output. Fetch coordinates from the Nova item.
+   synchronous execution response. Fetch coordinates from the Nova item.
 
 5. **On `NOT_FOUND`:** Raise `QuarantineError` with reason
    `UNRESOLVABLE_OBJECT_NAME`.
@@ -374,15 +374,16 @@ workflow. No modifications to `initialize_nova` are required.
 
 ### 5.2 Design Rationale
 
-- **Zero modifications to `initialize_nova`.** The polling approach is entirely
+- **Zero modifications to `initialize_nova`.** The synchronous invocation is entirely
   self-contained within the `ResolveNova` Lambda. `initialize_nova` is an Express
-  workflow, which rules out the synchronous `.sync:2` invocation pattern
-  (Standard-only). The task token pattern (`.waitForTaskToken`) was considered and
+  Workflow, so the correct API is `sfn:StartSyncExecution`, which blocks until the
+  execution completes and returns the output directly in the response. This is simpler
+  than the alternatives considered: the task token pattern (`.waitForTaskToken`) was
   rejected for MVP due to the coupling cost — it would require `initialize_nova`'s
   terminal handlers to call `sfn:SendTaskSuccess/Failure`.
 
 - **One name per ticket.** Each ticket contains exactly one `OBJECT NAME`, so the
-  orchestrator fires a single `initialize_nova` execution. The polling overhead is
+  orchestrator fires a single `initialize_nova` execution. The invocation overhead is
   minimal — `initialize_nova` completes in 5–15 seconds for the happy path.
 
 - **Preflight DDB check avoids unnecessary workflow executions.** For the common case
@@ -739,7 +740,7 @@ The workflow requires three new Lambda handlers:
 | Handler | Module | Task States | Description |
 |---|---|---|---|
 | `ticket_parser` | `services/ticket_parser/` | ParseTicket | Reads `.txt` file, validates into typed Pydantic model |
-| `nova_resolver_ticket` | `services/nova_resolver_ticket/` | ResolveNova | DDB NameMapping lookup + `initialize_nova` fire-and-poll |
+| `nova_resolver_ticket` | `services/nova_resolver_ticket/` | ResolveNova | DDB NameMapping lookup + `initialize_nova` sync invocation |
 | `ticket_ingestor` | `services/ticket_ingestor/` | IngestPhotometry, IngestSpectra | Dispatches on `ticket_type`; reads data, transforms, persists |
 
 `ticket_ingestor` is a single Lambda with internal dispatch based on `ticket_type`.
@@ -861,11 +862,11 @@ project knowledge documents to reference, and the acceptance criteria.
 - `services/nova_resolver_ticket/__init__.py`
 - `services/nova_resolver_ticket/handler.py` — Lambda handler. Single task:
   `ResolveNova`. Implements the resolution sequence from §5.1: DynamoDB `NameMapping`
-  preflight check, `initialize_nova` fire-and-poll if not found, coordinate fetch from
-  Nova item.
+  preflight check, `initialize_nova` synchronous invocation via `StartSyncExecution`
+  if not found, coordinate fetch from Nova item.
 - `tests/services/test_nova_resolver_ticket.py` — Unit tests covering: existing nova
   found via NameMapping (no workflow invocation), new nova requiring `initialize_nova`
-  (mock SFN `start_execution` + `describe_execution` poll loop), `NOT_FOUND` outcome →
+  (mock SFN `start_sync_execution` returning terminal output), `NOT_FOUND` outcome →
   `QuarantineError`, `QUARANTINED` outcome → `QuarantineError`, SFN failure →
   `TerminalError`.
 
@@ -881,7 +882,7 @@ project knowledge documents to reference, and the acceptance criteria.
 
 *Acceptance criteria:*
 - Passes `mypy --strict` and `ruff check`
-- Poll loop uses 2-second interval with configurable max attempts
+- `StartSyncExecution` used for `initialize_nova` invocation (Express Workflow)
 - `QuarantineError` and `TerminalError` raised from `nova_common.errors`
 - No modifications to `initialize_nova` or any existing handler
 
@@ -966,8 +967,7 @@ project knowledge documents to reference, and the acceptance criteria.
 
 *Environment variables required:*
 - `NOVACAT_TABLE_NAME` — main NovaCat DynamoDB table
-- `PUBLIC_BUCKET_NAME` — S3 bucket for FITS uploads (or private bucket, depending on
-  publication gate design)
+- `NOVA_CAT_PUBLIC_SITE_BUCKET` — S3 bucket for FITS uploads
 
 *Acceptance criteria:*
 - Passes `mypy --strict` and `ruff check`
@@ -993,9 +993,9 @@ project knowledge documents to reference, and the acceptance criteria.
   (`ticket_parser`, `nova_resolver_ticket`, `ticket_ingestor`). Note:
   `ticket_ingestor` must be container-based (astropy dependency).
 - CDK additions to `infra/nova_constructs/workflows.py` — `ingest_ticket` state
-  machine construct with substitutions for all Lambda ARNs. IAM grants for
-  `sfn:StartExecution` and `sfn:DescribeExecution` on the `initialize_nova` state
-  machine (for `nova_resolver_ticket`).
+  machine construct with substitutions for all Lambda ARNs. IAM grant for
+  `sfn:StartSyncExecution` on the `initialize_nova` state machine (for
+  `nova_resolver_ticket`).
 - CDK additions to `infra/nova_constructs/storage.py` — dedicated photometry DynamoDB
   table (if not already provisioned by a preceding epic).
 - `tests/integration/test_ingest_ticket_integration.py` — Integration test executing

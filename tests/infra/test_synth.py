@@ -262,6 +262,8 @@ _ZIP_FUNCTIONS: dict[str, dict[str, int]] = {
     "nova-cat-photometry-ingestor": {"memory": 512, "timeout": 300},
     "nova-cat-quarantine-handler": {"memory": 256, "timeout": 30},
     "nova-cat-name-reconciler": {"memory": 256, "timeout": 90},
+    "nova-cat-ticket-parser": {"memory": 256, "timeout": 30},
+    "nova-cat-nova-resolver-ticket": {"memory": 256, "timeout": 120},
 }
 
 # Container-bundled functions — PackageType: Image, no Runtime, no layer.
@@ -270,6 +272,7 @@ _DOCKER_FUNCTIONS: dict[str, dict[str, int]] = {
     "nova-cat-archive-resolver": {"memory": 256, "timeout": 90},
     "nova-cat-spectra-discoverer": {"memory": 256, "timeout": 60},
     "nova-cat-spectra-validator": {"memory": 512, "timeout": 300},
+    "nova-cat-ticket-ingestor": {"memory": 512, "timeout": 600},
 }
 
 # Combined — used for tests that apply equally to both packaging types.
@@ -286,7 +289,7 @@ _REQUIRED_ENV_VARS = {
 
 
 class TestLambda:
-    def test_all_twelve_functions_exist(self, template: assertions.Template) -> None:
+    def test_all_fifteen_functions_exist(self, template: assertions.Template) -> None:
         functions = template.find_resources("AWS::Lambda::Function")
         function_names = {
             props.get("Properties", {}).get("FunctionName") for props in functions.values()
@@ -395,6 +398,9 @@ class TestOutputs:
             "*", {"Export": {"Name": "NovaCat-AcquireAndValidateSpectraStateMachineArn"}}
         )
 
+    def test_ingest_ticket_output_exists(self, template: assertions.Template) -> None:
+        template.has_output("*", {"Export": {"Name": "NovaCat-IngestTicketStateMachineArn"}})
+
 
 # ---------------------------------------------------------------------------
 # Step Functions
@@ -406,6 +412,7 @@ _EXPECTED_STATE_MACHINES = [
     "nova-cat-refresh-references",
     "nova-cat-discover-spectra-products",
     "nova-cat-acquire-and-validate-spectra",
+    "nova-cat-ingest-ticket",
 ]
 
 

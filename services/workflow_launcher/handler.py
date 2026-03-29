@@ -16,7 +16,7 @@ Design notes:
     they need from DynamoDB rather than receiving it in the continuation payload.
   - For PublishAcquireAndValidateSpectraRequests, sfn:StartExecution is called
     once per product in a Python loop. All N executions are non-blocking and run
-    in parallel as independent Standard Workflow state machines — no SNS/SQS fan-out
+    in parallel as independent Express Workflow state machines — no SNS/SQS fan-out
     is required.
   - Execution names:
       Single-product workflows: "<nova_id>-<job_run_id[:8]>" (45 chars)
@@ -148,7 +148,7 @@ def _publish_acquire_and_validate_spectra_requests(
     Start one acquire_and_validate_spectra execution per newly eligible data_product_id.
 
     sfn:StartExecution is non-blocking — all N executions are dispatched in a
-    Python loop and run in parallel as independent Standard Workflow state machines.
+    Python loop and run in parallel as independent Express Workflow state machines.
     No SNS/SQS fan-out is required.
 
     Each execution receives a minimal continuation event containing the fields

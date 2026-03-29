@@ -366,10 +366,11 @@ entirely for that file.
 2. Extract all distinct name values from that column
 3. **Batch DynamoDB check:** query the existing nova table for all distinct names in
    one batch. Names that match existing records → `nova_id` resolved immediately.
-4. **Unknown names:** for each name with no DynamoDB match, fire one
-   `initialize_nova` execution (Express SFn) via `sfn.start_execution()`
-5. **Poll** `describe_execution()` until all `initialize_nova` executions complete.
-   Executions are fired in parallel; polling continues until all reach a terminal state.
+4. **Unknown names:** for each name with no DynamoDB match, invoke
+   `initialize_nova` (Express SFn) synchronously via `sfn.start_sync_execution()`.
+   Each call blocks until the execution completes and returns the result inline
+5. **Collect results** from each `start_sync_execution` response.
+   Invocations are issued in sequence; each returns synchronously upon completion.
 6. **`CREATED_AND_LAUNCHED`** outcome → fetch `nova_id` from DynamoDB; proceed.
 7. **`NOT_FOUND`** outcome → rows for that name are quarantined with reason code
    `UNRESOLVABLE_OBJECT_NAME`. Other names' rows are unaffected.
