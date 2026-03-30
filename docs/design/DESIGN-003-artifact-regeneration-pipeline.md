@@ -2059,13 +2059,428 @@ and by the photometry FITS table construction here).
 
 ## 11. Artifact Generation: catalog.json
 
-_To be designed._
+### 11.1 Purpose
+
+`catalog.json` is the single global artifact consumed by the homepage stats bar, the
+catalog table, and the search page. Unlike every other artifact in the pipeline, it is
+not scoped to a single nova — it carries a summary record for every ACTIVE nova in the
+catalog and aggregate statistics across the entire dataset.
+
+catalog.json is generated once per sweep, after all per-nova artifacts have been
+processed. It is the last artifact the Fargate task produces before exiting (§4.4,
+step 4). Because it must include every ACTIVE nova — not just those in the current
+sweep batch — it reads from both in-process state and DynamoDB.
+
+### 11.2 Input Sources
+
+The generator draws from two sources: the Fargate task's in-memory state for novae
+processed in the current sweep, and a DynamoDB Scan for all remaining ACTIVE novae.
+
+**In-memory sweep results.**
+
+As the Fargate task processes each nova sequentially, it accumulates a per-nova result
+record containing: `nova_id`, `spectra_count`, `photometry_count`, `references_count`,
+`has_sparkline`, and a success/failure flag. For novae that succeeded, these values are
+authoritative — they reflect what was actually published to S3 moments earlier in the
+same execution. For novae that failed, no in-memory record is usable.
+
+**Main table — DDB Scan of all Nova items with `status == "ACTIVE"`.**
+
+```
+Scan: FilterExpression: status = "ACTIVE" AND SK = "NOVA"
+```
+
+Returns all ACTIVE Nova items. Each item provides: `nova_id`, `primary_name`, `aliases`,
+`ra_deg`, `dec_deg`, `discovery_date`, `spectra_count`, `photometry_count`,
+`references_count`, `has_sparkline`.
+
+The observation counts and `has_sparkline` flag on Nova items are written by the
+Finalize Lambda (§4.5) after each successful sweep. For novae not in the current sweep,
+these values reflect their most recent successful artifact generation. For novae that
+have never been successfully swept, these fields are absent — the generator treats
+missing counts as `0` and missing `has_sparkline` as `false`.
+
+At MVP scale (<1,000 novae, ~500 bytes per item), this Scan reads approximately 500 KB
+— a handful of read capacity units completing in well under a second. The Scan is
+paginated as a matter of correctness (DynamoDB returns at most 1 MB per Scan page), but
+a single page will suffice at MVP scale.
+
+### 11.3 Record Assembly
+
+The generator merges the two input sources into a single list of nova summary records.
+The merge strategy:
+
+1. Execute the DDB Scan. Build a dict keyed by `nova_id` containing every ACTIVE Nova
+   item.
+
+2. For each nova in the dict, check whether it was in the current sweep and succeeded.
+   If yes: overlay the in-memory counts (`spectra_count`, `photometry_count`,
+   `references_count`) and `has_sparkline` onto the Nova item's data, replacing
+   whatever the DDB item carried. If no (not swept, or swept but failed): use the
+   Nova item's values as-is.
+
+3. Transform each merged record into the output schema (§11.5).
+
+This "DDB as base, in-memory as overlay" approach ensures that metadata changes
+(name corrections, alias additions, coordinate refinements, status transitions) are
+always reflected in the catalog, while observation counts for swept novae are fresh
+from the current execution.
+
+**Failed swept novae.** A nova that was in the sweep batch but whose artifact generation
+failed is treated identically to a non-swept nova — its catalog entry uses the Nova DDB
+item values, which reflect the last successful sweep. This is consistent: the failed
+nova's S3 artifacts were not updated, so the catalog entry and the live artifacts agree.
+
+**Newly ACTIVE novae never swept.** A nova that has reached ACTIVE status but has never
+been through a successful artifact generation sweep will have no observation counts or
+`has_sparkline` flag on its Nova DDB item. The generator defaults to `spectra_count: 0`,
+`photometry_count: 0`, `references_count: 0`, `has_sparkline: false`. This is correct —
+no artifacts have been published for this nova, so zero counts are truthful.
+
+**Novae that transitioned out of ACTIVE.** A nova that was QUARANTINED or DEPRECATED
+since its last successful sweep does not appear in the Scan results (the filter excludes
+non-ACTIVE items). It is silently dropped from the catalog. Its S3 artifacts remain
+but are no longer linked from the catalog — cleanup of orphaned per-nova artifacts is
+an operator concern (§15).
+
+### 11.4 Stats Block
+
+The `stats` block carries aggregate counts for the homepage stats bar. All values are
+computed during record assembly — they are sums across the final merged record list,
+not independent queries.
+
+| Field | Computation |
+|---|---|
+| `nova_count` | Length of the merged record list |
+| `spectra_count` | Sum of `spectra_count` across all records |
+| `photometry_count` | Sum of `photometry_count` across all records |
+
+These sums use the same per-nova count values that appear in the individual nova summary
+records — in-memory counts for successfully swept novae, DDB counts for all others. The
+stats block and the `novae` array are consistent by construction.
+
+`references_count` is intentionally excluded from the stats block. The homepage stats
+bar (ADR-011) displays nova count, spectra count, and photometry count — these are the
+numbers that convey the catalog's observational richness to a visitor. A global
+reference count is less meaningful (it conflates "data sources" with "data volume") and
+was not specified in the ADR-011 or ADR-014 designs.
+
+### 11.5 Output Mapping
+
+**Top-level fields:**
+
+| ADR-014 field | Source | Transformation |
+|---|---|---|
+| `schema_version` | Constant | `"1.1"` |
+| `generated_at` | Runtime | ISO 8601 UTC timestamp at generation time (shared utility) |
+| `stats` | Computed | See §11.4 |
+| `novae` | Computed | Ordered array of nova summary records |
+
+**Nova summary record fields:**
+
+| ADR-014 field | Source | Transformation |
+|---|---|---|
+| `nova_id` | Nova item `.nova_id` | Direct |
+| `primary_name` | Nova item `.primary_name` | Direct |
+| `aliases` | Nova item `.aliases` | Direct (list of strings); `[]` if absent |
+| `ra` | Nova item `.ra_deg` | Decimal degrees → `HH:MM:SS.ss` (shared utility, §5.3) |
+| `dec` | Nova item `.dec_deg` | Decimal degrees → `±DD:MM:SS.s` (shared utility, §5.3) |
+| `discovery_date` | Nova item `.discovery_date` | Direct pass-through; `None` → `null` |
+| `spectra_count` | In-memory (swept) or Nova item | Per §11.3 merge; default `0` if absent |
+| `photometry_count` | In-memory (swept) or Nova item | Per §11.3 merge; default `0` if absent |
+| `references_count` | In-memory (swept) or Nova item | Per §11.3 merge; default `0` if absent |
+| `has_sparkline` | In-memory (swept) or Nova item | Per §11.3 merge; default `false` if absent |
+
+### 11.6 Sort Order
+
+The `novae` array is sorted by `spectra_count` descending. This matches the frontend's
+default catalog table sort (ADR-012: "Default sort: Descending by spectra count"), so
+the catalog renders without a client-side re-sort on initial page load.
+
+Ties in `spectra_count` are broken by `primary_name` ascending (alphabetical). This
+ensures a deterministic, stable order — two novae with the same spectra count always
+appear in the same relative position across regenerations, which avoids visual churn
+in the catalog table.
+
+### 11.7 Edge Cases and Error Handling
+
+**DDB Scan failure.** If the Scan fails (throttling, network error), the catalog.json
+generator retries with exponential backoff (standard boto3 retry configuration). If
+retries are exhausted, catalog.json generation fails. This is a sweep-level failure —
+the Fargate task logs the error and exits. Per-nova artifacts already published to S3
+during this sweep are still valid; the Finalize Lambda writes their counts and cleans
+up their WorkItems normally. The stale catalog.json from the previous sweep remains in
+S3 and continues to serve the frontend. The next sweep will regenerate the catalog.
+
+**Zero ACTIVE novae.** If the Scan returns zero items (empty catalog), the generator
+emits a valid catalog.json with an empty `novae` array and zero-valued stats. This is
+a legitimate state during initial system setup.
+
+**Missing coordinates on an ACTIVE Nova item.** RA/DEC are required for ACTIVE novae
+(P-1, §5.8). If a Nova item is missing coordinates, this indicates a data integrity
+issue. The generator logs an error and excludes the nova from the catalog. It does not
+fail the entire catalog generation — one corrupt Nova item should not suppress all other
+novae from the catalog.
+
+**Missing `discovery_date`.** Legitimate — the reference pipeline may not have run.
+Emitted as `null`. Not an error condition.
+
+### 11.8 File Size and Performance
+
+At MVP scale (~100 novae), catalog.json is approximately 30–50 KB. At full intended
+scale (~1,000 novae), it grows to approximately 300–500 KB. Both are well within
+comfortable bounds for an initial page load asset delivered via CloudFront.
+
+The `aliases` array is the largest variable-size field per record. A nova with many
+aliases (e.g., well-studied objects with historical designations) may contribute
+500+ bytes to the catalog. This is acceptable — even with generous alias lists, the
+artifact stays under 1 MB at 1,000 novae.
+
+If the catalog eventually grows beyond 5,000 novae (unlikely for classical novae, but
+relevant if generalized to other transient classes), a paginated catalog endpoint would
+replace the single-file model. This is noted as a future generalization candidate.
+
+> **Future generalization candidate.** The single-file catalog model works for the
+> classical nova domain (~400 known Galactic novae, growing by ~10/year). A
+> generalized transient catalog covering supernovae, dwarf novae, or other classes
+> would require pagination, server-side filtering, or a search API — replacing
+> catalog.json with a query endpoint. The current architecture cleanly separates
+> catalog.json generation from per-nova artifacts, so this replacement would be
+> localized.
+
+### 11.9 ADR-014 Amendment Notes
+
+1. **`discovery_year`** — Replaced by `discovery_date` (`string | null`) on the catalog
+   nova summary record. Semantics identical to the `discovery_date` field on `nova.json`
+   (§5.7): `YYYY-MM-DD` format with the `00` convention for imprecise components;
+   `null` when no discovery date has been resolved. The frontend extracts the four-digit
+   year for display and sorting in the catalog table.
+
+2. **`discovery_date` nullability** — The field is `string | null`, consistent with
+   the nova.json amendment in §5.7.
+
+3. **Schema version** — Incremented from `"1.0"` to `"1.1"`, consistent with the
+   version bump applied to `spectra.json` (§7.8), `photometry.json` (§8.9), and
+   `nova.json` (amended by §5.7 type changes).
+
+### 11.10 Prerequisites
+
+**P-7: Finalize Lambda writeback extended to include `references_count` and
+`has_sparkline`.** The Finalize Lambda (§4.5) currently writes `spectra_count` and
+`photometry_count` to the Nova DDB item after successful artifact generation. For the
+catalog.json generator to read correct values for non-swept novae, the writeback must
+also include `references_count` (integer) and `has_sparkline` (boolean). This is a
+minor extension to the Finalize Lambda's update expression — two additional fields in
+the same `update_item` call.
+
+This prerequisite retroactively amends §4.5: the Finalize Lambda's per-nova writeback
+set is `spectra_count`, `photometry_count`, `references_count`, and `has_sparkline`.
+
 
 ---
 
 ## 12. Publication to S3
 
-_To be designed._
+### 12.1 Overview
+
+Publication is the act of writing generated artifacts from the Fargate task to S3,
+making them available for delivery to browsers via CloudFront (§13). This section
+defines the target bucket, key structure, upload mechanics, and cleanup behavior.
+
+Publication is not a separate pipeline stage — it happens inline during the Fargate
+task's per-nova processing loop (§4.4). As each artifact is generated, it is written
+to S3 immediately. catalog.json is written last, after all per-nova processing
+completes.
+
+### 12.2 Target Bucket
+
+All published artifacts are written to the **public site bucket**
+(`NovaCatStorage.public_site_bucket`). This bucket is the sole origin for the
+CloudFront distribution (§13). It is not directly accessible to browsers — all public
+access is blocked at the bucket level, and CloudFront reads from it via an Origin
+Access Control (OAC).
+
+The public site bucket's role is narrower than originally specified in s3-layout.md.
+The `releases/<release_id>/...` immutable release model described there is retired —
+it was designed for a full-site snapshot publish model that predates the incremental
+sweep pipeline. Artifacts are now written in-place at stable paths and overwritten on
+each regeneration.
+
+> **s3-layout.md update required.** The Public Site Bucket section should be updated
+> to reflect the in-place artifact model defined here, replacing the release-based
+> layout.
+
+### 12.3 Key Structure
+
+Artifact S3 keys match the ADR-014 path convention directly. No prefix wrapping
+(no `releases/`, no `data/`). The CloudFront distribution serves the bucket root,
+so S3 keys map 1:1 to URL paths.
+
+**Global artifact:**
+
+```
+catalog.json
+```
+
+**Per-nova artifacts:**
+
+```
+nova/<nova_id>/nova.json
+nova/<nova_id>/references.json
+nova/<nova_id>/spectra.json
+nova/<nova_id>/photometry.json
+nova/<nova_id>/sparkline.svg
+nova/<nova_id>/<primary-name-hyphenated>_bundle_<YYYYMMDD>.zip
+```
+
+**Bundle manifest (operational, not served to browsers):**
+
+```
+nova/<nova_id>/manifest.json
+```
+
+The `<nova_id>` path segment is the nova's stable UUID, consistent with the routing
+model (ADR-010). The `<primary-name-hyphenated>` segment in the bundle filename uses
+the hyphenated slug convention (spaces replaced with hyphens) established in ADR-014.
+
+### 12.4 Upload Mechanics
+
+Each artifact is uploaded via `s3.put_object()` with explicit metadata:
+
+| Artifact type | `Content-Type` | `Content-Disposition` |
+|---|---|---|
+| `.json` (all JSON artifacts) | `application/json` | Not set |
+| `.svg` (sparkline) | `image/svg+xml` | Not set |
+| `.zip` (bundle) | `application/zip` | `attachment; filename="<bundle_filename>"` |
+
+The `Content-Disposition` header on the bundle ZIP causes browsers to trigger a
+download dialog with the human-readable filename rather than displaying raw content
+or using the S3 key. It is not set on JSON or SVG artifacts — these are consumed
+programmatically by the frontend application, not downloaded by users.
+
+`Cache-Control` is not set at the S3 object level. Cache policy is managed entirely
+at the CloudFront layer (§13) via cache behaviors, avoiding duplicated policy that
+could drift between the two layers.
+
+**Upload order within a nova.** Artifacts are uploaded in the same dependency order
+they are generated (§4.4): `references.json` → `spectra.json` → `photometry.json` →
+`sparkline.svg` → `nova.json` → `bundle.zip`. The bundle is uploaded last because it
+may reference counts from the other generators. `nova.json` is uploaded after the data
+artifacts so that if a user navigates to the nova page mid-upload, the metadata header
+doesn't show updated counts before the corresponding data artifacts are available.
+This is a best-effort ordering, not a hard consistency guarantee — the transient
+inconsistency during sweeps is accepted (§12.7).
+
+**catalog.json upload.** Written once, after all per-nova processing is complete
+(§4.4, step 4). This is the last S3 write the Fargate task performs before exiting.
+
+### 12.5 Bundle Cleanup
+
+The bundle filename includes a `YYYYMMDD` date stamp, so each regeneration writes a
+new key. Old bundles accumulate unless explicitly deleted.
+
+The Fargate task handles cleanup inline, immediately after a successful new bundle
+upload:
+
+1. Write the new bundle ZIP to S3. Confirm the `put_object` succeeds.
+2. List objects under `nova/<nova_id>/` matching the pattern `*_bundle_*.zip`.
+3. Delete any matching objects whose key differs from the key just written.
+
+This ensures the old bundle is only removed after its replacement is confirmed in S3.
+If the new bundle write fails, the old bundle remains — the nova still has a
+downloadable bundle, just a stale one. This is consistent with the general failure
+principle: failure leaves previous state intact.
+
+The bundle manifest (`nova/<nova_id>/manifest.json`) is overwritten in-place (it has
+a stable key, not a date-stamped one), so it does not accumulate.
+
+### 12.6 S3 Bucket Configuration Updates
+
+The public site bucket requires two configuration changes from its current CDK
+definition:
+
+**Enable versioning.** Versioning provides a rollback safety net — if a sweep
+publishes a corrupt artifact, the previous version can be restored with a single
+`aws s3api get-object --version-id` command. At MVP artifact volumes, the storage
+cost of noncurrent versions is negligible (estimated $0.15–$0.40/month).
+
+**Add noncurrent version expiration.** A lifecycle rule expires noncurrent object
+versions after 7 days. This bounds the storage cost of versioning while providing a
+reasonable window for detecting and rolling back problems. The rule applies to the
+entire bucket (no prefix scoping needed — all objects in the bucket are published
+artifacts).
+
+```python
+# CDK changes to NovaCatStorage.public_site_bucket:
+versioned=True,  # Changed from False
+lifecycle_rules=[
+    s3.LifecycleRule(
+        id="ExpireNoncurrentVersions",
+        noncurrent_version_expiration=cdk.Duration.days(7),
+    ),
+    # The existing ExpireOldReleases rule (prefix "releases/") can be removed
+    # once s3-layout.md is updated and any existing release objects are cleaned up.
+],
+```
+
+**Fargate task IAM permissions.** The Fargate task's execution role requires
+`s3:PutObject`, `s3:ListBucket`, and `s3:DeleteObject` on the public site bucket.
+These are granted via the CDK construct that provisions the Fargate task definition
+(to be designed alongside the Fargate infrastructure). `s3:ListBucket` is needed for
+the bundle cleanup `list_objects_v2` call. `s3:DeleteObject` is needed for old bundle
+deletion.
+
+### 12.7 Consistency Model
+
+Artifacts are written to S3 individually as each nova completes processing. There is
+no atomic switchover mechanism. During a sweep, the system passes through a transient
+state where:
+
+- Some per-nova artifacts reflect the current sweep (freshly written).
+- Other per-nova artifacts reflect the previous sweep (not yet updated, or not in
+  this sweep's batch).
+- `catalog.json` reflects the previous sweep until the current sweep completes.
+
+This transient inconsistency is accepted at MVP scale. The inconsistency window is
+bounded by the sweep duration (minutes for a typical batch of 5–50 novae). The
+nature of the inconsistency is cosmetic — count mismatches between the catalog table
+and individual nova pages — not data corruption or broken rendering.
+
+The inconsistency is self-resolving: once `catalog.json` is written at the end of
+the sweep, all artifacts are consistent with respect to the current sweep's changes.
+Non-swept novae were already consistent (their artifacts and catalog entries both
+reflect their last successful sweep).
+
+If sweep duration grows to the point where the inconsistency window becomes
+noticeable (e.g., processing hundreds of novae), a mitigation is available without
+architectural change: write `catalog.json` twice — once at the start of the sweep
+with current DDB values (ensuring it's never more than one sweep behind), and once
+at the end with fresh in-memory values. This is a single-line change to the Fargate
+task's control flow.
+
+### 12.8 Error Handling
+
+**Per-artifact upload failure.** If `put_object` fails for a single artifact within
+a nova (e.g., `spectra.json` upload fails), the entire nova is recorded as failed in
+the Fargate task's per-nova result ledger. Artifacts that were already uploaded for
+that nova during this sweep remain in S3 alongside the previous sweep's artifacts for
+the same nova. This creates a mixed state — some artifacts from the current sweep,
+some from the previous — but the next successful sweep will overwrite all of them
+consistently. The Finalize Lambda does not update counts or delete WorkItems for
+failed novae.
+
+**catalog.json upload failure.** If the final catalog.json upload fails, the Fargate
+task logs the error and exits with a failure status. The previous catalog.json remains
+in S3 and continues serving. Per-nova artifacts written during the sweep are still
+valid — they just won't be reflected in the catalog until the next successful sweep
+writes a new catalog.json.
+
+**Bundle cleanup failure.** If the old bundle deletion fails after a successful new
+bundle write, the nova has two bundles in S3 temporarily. This is harmless — the
+frontend links to the bundle using the nova's download URL (constructed from the
+primary name and current date), not by listing S3 objects. The extra bundle
+consumes storage until the next successful sweep cleans it up.
+
 
 ---
 
