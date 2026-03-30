@@ -872,19 +872,1188 @@ FITS header `BUNIT` keyword. Backfill existing items.
 
 ## 8. Artifact Generation: photometry.json
 
-_To be designed._
+### 8.1 Purpose
+
+`photometry.json` is a per-nova file consumed exclusively by the light curve panel
+component. It carries all data required to render the multi-regime, multi-band light
+curve as defined in ADR-013, with all backend computations — upper limit suppression,
+density-preserving subsampling, per-band vertical offsets, and days-since-outburst
+derivation — pre-applied. No heavy computation is deferred to the frontend.
+
+This is the most computationally intensive per-nova artifact generator. The spectra
+generator (§7) reads pre-processed CSVs and performs only normalization; the photometry
+generator reads raw observation items from DynamoDB and applies a multi-step
+transformation pipeline before output.
+
+### 8.2 Input Sources
+
+The generator reads from DynamoDB and the band registry. Unlike the spectra generator,
+it does not read from S3 — all photometric data is stored as individual DDB items.
+
+**Dedicated photometry table — PhotometryRow items:**
+```
+Query: PK = "<nova_id>", SK begins_with "PHOT#"
+```
+
+Returns all photometric observations for the nova. Each item provides: `row_id`,
+`time_mjd`, `band_id`, `regime`, `magnitude`, `mag_err`, `flux_density`,
+`flux_density_err`, `flux_density_unit`, `is_upper_limit`, `telescope`, `instrument`,
+`observer`, `orig_catalog`, `bibcode`.
+
+The query returns items across all regimes. The generator groups them by `regime` for
+per-regime processing.
+
+**Band registry:**
+
+Loaded once per Fargate execution (not per nova). Used to look up display metadata for
+each `band_id` encountered in the observation data: `band_name` (short display label),
+`lambda_eff` (effective wavelength in Ångströms, for band ordering), and `regime`
+(cross-checked against the row's `regime` field).
+
+**Per-nova context — Outburst MJD:**
+
+The `outburst_mjd` value and `outburst_mjd_is_estimated` flag are computed by the
+Fargate per-nova loop (shared utility, §7.6) and passed to the generator. The generator
+does not compute these values itself.
+
+**Offset cache — main NovaCat table (optional read):**
+
+The generator reads cached band offset data from the main NovaCat table (§8.6) to
+avoid recomputing offsets when the underlying data has not materially changed.
+
+### 8.3 Processing Pipeline
+
+The generator processes observations in a defined sequence. Each step consumes the
+output of the previous step.
+
+1. **Load and group.** Query all `PHOT#*` items for the nova. Group by `regime`.
+   Discard any items whose `regime` is not in the set of recognized regimes
+   (`optical`, `xray`, `gamma`, `radio`). Log a warning for unrecognized regimes.
+
+2. **Resolve band display labels.** For each distinct `band_id` in the data, look up
+   the band registry entry and extract the short display label (`band_name`). If a
+   `band_id` is not found in the registry, use the `band_id` string itself as the
+   display label and log a warning. See §8.4 for collision handling.
+
+3. **Upper limit suppression** (per band within each regime). Remove non-constraining
+   upper limits per the rule defined in §8.5.
+
+4. **Density-preserving log subsampling** (per regime). Reduce each regime's
+   observation set to the configured point cap. See §8.6.
+
+5. **Band offset computation** (per regime, after subsampling). Compute or retrieve
+   cached per-band vertical offsets. See §8.7.
+
+6. **Days since outburst.** For each surviving observation:
+   `days_since_outburst = time_mjd - outburst_mjd`. When `outburst_mjd` is `null`,
+   `days_since_outburst` is `null`.
+
+7. **Assemble output.** Build the three output arrays (`regimes`, `bands`,
+   `observations`) and top-level metadata per §8.8.
+
+### 8.4 Band Display Label Resolution
+
+The artifact's `band` field on both band metadata records and observation records
+carries a short display label (e.g., `"V"`, `"B"`, `"UVW1"`) rather than the full
+two-track `band_id` (e.g., `HCT_HFOSC_Bessell_V`). The display label is the
+`band_name` field from the band registry entry.
+
+**Collision handling.** At MVP scale, the ticket-driven ingestion path uses
+unambiguous filter strings that resolve to distinct registry entries. However, it is
+architecturally possible for two distinct `band_id` values to share the same
+`band_name` (e.g., `HCT_HFOSC_Bessell_V` and `CTIO_09m_Bessell_V` could both have
+`band_name = "V"`). For MVP, such collisions are accepted: observations from both
+`band_id` values would be grouped under the same display label `"V"` in the artifact.
+This means they share a single band metadata record (including a single vertical
+offset) and render as a single trace in the plot.
+
+> **Post-MVP resolution:** When the heuristic ingestion path is operational and the
+> catalog includes data from multiple telescope systems with the same filter names,
+> this collision must be revisited. Options include qualifying the display label with
+> an instrument prefix (e.g., `"V (HFOSC)"` vs `"V (CTIO)"`), or assigning distinct
+> color tokens to differentiate same-name bands from different instruments. This is
+> noted as a future generalization candidate.
+
+### 8.5 Non-Constraining Upper Limit Suppression
+
+Upper limits that provide no observational constraint given the existing detections are
+removed from the artifact before subsampling. This prevents non-informative limits from
+consuming subsampling budget and compressing the plot's dynamic range.
+
+**Rule (uniform across all regimes):** An upper limit is suppressed if it is
+*brighter* than the brightest detection in the same band.
+
+The definition of "brighter" varies by the physical quantity used in each regime:
+
+| Regime | Quantity | "Brighter" means | Suppress if |
+|---|---|---|---|
+| `optical`, `uv`, `nir`, `mir` | magnitude | Smaller number | `ul_mag < min(detection_magnitudes)` |
+| `radio` | flux density (mJy) | Larger number | `ul_flux > max(detection_fluxes)` |
+| `xray` | count rate (cts/s) | Larger number | `ul_rate > max(detection_rates)` |
+| `gamma` | photon flux (ph/cm²/s) | Larger number | `ul_flux > max(detection_fluxes)` |
+
+The comparison is strictly per-band: an upper limit in V-band is compared only against
+V-band detections, not against detections in B or R. A band with zero detections (only
+upper limits) retains all its upper limits — there is no brightness reference to
+suppress against.
+
+Suppression is applied before subsampling so that non-constraining limits do not
+compete for the regime's point budget.
+
+### 8.6 Density-Preserving Log Subsampling
+
+When a regime's total observation count (detections + surviving upper limits across all
+bands) exceeds `MAX_POINTS_PER_REGIME`, the dataset is subsampled to the cap.
+
+`MAX_POINTS_PER_REGIME` is a configurable constant, set to **500** per ADR-013. This
+value should be validated empirically with real data once the artifact generation
+pipeline is operational. If the frontend adopts `scattergl` (WebGL-accelerated scatter
+in Plotly.js), the comfortable ceiling is significantly higher (2,000–3,000 points).
+The constant is parameterized to support adjustment without a code change.
+
+> **ADR-013 amendment candidate:** The 500-point cap was established before the full
+> scope of multi-band optical datasets was understood. A well-observed nova with 5
+> optical bands at 500 points total yields ~100 points per band — potentially
+> insufficient to capture the light curve morphology. This value should be revisited
+> in an ADR-013 amendment informed by empirical rendering performance data.
+
+**Budget allocation.** The per-regime budget is allocated proportionally across bands
+by observation count. Each band receives a share of the budget equal to its fraction of
+the regime's total observation count, with a minimum allocation of 1 point per band
+(ensuring no band is dropped entirely). Detections and surviving upper limits within a
+band share that band's allocation.
+
+**Per-band subsampling algorithm.** Within each band's allocation, the
+density-preserving log sampler operates as follows:
+
+1. Compute the time span: `t_min = min(time_mjd)`, `t_max = max(time_mjd)` across
+   the band's observations.
+2. Divide the time span into `N` log-spaced intervals, where `N` equals the band's
+   allocation. Intervals are defined in `log(t - t_min + 1)` space (the `+1` avoids
+   `log(0)` for the earliest observation).
+3. **Dynamic boundary stretching.** If any interval is empty (no observations fall
+   within it), merge it with its nearest non-empty neighbor. This ensures every
+   interval contributes at least one point to the output and prevents sparse late-epoch
+   observations from being lost.
+4. From each non-empty interval, select one representative observation. Selection
+   priority: (a) the detection closest to the interval midpoint; (b) if no detections
+   exist in the interval, the upper limit closest to the midpoint.
+5. The result is a subsampled set that preserves the temporal coverage and density
+   profile of the original data, with sparse late-epoch observations guaranteed
+   representation.
+
+**Single-band regime optimization.** When a regime contains only one band (common for
+X-ray and gamma-ray), the proportional allocation step is skipped and the full budget
+is assigned to that band.
+
+### 8.7 Band Offset Computation and Caching
+
+Per-band vertical offsets separate overlapping traces so that the light curve is
+legible when multiple bands occupy similar value ranges. Offsets are computed *after*
+subsampling, on the data as it will be displayed. This is a deliberate sequencing
+choice: offsets should reflect the rendered dataset, and computing on the full
+pre-subsampled dataset would be both wasteful and potentially misleading (the offset
+might not match what the user sees).
+
+**Algorithm specification.** The exact offset algorithm — overlap detection, density
+metric, kd-tree configuration, and offset assignment — is specified in a dedicated ADR
+(ADR-0XX, Band Offset Algorithm). This section defines the interface contract and
+caching mechanism only.
+
+**Interface contract.** The offset computation accepts the subsampled observation set
+for a single regime and returns a map of `band_display_label → vertical_offset`:
+
+- Input: list of `(time_mjd, value, band_display_label)` tuples for all observations
+  in the regime, where `value` is the regime-appropriate quantity (magnitude, flux
+  density, count rate, or photon flux).
+- Output: `dict[str, float]` mapping each band display label to its vertical offset.
+
+Constraints on the output:
+- The reference band (the band with the most observations, or the most scientifically
+  significant band by convention — V for optical) receives offset `0.0`.
+- Non-zero offsets are rounded to the nearest half-integer increment (e.g., `+0.5`,
+  `+1.0`, `+1.5`, `-0.5`).
+- If natural separation between bands is sufficient (no significant overlap), all
+  offsets are `0.0`.
+
+**Regime applicability.** Offsets are computed for all regimes, but in practice they
+are primarily relevant for the optical regime where multiple bands routinely overlap.
+X-ray, gamma, and radio regimes rarely have enough multi-band data at MVP scale to
+require offsets. The generator applies the offset algorithm uniformly; if a regime
+has only one band, the offset is trivially `0.0`.
+
+**Caching mechanism.** Offset computation is potentially expensive for dense optical
+datasets. Because the photometry artifact is regenerated whenever *any* photometry
+changes for a nova (even a single new observation in one band), a caching mechanism
+avoids unnecessary recomputation when the change does not materially affect the offset
+geometry.
+
+The cache is stored as a DynamoDB item in the **main NovaCat table**:
+
+```
+PK = "<nova_id>"
+SK = "OFFSET_CACHE#<regime>"
+```
+
+**Cached fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `band_offsets` | map | `{ band_display_label: offset_value }` — the computed offsets |
+| `band_observation_counts` | map | `{ band_display_label: count }` — per-band observation counts in the subsampled dataset used to compute these offsets |
+| `band_set_hash` | string | SHA-256 hash of the sorted band display label list — enables fast detection of band set changes |
+| `computed_at` | string | ISO 8601 UTC timestamp |
+
+**Cache invalidation heuristic.** On regeneration, after subsampling completes, the
+generator evaluates whether the cached offsets are still valid:
+
+1. **Band set check.** Compute the hash of the current sorted band display label list
+   and compare to `band_set_hash`. If different (a band was added or removed), the
+   cache is invalidated — recompute offsets.
+
+2. **Density stability check.** If the band set is unchanged, compare the current
+   per-band observation counts against `band_observation_counts`. If *any* band's
+   count has changed by more than `OFFSET_CACHE_DENSITY_THRESHOLD` (default: 20%
+   relative change, minimum absolute change of 5 points), the cache is invalidated.
+   Otherwise, the cached offsets are reused.
+
+The threshold parameters are configurable via Fargate environment variables. The 20%
+/ 5-point defaults reflect the expectation that small data additions (a few new
+observations in an already-dense band) do not materially change the overlap geometry,
+while a significant density shift (doubling a band's coverage) likely does.
+
+**Cache miss behavior.** If no cache item exists (first generation for this nova, or
+cache was manually deleted), the generator computes offsets from scratch and writes
+the cache item. This is the expected path for newly ingested novae.
+
+**Cache write.** After computing new offsets (whether due to invalidation or cache
+miss), the generator writes the cache item with `PutItem` (unconditional overwrite).
+The cache item has no TTL — it persists until overwritten or manually deleted.
+
+### 8.8 Regime-Specific Value Routing
+
+Each PhotometryRow in DDB carries multiple nullable measurement fields. The generator
+maps these to ADR-014's per-observation nullable fields based on the row's `regime`:
+
+| DDB `regime` | DDB source field | DDB error field | ADR-014 target field | ADR-014 error field |
+|---|---|---|---|---|
+| `optical`, `uv`, `nir`, `mir` | `magnitude` | `mag_err` | `magnitude` | `magnitude_error` |
+| `radio` | `flux_density` | `flux_density_err` | `flux_density` | `flux_density_error` |
+| `xray` | `flux_density` or `count_rate` | corresponding `_err` | `count_rate` | `count_rate_error` |
+| `gamma` | `flux_density` | `flux_density_err` | `photon_flux` | `photon_flux_error` |
+
+**X-ray routing.** X-ray observations may be stored with either `count_rate` or
+`flux_density` populated, depending on the source. The generator checks `count_rate`
+first; if non-null, it maps to the artifact's `count_rate` field. If `count_rate` is
+null but `flux_density` is non-null (indicating an energy flux measurement), the value
+is mapped to the artifact's `count_rate` field with a log warning noting the unit
+mismatch. This is a pragmatic MVP compromise — X-ray flux density and count rate are
+physically distinct quantities, but displaying them on a shared axis is preferable to
+dropping data. Post-MVP, the X-ray regime may need to split into sub-regimes or carry
+a per-observation unit indicator.
+
+> **Model-dependence concern.** X-ray energy flux (erg/cm²/s) is derived from count
+> rates via an energy conversion factor (ECF) that depends on an assumed spectral
+> model. Different spectral assumptions produce different flux values from the same
+> count rate data. Count rates are the directly observed quantity; flux is a derived
+> quantity with embedded modeling assumptions. For a catalog positioned as a trusted
+> reference, count rates are the safer default — this is consistent with ADR-013's
+> decision to defer energy flux conversion post-MVP.
+
+**Gamma-ray routing.** The DDB model stores gamma-ray photon flux as `flux_density`
+with `flux_density_unit = "photons/cm2/s"` (or equivalent). The generator reads
+`flux_density` and maps it to the artifact's `photon_flux` field. The unit string on
+the DDB row is not carried into the artifact — the regime's `y_axis_label`
+(`"Photon flux (ph/cm²/s)"`) provides the unit context.
+
+**Provider field.** The ADR-014 observation record carries a `provider` field. This
+is mapped from the DDB row's `orig_catalog` field (e.g., `"AAVSO"`, `"SMARTS"`). If
+`orig_catalog` is null, the generator falls back to `bibcode` if present, then
+`"unknown"`.
+
+> **Post-MVP: donor attribution.** When the data donation system is operational,
+> `provider` should map to the individual donor for donated data (using the
+> `donor_attribution` field on the PhotometryRow). This is a straightforward
+> extension to the fallback chain — `orig_catalog` → `donor_attribution` →
+> `bibcode` → `"unknown"` — but is deferred until the donation workflow is
+> implemented.
+
+### 8.9 Output Mapping
+
+**Top-level fields:**
+
+| ADR-014 field | Source | Transformation |
+|---|---|---|
+| `schema_version` | Constant | `"1.1"` (reflects `outburst_mjd_is_estimated` addition) |
+| `generated_at` | Runtime | ISO 8601 UTC timestamp (shared utility) |
+| `nova_id` | Nova context | Direct |
+| `outburst_mjd` | Per-nova context | Shared utility output; `null` if unresolved |
+| `outburst_mjd_is_estimated` | Per-nova context | Shared utility output; `true` when derived from earliest observation |
+| `regimes` | Generated | Array of regime metadata records; one per regime with data |
+| `bands` | Generated | Array of band metadata records; one per distinct band display label |
+| `observations` | Generated | Array of observation records after all processing |
+
+**Regime metadata records.** One record per regime present in the processed data. The
+generator emits only regimes that contain at least one observation after upper limit
+suppression and subsampling. Fields are populated from the regime definition constants
+(matching ADR-014 §Regime metadata record fields):
+
+| Field | Source |
+|---|---|
+| `id` | Regime identifier constant (`"optical"`, `"xray"`, `"gamma"`, `"radio"`) |
+| `label` | Display label constant (`"Optical"`, `"X-ray"`, `"Gamma-ray"`, `"Radio / Sub-mm"`) |
+| `y_axis_label` | Axis label constant (per ADR-014 table) |
+| `y_axis_inverted` | Boolean constant (per ADR-014 table) |
+| `y_axis_scale_default` | Scale constant (per ADR-014 table) |
+| `bands` | List of band display labels belonging to this regime (from processed data) |
+
+**Band metadata records.** One record per distinct band display label in the
+processed data:
+
+| ADR-014 field | Source | Transformation |
+|---|---|---|
+| `band` | Band registry `.band_name` | Short display label (§8.4) |
+| `regime` | PhotometryRow `.regime` | Direct |
+| `wavelength_eff_nm` | Band registry `.lambda_eff` | Ångströms → nm (`lambda_eff / 10.0`); `null` if registry entry has no `lambda_eff` |
+| `vertical_offset` | Offset computation / cache | Computed per §8.7; `0.0` when no offset needed |
+| `display_color_token` | Generated | `"--color-plot-band-{band_display_label}"` for optical/UV/NIR/MIR bands; `null` for X-ray bands (colored by instrument per ADR-013) |
+
+The `bands` array is sorted by `wavelength_eff_nm` ascending within each regime (bands
+with `null` effective wavelength sort to the end). This gives the frontend a natural
+ordering for the legend strip without requiring client-side sorting.
+
+> **Note on `wavelength_eff_nm`.** This field is included in the artifact for band
+> ordering and potential future tooltip enrichment. It is **not** displayed on the
+> plot at MVP — most bands will be Generic fallback registry entries with `null`
+> effective wavelength, and displaying an approximate wavelength for unresolved bands
+> would be misleading.
+
+**Observation records.** One record per observation surviving the processing pipeline:
+
+| ADR-014 field | Source | Transformation |
+|---|---|---|
+| `observation_id` | PhotometryRow `.row_id` | Direct |
+| `epoch_mjd` | PhotometryRow `.time_mjd` | Direct |
+| `days_since_outburst` | Computed | `time_mjd - outburst_mjd`; `null` if `outburst_mjd` is `null` |
+| `band` | Band display label | Resolved per §8.4 |
+| `regime` | PhotometryRow `.regime` | Direct |
+| `magnitude` | PhotometryRow | Per §8.8 routing; `null` for non-magnitude regimes |
+| `magnitude_error` | PhotometryRow | Per §8.8 routing; `null` if value is null or error not reported |
+| `flux_density` | PhotometryRow | Per §8.8 routing; `null` for non-flux regimes |
+| `flux_density_error` | PhotometryRow | Per §8.8 routing |
+| `count_rate` | PhotometryRow | Per §8.8 routing; `null` for non-X-ray regimes |
+| `count_rate_error` | PhotometryRow | Per §8.8 routing |
+| `photon_flux` | PhotometryRow | Per §8.8 routing; `null` for non-gamma regimes |
+| `photon_flux_error` | PhotometryRow | Per §8.8 routing |
+| `is_upper_limit` | PhotometryRow `.is_upper_limit` | Direct |
+| `provider` | PhotometryRow `.orig_catalog` | Fallback chain: `orig_catalog` → `bibcode` → `"unknown"` |
+| `telescope` | PhotometryRow `.telescope` | Direct; `"unknown"` if null |
+| `instrument` | PhotometryRow `.instrument` | Direct; `"unknown"` if null |
+
+The `observations` array is sorted by `regime` (in the order: optical, xray, gamma,
+radio), then by `epoch_mjd` ascending within each regime. This co-locates observations
+by regime for efficient frontend iteration when building per-tab traces, while
+maintaining chronological order within each regime.
+
+### 8.10 Photometry Count
+
+The photometry count for this nova is the total number of observation records in the
+output `observations` array — i.e., the count of observations that survived upper
+limit suppression and subsampling and were successfully mapped to the output schema.
+
+This count reflects the *published* artifact, not the raw DDB row count. It is the
+value written to `photometry_count` on `nova.json` (§5.4) and `catalog.json` (§11),
+following the "count what we publish" principle.
+
+This count is passed forward in the per-nova context for use by `nova.json` and
+`catalog.json`, consistent with the spectra count mechanism in §7.5.
+
+### 8.11 Edge Cases and Error Handling
+
+**No photometry data.** If the DDB query returns zero items, the generator emits a
+valid `photometry.json` with empty `regimes`, `bands`, and `observations` arrays and a
+`photometry_count` of 0. This is not a nova-level failure — the nova may still have
+spectra and references. The frontend renders the "No photometry available" empty state
+(ADR-013).
+
+**Unrecognized `band_id`.** If a PhotometryRow carries a `band_id` not found in the
+loaded band registry, the generator uses the raw `band_id` string as the display label
+and logs a warning. The observation is included in the artifact — data is not dropped
+due to registry gaps. The `wavelength_eff_nm` for the band record is `null` and the
+band sorts to the end of the legend.
+
+**Unrecognized `regime`.** PhotometryRows with a `regime` value not in the recognized
+set (`optical`, `uv`, `nir`, `mir`, `xray`, `gamma`, `radio`) are excluded from the
+artifact. The generator logs a warning with the `nova_id`, `row_id`, and unrecognized
+`regime` value. This should not occur with well-formed data from either ingestion path,
+but is handled defensively.
+
+**UV / NIR / MIR regime mapping.** The ADR-014 schema defines four regime tabs:
+optical, X-ray, gamma, and radio. The DDB data model supports finer-grained regimes
+(UV, NIR, MIR). For the artifact, UV, NIR, and MIR observations are grouped into the
+`optical` regime tab — they share the magnitude Y-axis and inverted orientation. The
+`regime` field on each observation record in the artifact carries the ADR-014 regime
+identifier (`"optical"`), not the DDB-level sub-regime. The band display label and
+color token distinguish UV/NIR/MIR bands from optical bands within the shared tab.
+
+> **Future generalization candidate.** When the catalog accumulates sufficient
+> non-optical photometry, dedicated UV, NIR, and MIR tabs may be warranted. This
+> would require an ADR-014 schema amendment to add regime definitions and a
+> corresponding frontend update. For well-studied novae with data across many
+> regimes, a dropdown menu (rather than a growing tab bar) may be the appropriate
+> UI pattern to avoid clutter.
+
+> **MIR boundary warning.** The MIR regime requires a working definition that has
+> not yet been established. Critically, there is a wavelength boundary in the
+> mid-infrared where the standard reporting convention transitions from magnitudes
+> to flux densities (janskys). Observations longward of this boundary cannot share
+> the magnitude Y-axis with optical/NIR data. The current MVP consolidation into
+> the `optical` tab assumes all UV/NIR/MIR data uses magnitudes; if MIR data
+> reported in janskys is ingested, it must be routed to a flux-based regime (or a
+> new MIR-specific regime) rather than the optical tab. The exact wavelength
+> boundary and routing logic are deferred to a post-MVP ADR addressing MIR
+> ingestion.
+
+**Missing measurement value.** If a PhotometryRow has all measurement fields null
+(no `magnitude`, no `flux_density`, no `count_rate`), the observation is excluded and
+a warning is logged. This indicates a data integrity issue upstream.
+
+**Single-point bands.** A band with only one observation after suppression and
+subsampling is included in the artifact. A single-point band is legitimate (e.g., a
+single Swift/UVOT observation in UVW2).
+
+**Offset cache corruption.** If the offset cache DDB item exists but cannot be
+deserialized (malformed JSON, missing fields), the generator logs a warning, discards
+the cache, and recomputes offsets from scratch.
+
+### 8.12 ADR-014 Amendment Notes
+
+1. **`outburst_mjd_is_estimated`** — New boolean field at the `photometry.json`
+   top level, consistent with the same addition to `spectra.json` (§7.8). `true` when
+   `outburst_mjd` was derived from the earliest observation rather than from a
+   literature discovery date. Schema version incremented from `"1.0"` to `"1.1"`.
+
+2. **Regime consolidation note.** The ADR-014 regime table defines four regimes
+   (optical, xray, gamma, radio). The generator maps the finer-grained DDB regimes
+   (uv, nir, mir) into the `optical` tab. This mapping is an implementation detail
+   of the generator, not a schema change — the ADR-014 regime definitions remain as
+   specified.
+
+3. **`observation_id` clarification.** The `observation_id` field is the `row_id`
+   from the dedicated photometry table's DDB item. No separate identifier is minted.
+   This parallels §7.8's clarification that `spectrum_id` is `data_product_id`.
+
+### 8.13 Prerequisites
+
+**P-6 (shared with §7): Persist `nova_type` on Nova item.** Required for the outburst
+MJD resolution shared utility (§7.6), which uses `nova_type == "recurrent"` to select
+the earliest-observation fallback. The photometry generator is a consumer of this
+shared utility. Source: SIMBAD classification via `archive_resolver` or a dedicated
+enrichment step. Value may be `null` for novae not yet classified.
+
+No prerequisites unique to the photometry generator are identified beyond what is
+already required by the shared outburst MJD utility (§7.6) and the general
+infrastructure (§4). The dedicated photometry table, PhotometryRow schema, and band
+registry are all operational from the ticket-driven ingestion pipeline (DESIGN-004).
 
 ---
 
 ## 9. Artifact Generation: sparkline.svg
 
-_To be designed._
+### 9.1 Purpose
+
+`sparkline.svg` is a per-nova pre-rendered SVG image consumed by the catalog table's
+"Light Curve" column. It provides a small, non-interactive thumbnail of the optical
+light curve — the rise, peak, and decline — giving researchers an at-a-glance sense of
+the nova's temporal evolution without navigating to the nova page.
+
+The sparkline is the simplest per-nova artifact by code volume, but it plays an
+outsized role in the catalog browsing experience: it is the only visual data element on
+the catalog page, and for many novae it will be the first thing a researcher sees.
+
+### 9.2 Input Source
+
+The sparkline generator consumes the **output of the photometry.json generator (§8)**
+within the same Fargate per-nova execution. It does not perform an independent DDB
+query.
+
+The Fargate processing order (§4.4) runs `photometry.json` before `sparkline.svg`,
+so the processed observation list is available in the in-process nova context. The
+sparkline generator receives the full set of optical-regime observations (after upper
+limit suppression and subsampling) and the associated band metadata.
+
+This design guarantees consistency between the sparkline and the light curve panel —
+if an observation was suppressed or subsampled out of `photometry.json`, it is also
+absent from the sparkline. It also avoids a redundant DDB query for data already in
+memory.
+
+### 9.3 Band Selection
+
+The sparkline renders a single photometric band, not a composite of all optical bands.
+Combining bands would produce a physically nonsensical trace (B and I magnitudes at the
+same epoch can differ by 2+ magnitudes), and the sparkline's purpose is to show *shape*,
+not *coverage*.
+
+**Selection algorithm:**
+
+1. Filter the §8 output to optical-regime observations only (including UV, NIR, and
+   MIR observations consolidated into the optical tab per §8.11).
+2. Group by band display label.
+3. If V-band exists and has ≥ `SPARKLINE_BAND_MIN_POINTS` observations (configurable,
+   default **5**), select V-band. V is the conventional reference band for nova light
+   curves — decline times (t₂, t₃), peak magnitudes, and literature comparisons are
+   almost universally reported in V.
+4. If V-band does not meet the threshold, select the band with the most observations.
+5. If no band has ≥ `SPARKLINE_BAND_MIN_POINTS` observations, relax the threshold
+   and select the best-sampled band as long as it has ≥ 2 points. The threshold
+   exists to prefer V over alternatives, not to suppress sparklines entirely.
+6. If no optical band has ≥ 2 points, no sparkline is generated (see §9.7).
+
+### 9.4 Subsampling: Largest-Triangle-Three-Buckets (LTTB)
+
+The sparkline is 90px wide. At this resolution, rendering more than ~90 data points
+provides no visual benefit — there are not enough horizontal pixels to distinguish
+additional points. The selected band's observations are subsampled to a target of
+**90 points** using the LTTB algorithm.
+
+**Algorithm overview.** LTTB (Steinarsson, 2013) is a purpose-built downsampling
+algorithm for time-series visual fidelity. It divides the data into N equal-time
+buckets and selects one point per bucket — the point that forms the largest triangle
+with the selected point from the previous bucket and the average point of the next
+bucket. This preferentially preserves peaks, troughs, and inflection points while
+thinning smooth monotonic stretches. It is O(n), single-pass, and requires no tuning
+parameters beyond the target point count.
+
+The algorithm always retains the first and last data points, guaranteeing that the
+sparkline's time span matches the full light curve.
+
+**Implementation.** The LTTB function is a pure utility:
+
+```python
+def lttb(
+    points: list[tuple[float, float]],
+    threshold: int,
+) -> list[tuple[float, float]]:
+```
+
+Input: time-ordered `(time_mjd, magnitude)` pairs. Output: subsampled list of the
+same type. If `len(points) <= threshold`, the input is returned unchanged.
+
+**Skip condition.** If the selected band has ≤ 90 observations, LTTB is skipped and
+all points are rendered directly.
+
+> **Post-MVP exploration candidate.** LTTB may be a better subsampling algorithm than
+> the density-preserving log sampler currently specified in §8.6 for the per-band
+> photometry.json subsampling. LTTB is explicitly optimized for visual fidelity —
+> for a nova with a sharp peak followed by a smooth decline, it preserves more points
+> around the peak and fewer in the tail, which is arguably the better trade for a
+> visualization artifact. Evaluating LTTB as a replacement or alternative for §8.6's
+> log sampler is deferred to post-MVP.
+
+### 9.5 Coordinate Transformation and Y-Axis Inversion
+
+The sparkline maps astronomical data coordinates to SVG pixel coordinates within a
+90×55px viewport.
+
+**Padding.** An internal padding of 4px on each side prevents the line from touching
+the SVG edges, avoiding visual clipping at peaks and troughs. The drawable area is
+therefore 82×47px (90 − 2×4 by 55 − 2×4).
+
+**X-axis (time).** Linear mapping from `[t_min, t_max]` to `[4, 86]` (pixel x range).
+
+**Y-axis (magnitude, inverted).** Magnitude is inverted: brighter (smaller number) maps
+to higher y-position on the SVG. The mapping is from `[mag_min, mag_max]` to `[4, 51]`
+(pixel y range), where `mag_min` (brightest) maps to y=4 (top) and `mag_max` (faintest)
+maps to y=51 (bottom).
+
+**Band offsets are ignored.** The sparkline renders raw magnitude values for the
+selected band. Offsets (§8.7) are designed for visual separation of overlapping
+multi-band traces on the light curve panel; they have no meaning for a single-band
+sparkline.
+
+### 9.6 SVG Rendering
+
+The SVG is constructed as a raw string in Python — no external dependencies. The
+sparkline's visual simplicity (one line, no axes, no labels, no interactivity) makes
+template-based string construction the appropriate approach.
+
+**SVG structure:**
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 90 55"
+     width="90" height="55">
+  <!-- Optional: filled area under the curve -->
+  <polygon points="..." fill="#2A7D7B" fill-opacity="0.12" />
+  <!-- Light curve line -->
+  <polyline points="..." fill="none"
+            stroke="#2A7D7B" stroke-width="1.5"
+            stroke-linejoin="round" stroke-linecap="round" />
+</svg>
+```
+
+**Line color.** The teal accent color (`#2A7D7B`, ADR-012 `--color-interactive`) is
+used for the stroke. This connects the sparkline visually to the site's interactive
+elements, reinforcing its role as a preview invitation.
+
+**Stroke width.** 1.5px — legible on both standard and Retina displays without
+dominating the table cell.
+
+**Fill under the curve.** A `<polygon>` element traces the same path as the
+`<polyline>` but closes back to the baseline (y=51, the bottom of the drawable area)
+at the first and last x-coordinates. Fill color is the same teal at 12% opacity. This
+subtle fill makes the light curve shape more immediately readable at small sizes.
+
+**Background.** Transparent. The sparkline sits in a catalog table row and must render
+cleanly against whatever background the row has (default, alternating, hover).
+
+**Stroke joins and caps.** `stroke-linejoin="round"` and `stroke-linecap="round"` for
+a smooth visual appearance at the sparkline's small scale, where sharp miters or butt
+caps would be visually distracting.
+
+> **Provisional styling.** The fill treatment (6d) and transparent background (6c) are
+> subject to visual review once real sparklines are rendered against the actual catalog
+> table. Both are trivial to adjust: removing the `<polygon>` element eliminates the
+> fill; adding a `<rect>` background element adds a solid background.
+
+### 9.7 Edge Cases and Degenerate States
+
+**No optical photometry.** If the §8 output contains no optical-regime observations
+(or no observations survive band selection), no SVG file is generated. The frontend
+renders the "No data" placeholder text per ADR-012's empty state spec. This is
+consistent with how the frontend handles other missing artifacts.
+
+**Single data point.** One observation in the selected band cannot form a line. The
+sparkline renders a single dot: a `<circle>` element centered at the point's
+transformed coordinates, radius 2px, filled with the teal accent color. This
+communicates "we have one observation" rather than "we have nothing" — a meaningful
+distinction for researchers browsing the catalog.
+
+```xml
+<circle cx="45" cy="27.5" r="2" fill="#2A7D7B" />
+```
+
+(The coordinates center the dot in the drawable area when there is only one point,
+since there is no meaningful x or y range to scale against.)
+
+**Two data points.** Two points form a valid line segment. No special handling — the
+polyline has two vertices and renders as a straight line showing the direction of
+change (brightening or fading). The fill polygon is still generated.
+
+**Identical magnitudes.** If all points in the selected band have the same magnitude
+(within floating-point tolerance), the y-range collapses. The sparkline renders a
+horizontal line centered vertically in the drawable area. The coordinate transform
+detects the zero y-range and defaults to centering.
+
+**Identical timestamps.** If all points have the same `time_mjd` (e.g., multiple
+measurements within a single night, post-subsampling), the x-range collapses. Handled
+the same way as the single-point case — render a dot at the vertical center.
+
+### 9.8 File Size and Performance
+
+The expected SVG file size is 500 bytes to 2 KB depending on point count. At catalog
+scale (hundreds of novae), the total sparkline payload for the catalog page is well
+under 1 MB. Each SVG is a self-contained, zero-computation asset that the browser
+renders natively without JavaScript, consistent with ADR-013's decision to keep the
+catalog table free of Plotly.js dependencies.
+
+### 9.9 Sparkline Count
+
+The sparkline does not contribute an observation count. Its generation (or absence) is
+a boolean signal: either the file exists or it doesn't. The frontend uses file presence
+to decide between the sparkline image and the empty state placeholder.
+
+### 9.10 Prerequisites
+
+No prerequisites unique to the sparkline generator. It consumes the §8 output
+(available in-process) and uses only the Python standard library for SVG construction.
+The LTTB algorithm is a pure utility function with no external dependencies.
+
 
 ---
 
 ## 10. Artifact Generation: bundle.zip
 
-_To be designed._
+### 10.1 Purpose
+
+`bundle.zip` is a per-nova downloadable archive containing the complete, research-grade
+data package for a nova. It is the only mechanism by which a researcher can obtain the
+full, unfiltered dataset — the web visualization artifacts (spectra.json, photometry.json)
+are subsampled and processed for display, not for analysis.
+
+The bundle is designed to be self-contained: a researcher who downloads it should be able
+to understand, use, and cite the data without navigating back to the website. This
+principle drives the inclusion of a README, structured provenance metadata, and a
+citation-ready BibTeX file alongside the scientific data.
+
+### 10.2 Input Sources
+
+The bundle generator draws from three source types. Two are consumed from in-process
+context (avoiding redundant I/O); one requires direct S3 reads.
+
+**S3 — Raw spectra FITS files (private bucket):**
+```
+raw/spectra/<nova_id>/<data_product_id>/primary.fits
+```
+
+Each validated spectrum's original FITS file, with full spectral resolution and
+original flux units. These are research-grade files — not the downsampled, normalized
+web-ready CSVs consumed by the spectra.json generator (§7). The bundle generator reads
+these directly from S3 because there is no in-process substitute.
+
+**In-process context — Full photometry dataset:**
+
+The photometry.json generator (§8) queries all `PHOT#*` items from the dedicated
+photometry table at the start of its processing pipeline (§8.3, step 1). The full,
+unfiltered query result is retained in the per-nova context after §8 completes. The
+bundle generator consumes this retained dataset, avoiding a redundant paginated DDB
+scan.
+
+This is the **complete** photometric record — no upper limit suppression, no
+subsampling, no band offsets applied. Per ADR-013: "full photometric datasets are
+available exclusively via the bundle download."
+
+**In-process context — Metadata and references:**
+
+- Nova item properties (name, aliases, coordinates, discovery date) — loaded by the
+  Fargate per-nova loop.
+- References output from the references.json generator (§6) — the structured
+  reference list, already in memory.
+- Observation counts from the spectra.json generator (§7) and photometry.json
+  generator (§8) — for the README file.
+
+### 10.3 Bundle Structure
+
+```
+GK-Per_bundle_20260317.zip
+├── README.txt
+├── GK-Per_metadata.json
+├── GK-Per_sources.json
+├── GK-Per_references.bib
+├── GK-Per_photometry.fits
+├── spectra/
+│   ├── GK-Per_spectrum_CfA_FLWO15m_FAST_46134.4471.fits
+│   ├── GK-Per_spectrum_CfA_FLWO15m_FAST_46135.6832.fits
+│   └── ...
+```
+
+> **ADR-014 amendment:** The original ADR-014 bundle structure specified a
+> `photometry/` subdirectory containing individual per-observation FITS files. This
+> is replaced by a single consolidated photometry FITS table at the bundle root
+> (Decision 3). The `references.bib` and `README.txt` files are additions not
+> present in the original ADR-014 spec.
+
+**Bundle filename convention** (unchanged from ADR-014):
+```
+<primary-name-hyphenated>_bundle_<YYYYMMDD>.zip
+```
+
+Example: `GK-Per_bundle_20260317.zip`
+
+The `YYYYMMDD` date reflects the generation date. Nova primary names are hyphenated
+(spaces replaced with hyphens) for filesystem compatibility, consistent with the
+project-wide hyphenated URL slug convention.
+
+### 10.4 Spectra Inclusion
+
+The bundle includes raw FITS files for **all VALID DataProduct items that have a
+corresponding raw FITS file in S3**. This is a broader inclusion criterion than the
+spectra.json generator (§7), which requires both a VALID DataProduct and a web-ready
+CSV. A validated spectrum whose web-ready CSV derivative is missing (a pipeline gap,
+not a data quality issue) is still included in the bundle as long as its original
+FITS file exists.
+
+**Spectra file naming** follows the ADR-014 convention:
+```
+<name>_spectrum_<provider>_<telescope>_<instrument>_<epoch_mjd>.fits
+```
+
+All five naming segments are always present. `unknown` is used as an explicit sentinel
+for missing telescope or instrument values, ensuring every segment's position is
+unambiguous and programmatically parseable. Epoch MJD is formatted to 4 decimal places.
+
+**Per-spectrum processing:**
+1. Query all SPECTRA DataProduct items for the nova
+   (`PK = "<nova_id>"`, `SK begins_with "PRODUCT#SPECTRA#"`,
+   `validation_status = "VALID"`).
+2. For each DataProduct, attempt to read the raw FITS file from S3.
+3. If the FITS file exists, add it to the ZIP under `spectra/` with the
+   ADR-014 naming convention.
+4. If the FITS file is missing, log a warning with the `nova_id` and
+   `data_product_id`, skip the spectrum, and continue. This is not a
+   nova-level failure.
+
+### 10.5 Photometry FITS Table
+
+The bundle includes a single consolidated FITS file containing all photometric
+observations for the nova. This file conforms to the IVOA Photometry Data Model
+(PhotDM 1.1) and contains a BINTABLE extension with one row per observation.
+
+> **ADR-014 amendment:** The original spec described per-observation photometry FITS
+> files. This is replaced by a single consolidated table per nova — the conventional
+> distribution format for tabular photometric data in astronomical archives (VizieR,
+> AAVSO, CDS).
+
+**Input.** The full, unfiltered photometry dataset retained from §8's initial DDB
+query. All observations are included: no upper limit suppression, no subsampling, no
+band offsets.
+
+**Filename:** `<name>_photometry.fits`
+
+**BINTABLE columns:**
+
+| Column | FITS type | Description |
+|---|---|---|
+| `OBS_ID` | string | Observation `row_id` from DDB |
+| `TIME_MJD` | double | Observation epoch in MJD |
+| `BAND_ID` | string | NovaCat canonical band identifier (full two-track `band_id`, e.g., `HCT_HFOSC_Bessell_V`, `Generic_V`) |
+| `BAND_NAME` | string | Short display label for the band (e.g., `V`, `B`, `UVW1`). Derived from the band registry's `band_name` field. Matches the `band` field in `photometry.json`. |
+| `BAND_RES_TYPE` | string | Mechanism by which `band_id` was resolved: `canonical`, `synonym`, `generic_fallback`, or `sidecar_assertion` (per ADR-018 Decision 6) |
+| `BAND_RES_CONF` | string | Confidence of the band resolution: `high`, `medium`, or `low` (per ADR-018 Decision 6) |
+| `REGIME` | string | Wavelength regime (`optical`, `uv`, `nir`, `mir`, `xray`, `gamma`, `radio`) |
+| `MAGNITUDE` | float (nullable) | Observed magnitude; null for non-magnitude regimes |
+| `MAG_ERR` | float (nullable) | Magnitude uncertainty |
+| `FLUX_DENSITY` | float (nullable) | Flux density in regime-appropriate units |
+| `FLUX_DENSITY_ERR` | float (nullable) | Flux density uncertainty |
+| `FLUX_DENSITY_UNIT` | string (nullable) | Unit string for flux density (e.g., `mJy`, `erg/cm2/s/keV`, `photons/cm2/s`) |
+| `COUNT_RATE` | float (nullable) | Count rate in cts/s; X-ray only |
+| `COUNT_RATE_ERR` | float (nullable) | Count rate uncertainty |
+| `IS_UPPER_LIMIT` | logical | Whether this observation is a non-detection upper limit |
+| `TELESCOPE` | string | Telescope name; `unknown` if not recorded |
+| `INSTRUMENT` | string | Instrument name; `unknown` if not recorded |
+| `OBSERVER` | string (nullable) | Observer name or code |
+| `BIBCODE` | string (nullable) | ADS bibcode of the source paper |
+| `ORIG_CATALOG` | string (nullable) | Originating catalog or survey name |
+| `DATA_ORIGIN` | string | Origin of the row (`literature`, `operator_upload`, `donor_submission`) |
+| `DATA_RIGHTS` | string | Data rights/licence (`public`, `CC-BY`, etc.) |
+
+**FITS header keywords:**
+
+| Keyword | Value | Description |
+|---|---|---|
+| `EXTNAME` | `PHOTOMETRY` | BINTABLE extension name |
+| `NOVA_ID` | `<nova_id>` | NovaCat nova UUID |
+| `NOVACAT` | `<primary_name>` | Nova primary name |
+| `NOBS` | `<count>` | Total number of observations in the table |
+| `DATE` | `<generation_date>` | ISO 8601 generation timestamp |
+| `ORIGIN` | `NovaCat` | Producing system |
+
+The table preserves the full DDB-level `regime` values (including `uv`, `nir`, `mir`)
+rather than consolidating to the ADR-014 four-tab regime model. The bundle is a
+research-grade product; regime granularity is preserved for researchers who need to
+filter by sub-regime. The photometry.json artifact (§8) consolidates these for display
+purposes; the bundle does not.
+
+**FITS construction.** The generator uses `astropy.io.fits` to construct the BINTABLE
+in memory (the photometry data is already in memory from the retained §8 query result)
+and writes the resulting bytes directly into the ZIP file on disk.
+
+**Band identity columns.** The FITS table carries both the full `band_id` (e.g.,
+`HCT_HFOSC_Bessell_V`, `Generic_V`) and the short `BAND_NAME` display label (e.g.,
+`V`). The full `band_id` provides unambiguous band identity for rigorous analysis;
+the short label provides convenience for quick filtering and cross-referencing with
+the web visualization. The `BAND_RES_TYPE` and `BAND_RES_CONF` columns carry the
+band resolution provenance from the ingestion pipeline (per ADR-018 Decision 6),
+enabling researchers to assess how confidently the band was identified. A row with
+`BAND_RES_TYPE = "generic_fallback"` and `BAND_RES_CONF = "low"` signals that the
+band assignment should be treated with caution.
+
+### 10.6 Metadata File
+
+`<name>_metadata.json` contains structured nova properties. This is a lightweight
+file generated from the Nova DDB item already loaded in the per-nova context.
+
+```json
+{
+  "nova_id": "4e9b0e88-...",
+  "primary_name": "GK Per",
+  "aliases": ["Nova Persei 1901", "HD 21629"],
+  "ra": "03:31:11.82",
+  "dec": "+43:54:16.8",
+  "discovery_date": "1901-02-21",
+  "nova_type": null,
+  "spectra_count": 24,
+  "photometry_count": 1847,
+  "references_count": 12,
+  "generated_at": "2026-03-30T00:00:00Z"
+}
+```
+
+Coordinates are formatted in sexagesimal (HH:MM:SS.ss / ±DD:MM:SS.s) using the same
+shared utility as nova.json (§5). Observation counts are the *bundle* counts — spectra
+count is the number of FITS files successfully included in the `spectra/` directory,
+photometry count is the total row count in the photometry FITS table. These may differ
+from the web artifact counts (which reflect subsampled/filtered data).
+
+### 10.7 Provenance File
+
+`<name>_sources.json` contains provenance records for all data in the bundle,
+enabling a researcher to trace each measurement back to its original source.
+
+The file contains two sections: one for spectra and one for photometry.
+
+```json
+{
+  "nova_id": "4e9b0e88-...",
+  "generated_at": "2026-03-30T00:00:00Z",
+  "spectra": [
+    {
+      "data_product_id": "7a3c...",
+      "bundle_filename": "GK-Per_spectrum_CfA_FLWO15m_FAST_46134.4471.fits",
+      "provider": "CfA",
+      "telescope": "FLWO 1.5m",
+      "instrument": "FAST",
+      "epoch_mjd": 46134.4471,
+      "bibcode": "1992AJ....104..725W",
+      "data_url": null,
+      "data_rights": "public"
+    }
+  ],
+  "photometry_sources": [
+    {
+      "bibcode": "2002MNRAS.334..699Z",
+      "orig_catalog": "SAAO",
+      "observation_count": 142,
+      "regimes": ["optical"],
+      "bands": ["V", "B", "R", "I"],
+      "data_url": "https://vizier.cds.unistra.fr/viz-bin/...",
+      "data_rights": "public"
+    }
+  ]
+}
+```
+
+**Spectra provenance** is one record per spectrum FITS file in the bundle, carrying
+the fields available on the DataProduct DDB item.
+
+**Photometry provenance** is aggregated by source (bibcode or `orig_catalog`), not
+per observation. A source that contributed 142 observations across 4 bands produces
+one provenance record with an observation count, not 142 records. This keeps the
+file manageable for novae with thousands of observations from a single survey.
+
+> **Post-MVP: donor attribution.** When the data donation system is operational,
+> provenance records for donated data will include the `donor_attribution` field
+> from the PhotometryRow. The provenance structure supports this without schema
+> changes — it is simply an additional field on the photometry source records.
+
+### 10.8 References File
+
+`<name>_references.bib` is a BibTeX file generated from the Reference DDB items
+consumed from the §6 output (already in memory).
+
+Each reference produces a minimal BibTeX entry:
+
+```bibtex
+@article{1992AJ....104..725W,
+  author  = {Williams, Robert E. and Phillips, Mark M. and Hamuy, Mario},
+  title   = {The Optical Spectra of Nova GQ Muscae from Outburst to Quiescence},
+  year    = {1992},
+  bibcode = {1992AJ....104..725W},
+  doi     = {10.1086/116269}
+}
+```
+
+**Entry construction.** The generator builds each entry from the Reference item's
+fields: `bibcode` (used as the citation key), `authors` (formatted as
+`Last, First and Last, First and ...`), `title`, `year`, and `doi`. Missing fields
+are omitted from the entry rather than emitted as empty strings. The `bibcode` field
+is non-standard BibTeX but is included as a convenience for ADS cross-referencing.
+
+**Entry type.** All entries use `@article` as the default type. The Reference DDB
+items do not carry publication type metadata, and `@article` is correct for the
+vast majority of astronomical references. A researcher who needs precise BibTeX
+types can fetch them from ADS using the bibcodes.
+
+**No ADS runtime dependency.** The BibTeX file is generated entirely from data
+already in the NovaCat database. No ADS API calls are made during bundle generation.
+The entries are intentionally minimal — sufficient for citation and lookup, not a
+substitute for the full ADS BibTeX export. The README directs researchers to ADS for
+complete bibliographic records.
+
+### 10.9 README File
+
+`README.txt` is a human-readable text file generated from a template with
+nova-specific values interpolated. It makes the bundle self-documenting.
+
+**Contents:**
+
+1. **Nova identity.** Primary name, aliases, coordinates (RA/Dec in sexagesimal),
+   discovery date.
+
+2. **Bundle generation date** and NovaCat version identifier.
+
+3. **File inventory.** A listing of every file in the bundle with a one-line
+   description of each.
+
+4. **Format descriptions:**
+   - Spectra FITS files: IVOA Spectrum DM v1.2 compliance, BINTABLE structure,
+     wavelength/flux column names, unit conventions, header keyword reference.
+   - Photometry FITS table: IVOA PhotDM 1.1 compliance, column definitions,
+     regime and band_id conventions, upper limit flag semantics, nullable field
+     conventions.
+   - `_metadata.json`: field descriptions.
+   - `_sources.json`: provenance record structure.
+
+5. **Citation guidance.** "If you use data from this bundle in a publication,
+   please cite the original data sources listed in `<name>_references.bib`.
+   We also ask that you cite the Open Nova Catalog itself:
+   [citation format TBD]."
+
+6. **Link to the nova's page** on the catalog website:
+   `https://aws-nova-cat.vercel.app/nova/<identifier>`
+
+7. **Contact.** How to report issues or contribute data.
+
+The README is plain text (not Markdown) for maximum compatibility — every operating
+system can open a `.txt` file without additional software.
+
+### 10.10 Assembly and S3 Upload
+
+The bundle is assembled by streaming files to a ZIP archive on Fargate's ephemeral
+disk (`/tmp`), then uploading the completed ZIP to S3. This approach bounds memory
+usage regardless of bundle size — each file is written to the ZIP and released from
+memory before the next file is fetched.
+
+**Assembly sequence:**
+
+1. Create a `zipfile.ZipFile` in write mode targeting a temporary file path on
+   `/tmp`.
+2. Generate and write `README.txt` (small, generated from template).
+3. Generate and write `<name>_metadata.json` (small, generated from Nova item).
+4. Generate and write `<name>_sources.json` (small to moderate, generated from
+   DataProduct items and aggregated photometry provenance).
+5. Generate and write `<name>_references.bib` (small, generated from §6 output).
+6. Generate the photometry FITS table from the retained §8 query result and write
+   it to the ZIP. The FITS bytes are constructed in memory via `astropy.io.fits`
+   and written to the ZIP in one step — no intermediate disk file.
+7. For each VALID spectra DataProduct:
+   a. Fetch the raw FITS file from S3.
+   b. Write it to the ZIP under `spectra/` with the ADR-014 naming convention.
+   c. Release the FITS bytes from memory.
+   d. If the S3 fetch fails, log a warning and continue.
+8. Close the ZIP file.
+9. Upload the completed ZIP to S3:
+   ```
+   bundles/<nova_id>/full.zip
+   ```
+10. Optionally, generate and upload the manifest (see §10.11).
+
+**Error handling during assembly.** Per-file errors (missing FITS, corrupt data) are
+logged and skipped. The bundle is still generated with whatever files succeed. A
+bundle with zero spectra (all FITS files missing) is still valid if it contains
+photometry. A bundle with zero photometry (no observations) is still valid if it
+contains spectra. A bundle with neither produces only metadata files — this is an
+edge case that indicates a data pipeline problem but does not warrant failing the
+nova entirely.
+
+### 10.11 Bundle Manifest
+
+The s3-layout.md specifies a `manifest.json` alongside `full.zip`:
+
+```
+bundles/<nova_id>/full.zip
+bundles/<nova_id>/manifest.json
+```
+
+The manifest records what is in the bundle for operational auditability without
+requiring the ZIP to be opened:
+
+```json
+{
+  "nova_id": "4e9b0e88-...",
+  "primary_name": "GK Per",
+  "bundle_build_id": "<uuid>",
+  "generated_at": "2026-03-30T00:00:00Z",
+  "spectra_count": 24,
+  "spectra_data_product_ids": ["7a3c...", "8b4d...", "..."],
+  "spectra_skipped": 1,
+  "photometry_row_count": 1847,
+  "references_count": 12,
+  "bundle_size_bytes": 15234567,
+  "files": [
+    "README.txt",
+    "GK-Per_metadata.json",
+    "GK-Per_sources.json",
+    "GK-Per_references.bib",
+    "GK-Per_photometry.fits",
+    "spectra/GK-Per_spectrum_CfA_FLWO15m_FAST_46134.4471.fits",
+    "..."
+  ]
+}
+```
+
+The `spectra_skipped` field records how many VALID DataProducts had missing FITS
+files — an operational signal for the data integrity audit (OQ-6).
+
+### 10.12 Bundle Count
+
+The bundle does not contribute a distinct observation count to `nova.json` or
+`catalog.json`. Its spectra and photometry counts are recorded in the bundle
+manifest (§10.11) and the `_metadata.json` file within the bundle, but these are
+self-contained — they are not surfaced in the web artifacts.
+
+The bundle's spectra count may differ from spectra.json's count (the bundle includes
+all VALID spectra with FITS files; spectra.json includes only those with web-ready
+CSVs). The bundle's photometry count will always be ≥ photometry.json's count (the
+bundle is unfiltered; photometry.json is subsampled and suppressed).
+
+### 10.13 Edge Cases and Error Handling
+
+**No spectra and no photometry.** If the nova has neither spectra FITS files in S3
+nor photometry rows in DDB, the generator produces a bundle containing only metadata
+files (README, metadata JSON, sources JSON, references BibTeX). This is an edge case
+indicating a pipeline problem (a WorkItem was created but no data exists), not a
+nova-level failure. The bundle is still valid and uploadable.
+
+**All spectra FITS files missing.** The bundle is generated without a `spectra/`
+directory. The README and manifest reflect the absence. The `spectra_skipped` count
+in the manifest signals the gap for operational attention.
+
+**Empty photometry dataset.** If the retained §8 query result contains zero rows,
+no photometry FITS file is generated. The bundle omits `<name>_photometry.fits`
+entirely rather than producing an empty FITS file.
+
+**Very large bundles.** A nova with 100+ spectra and thousands of photometry rows
+could produce a bundle exceeding 500 MB. The streaming-to-disk approach (§10.10)
+handles this within Fargate's ephemeral storage limit (20 GB default). No per-bundle
+size limit is imposed at MVP — the Fargate task's ephemeral disk is the ceiling. If
+bundles approach this limit (unlikely at MVP scale), a per-nova size warning can be
+added to the coordinator's stale-item check.
+
+**S3 upload failure.** If the final ZIP upload to S3 fails, the bundle generation for
+this nova is recorded as a failure in the Fargate task's per-nova result ledger. The
+nova's WorkItems are retained for the next sweep. The temporary ZIP file on disk is
+cleaned up by the Fargate task's per-nova cleanup routine.
+
+### 10.14 ADR-014 Amendment Notes
+
+1. **Photometry bundle format.** Per-observation photometry FITS files are replaced
+   by a single consolidated FITS table per nova. The `photometry/` subdirectory is
+   removed from the bundle structure. The photometry naming convention changes from
+   `<name>_photometry_<provider>_<telescope>_<instrument>_<epoch>.fits` to
+   `<name>_photometry.fits`.
+
+2. **New bundle files.** `README.txt` and `<name>_references.bib` are added to the
+   bundle contents. This resolves ADR-014 Open Question 1 (references in the bundle).
+
+3. **Bundle band columns.** The photometry FITS table carries both `BAND_ID` (full
+   two-track `band_id` from ADR-017) and `BAND_NAME` (short display label), plus
+   band resolution provenance columns (`BAND_RES_TYPE`, `BAND_RES_CONF`) from the
+   ingestion pipeline. This is richer than the `photometry.json` artifact, which
+   carries only the short display label. The bundle is the authoritative data
+   product; researchers need both the precise identity and the confidence of the
+   resolution to make informed decisions about their analysis.
+
+### 10.15 Prerequisites
+
+No prerequisites unique to the bundle generator beyond what is already required by
+the upstream generators (§§6–8) and the general infrastructure (§4). The raw spectra
+FITS files in S3 and the PhotometryRow items in DDB are both produced by the existing
+ingestion pipelines (ticket-driven and spectra acquisition).
+
+The `astropy.io.fits` dependency is already present in the Fargate task's runtime
+environment (required by the spectra.json generator for potential FITS header reads
+and by the photometry FITS table construction here).
 
 ---
 
