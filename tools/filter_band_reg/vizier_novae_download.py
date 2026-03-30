@@ -12,7 +12,25 @@ Each catalog's tables are saved in two forms:
 A catalog_manifest.csv is also written summarizing every downloaded table
 (catalog name, table name, title, description, number of rows/columns).
 
+Filename convention
+-------------------
+  Catalog slashes become underscores; all other characters (including '+')
+  are preserved.  The 0-based table index follows a double-underscore:
+
+    J/A+A/452/567  table 0  →  J_A+A_452_567__0.vot
+    J/AJ/153/238   table 2  →  J_AJ_153_238__2.vot
+    B/cb           table 1  →  B_cb__1.vot
+
+  To reverse: split on "__" for the table index, then replace "_" with "/"
+  in the catalog portion.  The "+" in journal names like "A+A" survives the
+  round-trip because it is never replaced.
+
 Usage:
+
+python vizier_novae_download.py \
+    --from-manifest ./vizier_data/catalog_manifest.csv \
+    --outdir ./vizier_data
+
     # Search + download all matches (default keywords: Novae Optical)
     python vizier_novae_download.py
 
@@ -21,6 +39,12 @@ Usage:
 
     # Download specific catalogs by name (skip search)
     python vizier_novae_download.py --catalogs J/A+A/612/A37 J/MNRAS/789/012
+
+    # Re-download from an existing manifest (fixes truncated tables)
+    python vizier_novae_download.py --from-manifest ./vizier_data/catalog_manifest.csv
+
+    # Verify existing downloads — report which tables look truncated
+    python vizier_novae_download.py --verify ./vizier_data
 
     # Custom keywords
     python vizier_novae_download.py --keywords Novae photometry
@@ -37,13 +61,19 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import re
 import sys
 from pathlib import Path
 
-from astropy.io.votable import from_table
+from astropy.io.votable import from_table, parse_single_table
 from astropy.io.votable import writeto as write_votable
 from astroquery.vizier import Vizier
+
+# ============================================================
+# Common row-count thresholds that indicate truncation.
+# astroquery defaults to 50; VizieR web defaults to 200.
+# ============================================================
+
+SUSPECT_ROW_COUNTS = {50, 100, 200, 500, 1000}
 
 
 def search_catalogs(
@@ -79,9 +109,21 @@ def print_catalog_list(catalogs: dict[str, str]) -> None:
         print(f"{i:<4} {name:<25} {title_display}")
 
 
-def sanitize_filename(name: str) -> str:
-    """Turn a VizieR catalog/table name into a safe filename."""
-    return re.sub(r"[^\w\-.]", "_", name)
+def sanitize_filename(catalog_name: str) -> str:
+    """
+    Turn a VizieR catalog name into a safe filename base.
+
+    ONLY replaces slashes with underscores.  All other characters
+    (including '+' in journal names like 'A+A') are preserved so the
+    mapping is reversible:
+
+        J/A+A/452/567  →  J_A+A_452_567
+        reverse:           J_A+A_452_567.replace("_", "/")  →  J/A+A/452/567
+
+    This is critical for build_metadata_table.py's parse_votable_filename()
+    to correctly reconstruct the catalog name from the filename.
+    """
+    return catalog_name.replace("/", "_")
 
 
 def make_meta_serializable(meta: dict) -> dict:
@@ -199,6 +241,138 @@ def write_manifest(manifest: list[dict], outdir: Path) -> None:
     print(f"\nManifest written to {manifest_path}")
 
 
+# ============================================================
+# Re-download from existing manifest
+# ============================================================
+
+
+def load_manifest(manifest_path: Path) -> list[dict]:
+    """Load an existing catalog_manifest.csv."""
+    rows = []
+    with open(manifest_path, newline="", encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            rows.append(row)
+    return rows
+
+
+def redownload_from_manifest(
+    manifest_path: Path,
+    outdir: Path,
+    row_limit: int = -1,
+) -> list[dict]:
+    """
+    Re-download all catalogs listed in an existing manifest.
+
+    Extracts the unique catalog names from the manifest and downloads
+    them fresh with the specified row_limit (default: unlimited).
+    Existing files in outdir are overwritten.
+    """
+    old_manifest = load_manifest(manifest_path)
+    catalog_names = list(dict.fromkeys(row["catalog"] for row in old_manifest))
+
+    print(f"Re-downloading {len(catalog_names)} catalog(s) from manifest ...")
+    print(f"  (row_limit={row_limit})\n")
+
+    # Show before/after comparison for each table
+    old_rows_by_file: dict[str, int] = {}
+    for row in old_manifest:
+        vot_file = row.get("vot_file", "")
+        try:
+            old_rows_by_file[vot_file] = int(row.get("rows", 0))
+        except (ValueError, TypeError):
+            pass
+
+    new_manifest = download_catalogs(catalog_names, outdir, row_limit)
+
+    # Print comparison
+    print("\n" + "=" * 70)
+    print("Before/after row counts:")
+    print(f"  {'File':<40} {'Old':>8} {'New':>8} {'Delta':>8}")
+    print("  " + "-" * 66)
+
+    changed = 0
+    for entry in new_manifest:
+        vot_file = entry["vot_file"]
+        new_rows = entry["rows"]
+        old_rows = old_rows_by_file.get(vot_file)
+
+        if old_rows is not None:
+            delta = new_rows - old_rows
+            marker = " ***" if delta != 0 else ""
+            if delta != 0:
+                changed += 1
+            print(f"  {vot_file:<40} {old_rows:>8} {new_rows:>8} {delta:>+8}{marker}")
+        else:
+            print(f"  {vot_file:<40} {'new':>8} {new_rows:>8}")
+
+    print(f"\n  {changed} table(s) had different row counts.")
+
+    return new_manifest
+
+
+# ============================================================
+# Verify existing downloads for truncation
+# ============================================================
+
+
+def verify_downloads(votable_dir: Path) -> None:
+    """
+    Scan a directory of .vot files and flag tables that may be truncated.
+
+    A table is flagged as suspect if its row count exactly matches a common
+    default limit (50, 100, 200, 500, 1000).
+    """
+    vot_files = sorted(votable_dir.glob("*.vot"))
+
+    if not vot_files:
+        print(f"No .vot files found in {votable_dir}")
+        return
+
+    print(f"Verifying {len(vot_files)} VOTable files in {votable_dir}\n")
+    print(f"  {'File':<45} {'Rows':>8} {'Status'}")
+    print("  " + "-" * 70)
+
+    suspect = []
+    ok = 0
+    errors = 0
+
+    for vot_path in vot_files:
+        try:
+            table = parse_single_table(vot_path)
+            nrows = len(table.array) if table.array is not None else 0
+
+            if nrows in SUSPECT_ROW_COUNTS:
+                status = f"SUSPECT (exactly {nrows} — possible truncation)"
+                suspect.append((vot_path.name, nrows))
+            else:
+                status = "ok"
+                ok += 1
+
+            print(f"  {vot_path.name:<45} {nrows:>8} {status}")
+
+        except Exception as exc:
+            errors += 1
+            print(f"  {vot_path.name:<45} {'ERROR':>8} {exc}")
+
+    print(f"\n  OK: {ok}  |  Suspect: {len(suspect)}  |  Errors: {errors}")
+
+    if suspect:
+        print("\n  Suspect tables (row count matches a common default limit):")
+        for name, nrows in suspect:
+            print(f"    {name}: {nrows} rows")
+        print(
+            f"\n  These tables may have been downloaded with a row limit."
+            f"\n  Re-download with: python {sys.argv[0]} "
+            f"--from-manifest {votable_dir / 'catalog_manifest.csv'}"
+        )
+
+
+# ============================================================
+# CLI
+# ============================================================
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Search VizieR for catalogs by keyword and download them."
@@ -216,6 +390,25 @@ def main() -> None:
         nargs="+",
         default=None,
         help="Skip search; download these specific catalog names directly.",
+    )
+    parser.add_argument(
+        "--from-manifest",
+        type=Path,
+        default=None,
+        metavar="CSV",
+        help=(
+            "Re-download all catalogs listed in an existing manifest CSV. "
+            "Use this to fix truncated tables by re-fetching with row_limit=-1."
+        ),
+    )
+    parser.add_argument(
+        "--verify",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help=(
+            "Verify existing .vot files in DIR for possible truncation. Does not download anything."
+        ),
     )
     parser.add_argument(
         "--search-only",
@@ -243,6 +436,20 @@ def main() -> None:
         help="Max catalogs returned by search (default: 500)",
     )
     args = parser.parse_args()
+
+    # --- Verify mode (no downloads) ---
+    if args.verify:
+        verify_downloads(args.verify)
+        return
+
+    # --- Re-download from manifest mode ---
+    if args.from_manifest:
+        if not args.from_manifest.exists():
+            print(f"Error: manifest not found: {args.from_manifest}")
+            sys.exit(1)
+        manifest = redownload_from_manifest(args.from_manifest, args.outdir, args.row_limit)
+        write_manifest(manifest, args.outdir)
+        return
 
     # --- Direct download mode (skip search) ---
     if args.catalogs:
