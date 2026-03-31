@@ -3,6 +3,18 @@
 Status: Proposed
 Date: 2026-03-17
 
+> **⚠ Amended by ADR-031** (2026-03-31)
+> ADR-031 (Data Layer Readiness for Artifact Generation) amends this ADR as follows:
+>
+> - **Decision 8:** The sparkline band selection is no longer "V-band only." DESIGN-003
+>   §9.3 defines a ranked fallback algorithm that prefers V-band but selects the
+>   best-sampled optical band when V-band data is absent or insufficient. The sparkline
+>   specification table below is updated accordingly.
+> - **Decision 9:** Open Question 5 (recurrent nova outburst selection) is resolved by
+>   DESIGN-003 §7.6. See the Open Questions section below.
+>
+> See: `docs/adr/ADR-031-data-layer-readiness-for-artifact-generation.md`
+
 ---
 
 ## Context
@@ -554,7 +566,7 @@ rendered by a client-side component.
 |---|---|
 | Format | SVG |
 | Dimensions | 90 × 55 pixels |
-| Photometric band | V-band only |
+| Photometric band | V-band preferred; falls back to best-sampled optical band (see DESIGN-003 §9.3) |
 | Background | Transparent |
 | Axis labels | Minimal scale labels at the extremes of both axes (first/last x-axis value; min/max y-axis value) |
 | Axis label implementation | Conditional on visual review during implementation — labels must not obscure the light curve shape at this size; if they do, they should be dropped without requiring an ADR amendment |
@@ -704,11 +716,12 @@ potentially mismatched data.
    finalized per ADR-013 Open Question 7. Token finalization should occur during the
    frontend implementation phase.
 
-5. **Recurrent nova outburst selection:** For recurrent novae with multiple recorded
-   outbursts, the strategy for selecting the reference `outburst_mjd` is not defined here.
-   This is a backend data modeling decision that should be addressed in a dedicated ADR or
-   backend responsibilities document before the photometry and spectra artifact generation
-   pipelines are implemented.
+5. ~~**Recurrent nova outburst selection:**~~ **Resolved by DESIGN-003 §7.6.** Recurrent
+   novae always use the earliest-observation fallback regardless of `discovery_date`, and
+   always set `outburst_mjd_is_estimated = true`. The `discovery_date` for a recurrent
+   nova typically refers to the earliest known outburst (potentially centuries ago), which
+   is not a meaningful reference for DPO computation. Full outburst segmentation is
+   deferred to a post-MVP ADR.
 
 ---
 
