@@ -56,6 +56,7 @@ from nova_common.errors import TerminalError
 from nova_common.file_io import resolve_dir
 from nova_common.logging import configure_logging, logger
 from nova_common.tracing import tracer
+from nova_common.work_item import DirtyType, write_work_item
 
 # ---------------------------------------------------------------------------
 # Band registry — loaded once at module initialisation.
@@ -227,6 +228,17 @@ def _ingest_photometry(event: dict[str, Any]) -> dict[str, Any]:
         table=_TABLE,
     )
 
+    # --- ADR-031 Decision 7: WorkItem for the regeneration pipeline ---
+    if result.rows:
+        write_work_item(
+            _TABLE,
+            nova_id=str(nova_id),
+            dirty_type=DirtyType.photometry,
+            source_workflow="ingest_ticket",
+            job_run_id=str(event.get("job_run_id", "unknown")),
+            correlation_id=str(event.get("correlation_id", "unknown")),
+        )
+
     return {
         "rows_produced": len(result.rows),
         "failures": len(result.failures),
@@ -328,6 +340,7 @@ def _ingest_spectra(event: dict[str, Any]) -> dict[str, Any]:
                 bucket=_PUBLIC_BUCKET_NAME,
                 s3=_s3,
                 table=_TABLE,
+                private_bucket=_PRIVATE_BUCKET,
             )
             spectra_ingested += 1
         except Exception as exc:  # noqa: BLE001
@@ -350,6 +363,17 @@ def _ingest_spectra(event: dict[str, Any]) -> dict[str, Any]:
             "spectra_failed": write_failures,
         },
     )
+
+    # --- ADR-031 Decision 7: WorkItem for the regeneration pipeline ---
+    if spectra_ingested > 0:
+        write_work_item(
+            _TABLE,
+            nova_id=str(nova_id),
+            dirty_type=DirtyType.spectra,
+            source_workflow="ingest_ticket",
+            job_run_id=str(event.get("job_run_id", "unknown")),
+            correlation_id=str(event.get("correlation_id", "unknown")),
+        )
 
     return {
         "spectra_ingested": spectra_ingested,

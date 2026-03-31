@@ -49,6 +49,7 @@ import boto3
 import numpy as np
 import pytest
 from astropy.io import fits
+from boto3.dynamodb.conditions import Key
 from moto import mock_aws
 
 # ---------------------------------------------------------------------------
@@ -525,6 +526,20 @@ class TestHappyPathValid:
         assert dp is not None
         assert dp["validation_status"] == "VALID"
         assert dp["fits_profile_id"] == "ESO_UVES"
+
+        # ADR-031 Decision 7: WorkItem written for the regeneration pipeline
+        wq_resp = table.query(
+            KeyConditionExpression=(
+                Key("PK").eq("WORKQUEUE") & Key("SK").begins_with(f"{_NOVA_ID}#spectra#")
+            ),
+        )
+        assert len(wq_resp["Items"]) >= 1, (
+            "No WorkItem found in WORKQUEUE for spectra after VALID validation"
+        )
+        wi = wq_resp["Items"][0]
+        assert wi["dirty_type"] == "spectra"
+        assert wi["source_workflow"] == "acquire_and_validate_spectra"
+        assert wi["nova_id"] == _NOVA_ID
 
     def test_gsi1_keys_removed_after_valid(self, aws_resources: tuple[Any, Any]) -> None:
         """

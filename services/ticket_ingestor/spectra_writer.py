@@ -24,16 +24,20 @@ provenance index, not a uniqueness boundary.
 
 Public API
 ----------
-write_spectrum(result, nova_id, job_run_id, bucket, s3, table) -> None
+write_spectrum(result, nova_id, job_run_id, bucket, s3, table, private_bucket) -> None
 """
 
 from __future__ import annotations
 
 import enum
+import io
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
+
+import astropy.io.fits as fits
+from nova_common.web_ready_csv import build_web_ready_csv, write_web_ready_csv_to_s3
 
 from ticket_ingestor.spectra_reader import SpectrumResult
 
@@ -95,6 +99,7 @@ def write_spectrum(
     bucket: str,
     s3: Any,  # boto3 S3 client
     table: Any,  # boto3 DynamoDB Table resource
+    private_bucket: str | None = None,  # private S3 bucket for derived artifacts
 ) -> None:
     """Upload FITS bytes to S3 and write DataProduct + FileObject items to DDB.
 
@@ -189,6 +194,51 @@ def write_spectrum(
         dp_item["flux_unit"] = result.flux_unit
 
     table.put_item(Item=dp_item)
+
+    # ── 2b. Web-ready CSV (ADR-031 P-4) ────────────────────────────────
+    #
+    # Best-effort: a failed write logs a warning but does not fail the
+    # spectrum write.  The ticket path has the FITS bytes in memory, so
+    # we re-open them to extract the validated arrays and spectral_units.
+    if private_bucket is not None:
+        try:
+            with fits.open(io.BytesIO(result.fits_bytes), memmap=False) as hdul:
+                primary_data = hdul[0].data
+                spectral_units = hdul[0].header.get("CUNIT1", "Angstrom")
+                # Flux is in the primary HDU data array; wavelength must be
+                # reconstructed from WCS keywords (CRVAL1 + CDELT1 * index).
+                crval1 = float(hdul[0].header["CRVAL1"])
+                cdelt1 = float(hdul[0].header.get("CDELT1", 1.0))
+                crpix1 = float(hdul[0].header.get("CRPIX1", 1.0))
+                import numpy as np
+
+                n_pix = len(primary_data)
+                wavelength = crval1 + cdelt1 * (np.arange(n_pix) - (crpix1 - 1.0))
+                flux = np.asarray(primary_data, dtype=np.float64)
+
+            csv_content = build_web_ready_csv(
+                wavelength=wavelength,
+                flux=flux,
+                spectral_units=spectral_units,
+            )
+            write_web_ready_csv_to_s3(
+                csv_content=csv_content,
+                nova_id=nova_id_str,
+                data_product_id=data_product_id_str,
+                s3=s3,
+                bucket=private_bucket,
+            )
+        except Exception:  # noqa: BLE001
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Failed to write web-ready CSV for ticket spectrum — continuing",
+                exc_info=True,
+                extra={
+                    "data_product_id": data_product_id_str,
+                    "nova_id": nova_id_str,
+                },
+            )
 
     # ── 3. FileObject PutItem ────────────────────────────────────────────────
     #

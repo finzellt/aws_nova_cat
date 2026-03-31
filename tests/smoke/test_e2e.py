@@ -48,6 +48,7 @@ import time
 import uuid
 from typing import Any
 
+import boto3
 import pytest
 from boto3.dynamodb.conditions import Key
 
@@ -260,6 +261,14 @@ class TestEndToEnd:
             f"Nova item missing coordinates: ra_deg={ra}, dec_deg={dec}.\n"
             f"SIMBAD resolution may have failed silently."
         )
+        # ADR-031 Decision 6: nova_type field must exist (value is null/None)
+        assert "nova_type" in nova_item, (
+            f"Nova item missing 'nova_type' field — ADR-031 Decision 6 "
+            f"forward-write not applied by initialize_nova. "
+            f"nova_id={nova_id}"
+        )
+        print(f"  nova_type: {nova_item.get('nova_type')!r}")
+
         _ok("Nova item exists with ACTIVE status and coordinates")
 
         # ══════════════════════════════════════════════════════════════════
@@ -282,15 +291,23 @@ class TestEndToEnd:
 
         print(f"  NOVAREF# items found: {len(novarefs)}")
 
-        # discovery_date must be derived from ADS references for V1324 Sco.
-        nova_item_refreshed = _get_item(table, nova_id, "NOVA")
-        discovery_date = (nova_item_refreshed or {}).get("discovery_date")
-        assert discovery_date is not None, (
-            f"discovery_date not written to Nova item after refresh_references.\n"
-            f"nova_id={nova_id}, NOVAREF# count={len(novarefs)}.\n"
-            f"ADS may have returned references without a derivable discovery date, "
-            f"or the discovery_date extraction logic has a bug."
+        # discovery_date is written by UpsertDiscoveryDateMetadata, which runs
+        # *after* the Map state that writes NOVAREF# items. Poll rather than
+        # single-read to avoid a race where the test sees NOVAREF# items land
+        # but the post-Map states haven't finished yet.
+        def _check_discovery_date() -> dict[str, Any] | None:
+            item = _get_item(table, nova_id, "NOVA")
+            if item and item.get("discovery_date"):
+                return item
+            return None
+
+        nova_item_refreshed = _poll_ddb(
+            _check_discovery_date,
+            timeout_seconds=30,
+            label="discovery_date on Nova item",
+            nova_id=nova_id,
         )
+        discovery_date = nova_item_refreshed["discovery_date"]
         print(f"  discovery_date: {discovery_date}")
 
         _ok(f"refresh_references — {len(novarefs)} reference(s) found")
@@ -390,6 +407,51 @@ class TestEndToEnd:
                 )
 
         _ok(f"acquire_and_validate_spectra — {valid_count} VALID product(s)")
+
+        # ══════════════════════════════════════════════════════════════════
+        # Stage 5b: ADR-031 data layer readiness checks
+        # Confirms: enrichment fields, web-ready CSVs, and WorkItems are
+        # present for VALID spectra products.
+        # ══════════════════════════════════════════════════════════════════
+        _section("Stage 5b — ADR-031 data layer readiness checks")
+
+        _s3_check = boto3.client("s3")
+        for stub in final_stubs:
+            vs = stub.get("validation_status")
+            dp_id = stub.get("data_product_id", "?")
+            if vs == "VALID":
+                # Decisions 2/3/5: enrichment fields present on DDB item.
+                # Values depend on real FITS headers — assert presence only.
+                for field in ("instrument", "telescope", "observation_date_mjd"):
+                    assert field in stub, (
+                        f"Product {dp_id} is VALID but missing '{field}' — "
+                        f"ADR-031 enrichment fields not written by "
+                        f"RecordValidationResult"
+                    )
+
+                # Decision 4: web-ready CSV exists in the private S3 bucket.
+                csv_key = f"derived/spectra/{nova_id}/{dp_id}/web_ready.csv"
+                try:
+                    _s3_check.head_object(
+                        Bucket=stack.private_bucket_name,
+                        Key=csv_key,
+                    )
+                except Exception:
+                    pytest.fail(
+                        f"Product {dp_id} is VALID but web-ready CSV "
+                        f"not found at s3://{stack.private_bucket_name}/{csv_key}"
+                    )
+
+        print(f"  enrichment fields + web-ready CSVs verified for {valid_count} VALID product(s)")
+
+        # Decision 7: at least one WorkItem in WORKQUEUE for spectra
+        wq_items = _query_prefix(table, "WORKQUEUE", f"{nova_id}#spectra#")
+        assert len(wq_items) >= 1, (
+            f"No WorkItem found in WORKQUEUE for spectra after VALID validation. nova_id={nova_id}"
+        )
+        print(f"  WorkItems in WORKQUEUE: {len(wq_items)}")
+
+        _ok("ADR-031 data layer readiness checks passed")
 
         # ══════════════════════════════════════════════════════════════════
         # Summary

@@ -11,7 +11,7 @@ Usage:
 
 Prerequisites:
     - AWS credentials configured (env vars, ~/.aws/credentials, or instance role)
-    - NovaCat stack deployed: cdk deploy -c account=<ACCOUNT_ID>
+    - NovaCatSmoke stack deployed: cdk deploy -c account=<ACCOUNT_ID>
     - Target region: us-east-1 (override with AWS_DEFAULT_REGION if needed)
 """
 
@@ -32,52 +32,85 @@ _STACK_NAME = "NovaCatSmoke"
 _REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 _POLL_INTERVAL_SECONDS = 5
 
+# ---------------------------------------------------------------------------
+# Resource name prefix
+#
+# Every Lambda, state machine, and IAM resource in the smoke stack is named
+# with this prefix.  The smoke stack exists so that deployment-validation
+# tests never touch production resources — but that isolation only works if
+# the tests actually address the *smoke* resources.
+#
+# Previously, these name lists were hardcoded with the production prefix
+# ("nova-cat-"), which meant the smoke tests were inspecting production
+# Lambdas and comparing their env vars against smoke-stack CloudFormation
+# outputs.  That mismatch was the root cause of
+# test_workflow_launcher_has_all_state_machine_arns failing: the production
+# workflow_launcher had production ARNs, but the test expected smoke ARNs.
+#
+# All resource names are now derived from _ENV_PREFIX so the two stacks
+# can never be confused.  If the smoke stack's env_prefix changes in
+# app.py, update this single constant and everything follows.
+# ---------------------------------------------------------------------------
+_ENV_PREFIX = "nova-cat-smoke"
+_CF_PREFIX = "NovaCatSmoke"
+
 # CloudFormation export names, keyed by the attribute they populate on
 # StackOutputs. Must stay in sync with the CfnOutput definitions in
 # nova_constructs/storage.py and nova_constructs/workflows.py.
 _CF_EXPORT_MAP: dict[str, str] = {
-    "table_name": "NovaCatSmoke-TableName",
-    "private_bucket_name": "NovaCatSmoke-PrivateBucketName",
-    "public_site_bucket_name": "NovaCatSmoke-PublicSiteBucketName",
-    "quarantine_topic_arn": "NovaCatSmoke-QuarantineTopicArn",
-    "initialize_nova_arn": "NovaCatSmoke-InitializeNovaStateMachineArn",
-    "ingest_new_nova_arn": "NovaCatSmoke-IngestNewNovaStateMachineArn",
-    "refresh_references_arn": "NovaCatSmoke-RefreshReferencesStateMachineArn",
-    "discover_spectra_products_arn": "NovaCatSmoke-DiscoverSpectraProductsStateMachineArn",
-    "acquire_and_validate_spectra_arn": "NovaCatSmoke-AcquireAndValidateSpectraStateMachineArn",
-    "ingest_ticket_arn": "NovaCatSmoke-IngestTicketStateMachineArn",
-    "photometry_table_name": "NovaCatSmoke-PhotometryTableName",
+    "table_name": f"{_CF_PREFIX}-TableName",
+    "private_bucket_name": f"{_CF_PREFIX}-PrivateBucketName",
+    "public_site_bucket_name": f"{_CF_PREFIX}-PublicSiteBucketName",
+    "quarantine_topic_arn": f"{_CF_PREFIX}-QuarantineTopicArn",
+    "initialize_nova_arn": f"{_CF_PREFIX}-InitializeNovaStateMachineArn",
+    "ingest_new_nova_arn": f"{_CF_PREFIX}-IngestNewNovaStateMachineArn",
+    "refresh_references_arn": f"{_CF_PREFIX}-RefreshReferencesStateMachineArn",
+    "discover_spectra_products_arn": f"{_CF_PREFIX}-DiscoverSpectraProductsStateMachineArn",
+    "acquire_and_validate_spectra_arn": f"{_CF_PREFIX}-AcquireAndValidateSpectraStateMachineArn",
+    "ingest_ticket_arn": f"{_CF_PREFIX}-IngestTicketStateMachineArn",
+    "photometry_table_name": f"{_CF_PREFIX}-PhotometryTableName",
 }
 
+# ---------------------------------------------------------------------------
 # Lambda function names as provisioned by NovaCatCompute.
-# Sourced from compute.py's _FUNCTION_SPECS and DockerImageFunction definitions.
-EXPECTED_LAMBDA_NAMES: list[str] = [
-    "nova-cat-nova-resolver",
-    "nova-cat-job-run-manager",
-    "nova-cat-idempotency-guard",
-    "nova-cat-workflow-launcher",
-    "nova-cat-reference-manager",
-    "nova-cat-spectra-acquirer",
-    "nova-cat-photometry-ingestor",
-    "nova-cat-quarantine-handler",
-    "nova-cat-name-reconciler",
-    "nova-cat-archive-resolver",
-    "nova-cat-spectra-discoverer",
-    "nova-cat-spectra-validator",
-    "nova-cat-ticket-parser",
-    "nova-cat-nova-resolver-ticket",
-    "nova-cat-ticket-ingestor",
+#
+# Sourced from compute.py's _FUNCTION_SPECS (zip-bundled) and the
+# DockerImageFunction definitions (container-based). The bare suffixes
+# below are the hyphenated form of the Python function spec keys.
+# ---------------------------------------------------------------------------
+
+_LAMBDA_SUFFIXES: list[str] = [
+    "nova-resolver",
+    "job-run-manager",
+    "idempotency-guard",
+    "workflow-launcher",
+    "reference-manager",
+    "spectra-acquirer",
+    "photometry-ingestor",
+    "quarantine-handler",
+    "name-reconciler",
+    # Container-based (DockerImageFunction)
+    "archive-resolver",
+    "spectra-discoverer",
+    "spectra-validator",
+    "ticket-parser",
+    "nova-resolver-ticket",
+    "ticket-ingestor",
 ]
 
+EXPECTED_LAMBDA_NAMES: list[str] = [f"{_ENV_PREFIX}-{s}" for s in _LAMBDA_SUFFIXES]
+
 # Expected Step Functions state machines.
-EXPECTED_STATE_MACHINE_NAMES: list[str] = [
-    "nova-cat-initialize-nova",
-    "nova-cat-ingest-new-nova",
-    "nova-cat-refresh-references",
-    "nova-cat-discover-spectra-products",
-    "nova-cat-acquire-and-validate-spectra",
-    "nova-cat-ingest-ticket",
+_STATE_MACHINE_SUFFIXES: list[str] = [
+    "initialize-nova",
+    "ingest-new-nova",
+    "refresh-references",
+    "discover-spectra-products",
+    "acquire-and-validate-spectra",
+    "ingest-ticket",
 ]
+
+EXPECTED_STATE_MACHINE_NAMES: list[str] = [f"{_ENV_PREFIX}-{s}" for s in _STATE_MACHINE_SUFFIXES]
 
 # Required env vars injected into every Lambda (from compute.py shared_env).
 REQUIRED_ENV_VARS: set[str] = {
@@ -88,6 +121,10 @@ REQUIRED_ENV_VARS: set[str] = {
     "LOG_LEVEL",
     "POWERTOOLS_SERVICE_NAME",
 }
+
+# Expose the prefix so test_deploy.py (and any other smoke module) can
+# build function names without duplicating the constant.
+ENV_PREFIX = _ENV_PREFIX
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +151,7 @@ class StackOutputs:
 
 def _resolve_stack_outputs(cf_client: Any) -> StackOutputs:
     """
-    Describe the NovaCat stack and extract all expected outputs.
+    Describe the NovaCatSmoke stack and extract all expected outputs.
 
     Raises pytest.skip() if:
       - The stack doesn't exist or isn't in CREATE_COMPLETE / UPDATE_COMPLETE
@@ -123,18 +160,18 @@ def _resolve_stack_outputs(cf_client: Any) -> StackOutputs:
     try:
         resp = cf_client.describe_stacks(StackName=_STACK_NAME)
     except cf_client.exceptions.ClientError as exc:
-        pytest.skip(f"NovaCat stack not found or inaccessible: {exc}")
+        pytest.skip(f"NovaCatSmoke stack not found or inaccessible: {exc}")
 
     stacks = resp.get("Stacks", [])
     if not stacks:
-        pytest.skip("NovaCat stack returned no results from describe_stacks")
+        pytest.skip("NovaCatSmoke stack returned no results from describe_stacks")
 
     stack = stacks[0]
     status = stack.get("StackStatus", "")
     terminal_ok = {"CREATE_COMPLETE", "UPDATE_COMPLETE"}
     if status not in terminal_ok:
         pytest.skip(
-            f"NovaCat stack is in status '{status}' — expected one of {terminal_ok}. "
+            f"NovaCatSmoke stack is in status '{status}' — expected one of {terminal_ok}. "
             "Deploy the stack before running smoke tests."
         )
 
@@ -153,7 +190,7 @@ def _resolve_stack_outputs(cf_client: Any) -> StackOutputs:
     ]
     if missing:
         pytest.skip(
-            f"NovaCat stack is missing expected CloudFormation exports: {missing}. "
+            f"NovaCatSmoke stack is missing expected CloudFormation exports: {missing}. "
             "Re-deploy the stack and ensure all CfnOutputs are present."
         )
 

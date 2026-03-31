@@ -38,6 +38,7 @@ from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError, TerminalError
 from nova_common.logging import configure_logging, logger
 from nova_common.tracing import tracer
+from nova_common.work_item import DirtyType, write_work_item
 
 # ---------------------------------------------------------------------------
 # AWS clients — module-level so moto patches them on fresh import in tests
@@ -489,6 +490,20 @@ def _handle_upsertDiscoveryDateMetadata(event: dict, context: object) -> dict:
     nova_id: str | None = event.get("nova_id")
     if not nova_id:
         raise TerminalError("Missing required field: nova_id")
+
+    # --- ADR-031 Decision 7: WorkItem for the regeneration pipeline ---
+    # Written unconditionally: by the time UpsertDiscoveryDateMetadata runs,
+    # the ReconcileReferences Map state has already linked all references.
+    # The WorkItem signals "this nova has new reference data" regardless of
+    # whether the discovery date was updated.
+    write_work_item(
+        _table,
+        nova_id=nova_id,
+        dirty_type=DirtyType.references,
+        source_workflow="refresh_references",
+        job_run_id=str(event.get("job_run_id", event.get("correlation_id", "unknown"))),
+        correlation_id=str(event.get("correlation_id", "unknown")),
+    )
 
     new_date: str | None = event.get("earliest_publication_date")
     earliest_bibcode: str | None = event.get("earliest_bibcode")

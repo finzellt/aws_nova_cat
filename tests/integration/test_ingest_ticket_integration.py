@@ -731,6 +731,16 @@ class TestSpectraHappyPath:
         # JobRun status
         job_run_item = _get_job_run(aws_resources["main_table"], state)
         assert job_run_item["status"] == "SUCCEEDED"
+        # ADR-031 Decision 7: WorkItem written for the regeneration pipeline
+        wq_resp = aws_resources["main_table"].query(
+            KeyConditionExpression=(
+                Key("PK").eq("WORKQUEUE") & Key("SK").begins_with(f"{_GQ_MUS_NOVA_ID}#spectra#")
+            ),
+        )
+        assert len(wq_resp["Items"]) >= 1, (
+            "No WorkItem found in WORKQUEUE for spectra after ticket ingestion"
+        )
+
         assert job_run_item["outcome"] == "INGESTED_SPECTRA"
 
 
@@ -846,6 +856,17 @@ class TestPhotometryHappyPath:
         row = phot_resp["Items"][0]
         assert row["nova_id"] == _V4739_SGR_NOVA_ID
         assert row["band_id"] == "HCT_HFOSC_Bessell_V"
+
+        # ADR-031 Decision 7: WorkItem written for the regeneration pipeline
+        wq_resp = aws_resources["main_table"].query(
+            KeyConditionExpression=(
+                Key("PK").eq("WORKQUEUE")
+                & Key("SK").begins_with(f"{_V4739_SGR_NOVA_ID}#photometry#")
+            ),
+        )
+        assert len(wq_resp["Items"]) >= 1, (
+            "No WorkItem found in WORKQUEUE for photometry after ticket ingestion"
+        )
 
         # JobRun status
         job_run_item = _get_job_run(aws_resources["main_table"], state)

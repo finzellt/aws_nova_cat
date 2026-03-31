@@ -22,6 +22,8 @@ Three primary partition types exist:
 - `PK = "REFERENCE#<bibcode>"`
 - `PK = "WORKFLOW#<correlation_id>"` — pre-nova workflow artifacts written before a
   `nova_id` exists (e.g. `FileObject` records during `initialize_nova` quarantine)
+- `PK = "WORKQUEUE"` — artifact regeneration work orders (ADR-031 Decision 7,
+  DESIGN-003 §3)
 
 Within per-nova partitions, item types are distinguished by `SK` prefixes such as:
 - `NOVA`
@@ -30,6 +32,9 @@ Within per-nova partitions, item types are distinguished by `SK` prefixes such a
 - `NOVAREF#...`
 - `JOBRUN#...`
 - `ATTEMPT#...`
+
+The `WORKQUEUE` partition uses a different SK structure:
+- `<nova_id>#<dirty_type>#<created_at>` — ordered for per-nova grouping
 
 ### Global Secondary Index: EligibilityIndex (GSI1)
 
@@ -350,6 +355,62 @@ Purpose: Validate and reconcile the canonical name and aliases for an existing n
   boundary event, not as typed fields. See `NameCheckAndReconcileEvent` in `events.py`.
 - This workflow operates entirely downstream of `initialize_nova`; it does not perform
   coordinate-based identity resolution.
+
+---
+
+## Artifact regeneration pipeline (DESIGN-003 §3–§4)
+
+Purpose: Signal which novae have new data so the regeneration pipeline
+knows which artifacts to rebuild.
+
+### Write WorkItem (ingestion workflows → WORKQUEUE)
+
+After scientific data is persisted, each ingestion workflow writes a WorkItem:
+```
+PutItem:
+  PK = "WORKQUEUE"
+  SK = "<nova_id>#<dirty_type>#<created_at>"
+```
+
+| Workflow | dirty_type |
+|---|---|
+| `acquire_and_validate_spectra` (VALID outcome) | `spectra` |
+| `ingest_ticket` (spectra branch) | `spectra` |
+| `ingest_ticket` (photometry branch) | `photometry` |
+| `refresh_references` | `references` |
+
+Best-effort: a failed write logs a warning but does not fail the ingestion.
+
+### Read all pending WorkItems (coordinator sweep)
+```
+Query:
+  PK = "WORKQUEUE"
+```
+
+Returns all pending WorkItems across all novae. The coordinator groups
+by `nova_id` (extracted from the SK prefix) and derives per-nova
+regeneration manifests using the dirty_type → artifact dependency matrix
+(DESIGN-003 §3.4).
+
+### Read WorkItems for a specific nova
+```
+Query:
+  PK = "WORKQUEUE"
+  SK begins_with "<nova_id>#"
+```
+
+Useful for operator diagnosis: check what changes are pending for a
+specific nova.
+
+### Delete consumed WorkItems (after successful regeneration)
+```
+BatchWriteItem (DeleteRequest):
+  PK = "WORKQUEUE"
+  SK = <exact SK from the batch plan's workitem_sks list>
+```
+
+Only the WorkItems that were present when the coordinator built the
+batch plan are deleted — not any that arrived during execution.
 
 ---
 
