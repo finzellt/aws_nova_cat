@@ -8,6 +8,12 @@ spectra_reader.read_spectra:
   - DATE-OBS date conversion (JD → ISO 8601)
   - BUNIT handling (per-spectrum units present → set; both NA → empty string)
   - Per-spectrum failure collection (missing data file does not abort batch)
+  - ADR-031 enrichment fields on SpectrumResult (instrument, telescope,
+    observation_date_mjd, flux_unit)
+
+spectra_reader._to_mjd:
+  - JD, MJD, HJD, BJD time system conversion
+  - Unrecognised time system → ValueError
 
 spectra_reader determinism:
   - Stable data_product_id across calls with identical inputs
@@ -16,6 +22,7 @@ spectra_reader determinism:
 spectra_writer.write_spectrum:
   - DataProduct item written to DDB with correct SK, provider, and lifecycle fields
   - FileObject item written to DDB with correct role SK and provenance fields
+  - ADR-031 enrichment fields persisted on DataProduct DDB item
 
 Moto backs all S3 and DynamoDB interactions; no real AWS calls are made.
 
@@ -34,6 +41,7 @@ import io
 import uuid
 import warnings
 from collections.abc import Generator
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +51,7 @@ from astropy.io import fits
 from astropy.time import Time
 from boto3.dynamodb.conditions import Key
 from moto import mock_aws
-from ticket_ingestor.spectra_reader import read_spectra
+from ticket_ingestor.spectra_reader import _to_mjd, read_spectra
 from ticket_ingestor.spectra_writer import write_spectrum
 
 from contracts.models.tickets import SpectraTicket
@@ -65,6 +73,9 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "spectra" / "gq_mus"
 
 # JD value used across several test fixtures — mirrors the GQMUSA metadata row.
 _JD_GQMUSA = 2.44732e6
+
+# JD → MJD offset (consistent with photometry_reader and spectra_reader).
+_JD_TO_MJD_OFFSET = 2_400_000.5
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -117,6 +128,7 @@ def _make_ticket(
     *,
     flux_units: str | None = None,
     metadata_filename: str = "metadata.csv",
+    time_system: str = "JD",
 ) -> SpectraTicket:
     """Return a SpectraTicket whose column indices mirror the GQ Mus ticket.
 
@@ -139,7 +151,7 @@ def _make_ticket(
     return SpectraTicket(
         object_name="GQ Mus",
         wavelength_regime="optical",
-        time_system="JD",
+        time_system=time_system,
         assumed_outburst_date=None,
         reference="Williams et al. (1992)",
         bibcode="1992AJ....104..725W",
@@ -201,6 +213,16 @@ def _standard_metadata_row(
         f"{spectrum_filename},0,1,NA,{flux_units},{jd},"
         "Williams,CTIO 1 m,2D-Frutti,3.0,3100.0,7450.0"
     )
+
+
+def _metadata_row_with_na_provenance(
+    spectrum_filename: str = "spectrum_a.csv",
+    *,
+    flux_units: str = "NA",
+    jd: str = "NA",
+) -> str:
+    """Return a metadata CSV row with NA telescope, instrument, date, and flux_units."""
+    return f"{spectrum_filename},0,1,NA,{flux_units},{jd},Williams,NA,NA,3.0,3100.0,7450.0"
 
 
 # ---------------------------------------------------------------------------
@@ -459,3 +481,186 @@ def test_per_spectrum_failure_collection(tmp_path: Path) -> None:
 
     assert len(result.failures) == 1
     assert result.failures[0].spectrum_filename == "spectrum_missing.csv"
+
+
+# ---------------------------------------------------------------------------
+# ADR-031 enrichment fields — spectra_reader (Decisions 2, 3, 5)
+# ---------------------------------------------------------------------------
+
+
+class TestEnrichmentFieldsOnSpectrumResult:
+    """SpectrumResult carries instrument, telescope, observation_date_mjd, flux_unit."""
+
+    def test_enrichment_fields_populated_from_metadata_csv(self, tmp_path: Path) -> None:
+        """Standard GQ Mus row populates all four enrichment fields."""
+        _write_spectrum_csv(tmp_path)
+        _write_metadata_csv(tmp_path, rows=[_standard_metadata_row()])
+        ticket = _make_ticket()
+
+        result = read_spectra(tmp_path / "metadata.csv", tmp_path, ticket, _NOVA_ID)
+
+        assert len(result.results) == 1
+        sr = result.results[0]
+        assert sr.instrument == "2D-Frutti"
+        assert sr.telescope == "CTIO 1 m"
+        assert sr.observation_date_mjd == pytest.approx(_JD_GQMUSA - _JD_TO_MJD_OFFSET)
+        assert sr.flux_unit == "ergs/cm^2/sec"
+
+    def test_enrichment_fields_none_when_metadata_na(self, tmp_path: Path) -> None:
+        """When telescope, instrument, date, and flux_units are NA → all None."""
+        _write_spectrum_csv(tmp_path)
+        _write_metadata_csv(
+            tmp_path,
+            rows=[_metadata_row_with_na_provenance()],
+        )
+        ticket = _make_ticket(flux_units=None)
+
+        result = read_spectra(tmp_path / "metadata.csv", tmp_path, ticket, _NOVA_ID)
+
+        assert len(result.results) == 1
+        sr = result.results[0]
+        assert sr.instrument is None
+        assert sr.telescope is None
+        assert sr.observation_date_mjd is None
+        assert sr.flux_unit is None
+
+    def test_flux_unit_none_when_bunit_empty_string(self, tmp_path: Path) -> None:
+        """Empty BUNIT (both sources NA) → flux_unit is None, not empty string."""
+        _write_spectrum_csv(tmp_path)
+        _write_metadata_csv(
+            tmp_path,
+            rows=[_standard_metadata_row(flux_units="NA")],
+        )
+        ticket = _make_ticket(flux_units=None)
+
+        result = read_spectra(tmp_path / "metadata.csv", tmp_path, ticket, _NOVA_ID)
+
+        sr = result.results[0]
+        assert sr.flux_unit is None
+
+    def test_flux_unit_from_ticket_level_default(self, tmp_path: Path) -> None:
+        """When per-spectrum flux_units_col is NA, ticket-level flux_units is used."""
+        _write_spectrum_csv(tmp_path)
+        _write_metadata_csv(
+            tmp_path,
+            rows=[_standard_metadata_row(flux_units="NA")],
+        )
+        ticket = _make_ticket(flux_units="erg/s/cm2/A")
+
+        result = read_spectra(tmp_path / "metadata.csv", tmp_path, ticket, _NOVA_ID)
+
+        sr = result.results[0]
+        assert sr.flux_unit == "erg/s/cm2/A"
+
+
+# ---------------------------------------------------------------------------
+# ADR-031 enrichment fields — _to_mjd (time system conversion)
+# ---------------------------------------------------------------------------
+
+
+class TestToMjd:
+    """_to_mjd converts raw temporal values to MJD for all supported time systems."""
+
+    def test_jd_to_mjd(self) -> None:
+        mjd = _to_mjd(_JD_GQMUSA, "JD")
+        assert mjd == pytest.approx(_JD_GQMUSA - _JD_TO_MJD_OFFSET)
+
+    def test_mjd_passthrough(self) -> None:
+        mjd = _to_mjd(47320.0, "MJD")
+        assert mjd == pytest.approx(47320.0)
+
+    def test_hjd_to_mjd(self) -> None:
+        hjd = 2_451_545.0
+        mjd = _to_mjd(hjd, "HJD")
+        assert mjd == pytest.approx(hjd - _JD_TO_MJD_OFFSET)
+
+    def test_bjd_to_mjd(self) -> None:
+        bjd = 2_451_545.0
+        mjd = _to_mjd(bjd, "BJD")
+        assert mjd == pytest.approx(bjd - _JD_TO_MJD_OFFSET)
+
+    def test_unknown_time_system_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unrecognised time_system"):
+            _to_mjd(12345.0, "TAI")
+
+
+# ---------------------------------------------------------------------------
+# ADR-031 enrichment fields — spectra_writer (DDB persistence)
+# ---------------------------------------------------------------------------
+
+
+class TestEnrichmentFieldsOnDdbItem:
+    """write_spectrum persists ADR-031 enrichment fields on the DataProduct item."""
+
+    def test_enrichment_fields_written_to_ddb(
+        self, tmp_path: Path, aws_resources: dict[str, Any]
+    ) -> None:
+        """Standard row → all four enrichment fields present on the DDB item."""
+        _write_spectrum_csv(tmp_path)
+        _write_metadata_csv(tmp_path, rows=[_standard_metadata_row()])
+        ticket = _make_ticket()
+
+        read_result = read_spectra(tmp_path / "metadata.csv", tmp_path, ticket, _NOVA_ID)
+        sr = read_result.results[0]
+
+        table = aws_resources["table"]
+        write_spectrum(
+            result=sr,
+            nova_id=_NOVA_ID,
+            job_run_id=_JOB_RUN_ID,
+            bucket=aws_resources["bucket"],
+            s3=aws_resources["s3"],
+            table=table,
+        )
+
+        dp = table.get_item(
+            Key={
+                "PK": str(_NOVA_ID),
+                "SK": f"PRODUCT#SPECTRA#ticket_ingestion#{sr.data_product_id}",
+            }
+        )["Item"]
+
+        assert dp["instrument"] == "2D-Frutti"
+        assert dp["telescope"] == "CTIO 1 m"
+        assert dp["observation_date_mjd"] == pytest.approx(
+            Decimal(str(_JD_GQMUSA - _JD_TO_MJD_OFFSET))
+        )
+        assert dp["flux_unit"] == "ergs/cm^2/sec"
+
+    def test_enrichment_fields_absent_when_none(
+        self, tmp_path: Path, aws_resources: dict[str, Any]
+    ) -> None:
+        """NA metadata → enrichment fields are omitted from the DDB item entirely."""
+        _write_spectrum_csv(tmp_path)
+        _write_metadata_csv(
+            tmp_path,
+            rows=[_metadata_row_with_na_provenance()],
+        )
+        ticket = _make_ticket(flux_units=None)
+
+        read_result = read_spectra(tmp_path / "metadata.csv", tmp_path, ticket, _NOVA_ID)
+        sr = read_result.results[0]
+
+        table = aws_resources["table"]
+        write_spectrum(
+            result=sr,
+            nova_id=_NOVA_ID,
+            job_run_id=_JOB_RUN_ID,
+            bucket=aws_resources["bucket"],
+            s3=aws_resources["s3"],
+            table=table,
+        )
+
+        dp = table.get_item(
+            Key={
+                "PK": str(_NOVA_ID),
+                "SK": f"PRODUCT#SPECTRA#ticket_ingestion#{sr.data_product_id}",
+            }
+        )["Item"]
+
+        # When all source values are NA, the fields should not be present
+        # on the DDB item at all (null-means-absent contract).
+        assert "instrument" not in dp
+        assert "telescope" not in dp
+        assert "observation_date_mjd" not in dp
+        assert "flux_unit" not in dp

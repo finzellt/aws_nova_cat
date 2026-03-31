@@ -102,8 +102,9 @@ def write_spectrum(
     ----------
     result:
         SpectrumResult produced by spectra_reader.read_spectra for one
-        spectrum.  Carries fits_bytes, s3_key, data_product_id, and
-        locator_identity.
+        spectrum.  Carries fits_bytes, s3_key, data_product_id,
+        locator_identity, and ADR-031 enrichment fields (instrument,
+        telescope, observation_date_mjd, flux_unit).
     nova_id:
         Resolved UUID for the nova; used as the DynamoDB partition key and
         embedded in FileObject attributes.
@@ -171,6 +172,21 @@ def write_spectrum(
         "created_at": now,
         "updated_at": now,
     }
+
+    # --- ADR-031 enrichment fields (Decisions 2, 3, 5) ---
+    # Only include when non-None — null-means-absent contract.
+    # observation_date_mjd is coerced to Decimal for DDB Number type.
+    if result.instrument is not None:
+        dp_item["instrument"] = result.instrument
+
+    if result.telescope is not None:
+        dp_item["telescope"] = result.telescope
+
+    if result.observation_date_mjd is not None:
+        dp_item["observation_date_mjd"] = _coerce_for_ddb(result.observation_date_mjd)
+
+    if result.flux_unit is not None:
+        dp_item["flux_unit"] = result.flux_unit
 
     table.put_item(Item=dp_item)
 

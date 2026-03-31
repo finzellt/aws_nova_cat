@@ -596,6 +596,49 @@ class TestHappyPathValid:
         assert job_run["status"] == "SUCCEEDED"
         assert job_run["outcome"] == "COMPLETED"
 
+    def test_enrichment_fields_persisted_on_valid_product(
+        self, aws_resources: tuple[Any, Any]
+    ) -> None:
+        """ADR-031 Decisions 2, 3, 5: instrument, telescope, observation_date_mjd,
+        and flux_unit are extracted from the validated spectrum and persisted on
+        the DataProduct DDB item by RecordValidationResult.
+
+        Synthetic FITS headers: INSTRUME=UVES, TELESCOP=ESO-VLT-U2, MJD-OBS=56082.05.
+        UVES profile flux_units comes from TUNIT on the BinTable FLUX column;
+        the synthetic FITS does not set TUNIT, so flux_units is empty string,
+        which the handler normalizes to None (absent from DDB item).
+        """
+        table, _ = aws_resources
+        fits_bytes = _make_uves_fits_bytes()
+
+        with mock_aws():
+            _seed_data_product(table)
+            h = _load_handlers()
+            state = _run_prefix(h)
+            status = _run_check_status(h, state)
+            acquisition = _run_acquire(h, state, status, fits_bytes)
+            validation = _run_validate(h, state, status, acquisition)
+
+            # Verify enrichment fields flow through $.validation
+            assert validation["instrument"] == "UVES"
+            assert validation["telescope"] == "ESO-VLT-U2"
+            assert validation["observation_date_mjd"] == pytest.approx(56082.05)
+
+            _run_record_result(h, state, status, acquisition, validation)
+            _finalize_success(h, state)
+
+        dp = _get_data_product(table)
+        assert dp is not None
+
+        # ADR-031 enrichment fields on the DDB item
+        assert dp["instrument"] == "UVES"
+        assert dp["telescope"] == "ESO-VLT-U2"
+        assert dp["observation_date_mjd"] == pytest.approx(Decimal("56082.05"))
+
+        # flux_unit: synthetic FITS has no TUNIT on FLUX column → empty string
+        # → normalized to None → not written to DDB
+        assert "flux_unit" not in dp
+
 
 # ---------------------------------------------------------------------------
 # Path 2–4: CheckOperationalStatusOutcome skip paths
