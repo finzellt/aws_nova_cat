@@ -54,7 +54,111 @@ underlying data.
 
 ## 2. Solution Overview
 
-_Placeholder — to be filled in after the full design is complete._
+The regeneration pipeline connects NovaCat's backend (DynamoDB + S3) to its frontend
+(Vercel + browser) through three mechanisms: a work queue that tracks what changed, a
+sweep process that generates artifacts, and an immutable release model that delivers
+them.
+
+```mermaid
+flowchart LR
+    subgraph Ingestion
+        IW[Ingestion Workflows]
+    end
+
+    subgraph "Gap 2 — When to regenerate"
+        WQ[WorkItem Queue\n§3]
+        EB[EventBridge\nSchedule\n§4.1]
+        CO[Coordinator\nLambda\n§4.2]
+    end
+
+    subgraph "Gap 1 — Artifact generation"
+        FG[Fargate Task\n§4.4]
+    end
+
+    subgraph "Gap 3 — Hosting & delivery"
+        S3[S3 Release\n§12]
+        CF[CloudFront\n§13]
+        VL[Vercel App\n§14]
+        BR((Browser))
+    end
+
+    IW -- "write WorkItem" --> WQ
+    EB -- "cron trigger" --> CO
+    CO -- "build plan,\nlaunch workflow" --> FG
+    FG -- "generate artifacts,\ncopy unchanged,\nupdate pointer" --> S3
+    S3 --> CF
+    VL -- "app shell" --> BR
+    CF -- "data artifacts" --> BR
+```
+
+### How changes are detected (§3)
+
+Ingestion workflows (`ingest_ticket`, `acquire_and_validate_spectra`,
+`refresh_references`) write a **WorkItem** to a dedicated DynamoDB partition after
+persisting scientific data. Each WorkItem names the nova and what changed (`spectra`,
+`photometry`, or `references`). A dependency matrix (§3.4) maps dirty types to the
+artifacts that need regeneration.
+
+### How artifacts are generated (§4–§11)
+
+An **EventBridge scheduled rule** invokes a **Coordinator Lambda** on a regular
+cadence. The coordinator reads the work queue, groups WorkItems by nova, builds a
+regeneration plan, and launches a **single Fargate task** (§4.4) wrapped in a Step
+Functions workflow.
+
+The Fargate task processes novae sequentially, generating up to seven artifacts per
+nova in dependency order:
+
+```
+references.json → spectra.json → photometry.json → sparkline.svg → nova.json → bundle.zip
+```
+
+Each generator (§5–§10) reads from DynamoDB and S3, applies all computation
+(normalization, subsampling, offset calculation, coordinate formatting), and produces
+a frontend-ready artifact conforming to the ADR-014 schemas. After all per-nova
+artifacts are complete, `catalog.json` (§11) is generated from a DDB Scan of all
+ACTIVE novae merged with in-memory counts from the current sweep.
+
+### How artifacts are published (§12)
+
+The pipeline uses an **immutable release model**. Each sweep writes all artifacts —
+freshly generated and unchanged — to a new S3 prefix
+(`releases/<YYYYMMDD-HHMMSS>/`). Unchanged novae's artifacts are copied forward from
+the previous release via `s3.copy_object()`. After all writes succeed, a pointer file
+(`current.json`) at the bucket root is updated to reference the new release. This is
+the atomic switchover — users see either the old complete release or the new complete
+release, never a mix.
+
+A 7-day S3 lifecycle rule cleans up old releases automatically. Rollback is a single
+pointer update.
+
+### How artifacts reach the browser (§13–§14)
+
+A **CloudFront distribution** serves the S3 bucket via Origin Access Control. Two
+cache behaviors handle the two content types: the pointer file (`current.json`, 60s
+TTL) and release content (`releases/*`, 7-day TTL). Because each release produces new
+URL paths, no cache invalidation is needed under normal operations.
+
+The **Vercel-hosted Next.js app** fetches `current.json` on each page load to discover
+the active release, then constructs artifact URLs relative to the release prefix. A
+single environment variable (`NEXT_PUBLIC_DATA_URL`) connects the app to the
+CloudFront domain. In development, the same data client falls back to local mock
+fixtures.
+
+### Cost profile
+
+The entire pipeline — S3 storage, copy operations, CloudFront delivery, DynamoDB
+reads, and Fargate compute — is estimated at under **$2/month** at MVP scale (~200
+novae, ~100 daily users). Vercel hosting is free. See §12.12, §13.12, §14.11, and
+§15.8 for detailed breakdowns.
+
+### Operational model (§15)
+
+The system is designed for a solo operator. Sweeps run automatically; failures are
+self-healing (WorkItems are retained and retried on the next sweep). Two CloudWatch
+alarms cover the failure modes that matter: "a sweep failed" and "no sweep has run."
+Manual intervention recipes (§15.5) cover force-regeneration, full rebuilds, and
+rollback.
 
 ---
 
@@ -3129,21 +3233,644 @@ beyond the expected researcher audience.
 
 ## 15. Operational Model
 
-_To be designed._
+## 15. Operational Model
+
+### 15.1 Overview
+
+This section defines how a solo operator monitors, maintains, and intervenes in the
+artifact regeneration pipeline during normal operations. It covers routine monitoring,
+manual intervention recipes, orphaned artifact cleanup, cost tracking, and failure
+investigation workflows.
+
+The operational model is designed for the same constraints as the rest of NovaCat:
+single operator, low traffic, minimal tooling overhead. Where possible, it relies on
+AWS-native observability (CloudWatch Logs, Step Functions console, S3 lifecycle rules)
+rather than custom dashboards or third-party services.
+
+### 15.2 Routine Monitoring
+
+The regeneration pipeline has a small number of signals that matter. The operator
+should check these periodically (daily or after ingestion sessions) rather than
+watching them continuously.
+
+**Sweep health.** The primary signal is whether daily sweeps are completing
+successfully. The Step Functions console shows execution history for the
+`regenerate_artifacts` workflow — each execution is a sweep. A healthy system shows
+a regular cadence of `SUCCEEDED` executions. `FAILED` executions require
+investigation (§15.6).
+
+**Stale WorkItem warnings.** The coordinator Lambda (§4.2) logs a structured warning
+for any WorkItem older than 7 days. These warnings appear in the coordinator's
+CloudWatch log group. A stale WorkItem means a nova's artifacts have failed to
+regenerate across multiple sweep cycles — typically indicating a generator bug or
+corrupt data state for that specific nova.
+
+**Batch plan outcomes.** The `RegenBatchPlan` DynamoDB items (§4.3) provide an
+at-a-glance audit trail: how many novae were planned, how many succeeded, how many
+failed. The operator can query these directly:
+
+```bash
+aws dynamodb query \
+  --table-name NovaCat \
+  --key-condition-expression "PK = :pk" \
+  --expression-attribute-values '{":pk": {"S": "REGEN_PLAN"}}' \
+  --scan-index-forward false \
+  --limit 5
+```
+
+This returns the five most recent batch plans, newest first. Each plan's `status`,
+`nova_count`, and `completed_at` fields tell the operator whether sweeps are
+completing and how large they are.
+
+### 15.3 Structured Logging
+
+The regeneration pipeline follows the same structured logging conventions as all
+NovaCat workflows (observability-plan.md). All log entries are JSON with the
+standard field set.
+
+**Coordinator Lambda logs:**
+
+| Field | Description |
+|---|---|
+| `workflow_name` | `artifact_coordinator` |
+| `workitem_count` | Total WorkItems found in the queue |
+| `nova_count` | Distinct novae in the batch plan |
+| `plan_id` | The `RegenBatchPlan` ID created for this sweep |
+| `stale_workitems` | Array of WorkItems exceeding the staleness threshold |
+
+**Fargate task logs:**
+
+| Field | Description |
+|---|---|
+| `workflow_name` | `artifact_generator` |
+| `plan_id` | The batch plan being executed |
+| `release_id` | The release ID for this sweep (§12.3) |
+| `nova_id` | Per-nova log entries include the nova being processed |
+| `artifact` | The specific artifact being generated or uploaded |
+| `phase` | `generate`, `upload`, `copy_forward`, `catalog`, `pointer` |
+| `duration_ms` | Per-artifact and per-nova timing |
+| `error_classification` | `RETRYABLE` or `TERMINAL` on failure |
+
+**Finalize Lambda logs:**
+
+| Field | Description |
+|---|---|
+| `workflow_name` | `artifact_finalizer` |
+| `plan_id` | The batch plan being finalized |
+| `novae_succeeded` | Count of novae successfully committed |
+| `novae_failed` | Count of novae with retained WorkItems |
+| `workitems_deleted` | Count of consumed WorkItems |
+
+### 15.4 CloudWatch Alarms
+
+Two alarms are worth configuring at MVP. Both use the Step Functions built-in
+metrics (no custom metric publishing required).
+
+**Sweep failure alarm.** Fires when the `regenerate_artifacts` workflow enters a
+`FAILED` state. This catches both Fargate task crashes and Finalize Lambda failures.
+The alarm should notify via the existing SNS quarantine topic (reused for
+operational alerts at MVP; a dedicated ops topic can be split out later if the
+quarantine topic becomes noisy).
+
+```python
+# Illustrative CDK:
+cloudwatch.Alarm(
+    self, "SweepFailureAlarm",
+    metric=state_machine.metric_failed(),
+    threshold=1,
+    evaluation_periods=1,
+    comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+    alarm_description="Artifact regeneration sweep failed",
+)
+```
+
+**Sweep skip alarm.** Fires when no sweep has succeeded in 48 hours. This catches
+the case where the EventBridge rule is disabled, the coordinator is crashing before
+launching a workflow, or the coordinator is consistently finding an `IN_PROGRESS`
+plan and exiting (§4.6). Implemented as a metric math alarm on the workflow's
+`ExecutionsSucceeded` metric with a 48-hour evaluation period.
+
+These two alarms cover the two failure modes that matter: "a sweep ran and failed"
+and "no sweep has run at all." More granular alarms (per-nova failure rates,
+individual generator timing) can be added post-MVP if operational experience
+suggests they're needed.
+
+### 15.5 Manual Intervention Recipes
+
+**Trigger a manual sweep.**
+
+```bash
+aws lambda invoke \
+  --function-name nova-cat-artifact-coordinator \
+  --payload '{}' \
+  /dev/stdout
+```
+
+Behaves identically to a scheduled invocation. If a sweep is already in progress,
+the coordinator exits immediately (§4.6).
+
+**Force-regenerate a specific nova.**
+
+Write a synthetic WorkItem for the nova with all three dirty types. The next sweep
+(manual or scheduled) will regenerate all artifacts for that nova.
+
+```bash
+NOVA_ID="<nova-uuid>"
+NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+TTL=$(date -u -d "+30 days" +%s 2>/dev/null || date -u -v+30d +%s)
+
+for DIRTY_TYPE in spectra photometry references; do
+  aws dynamodb put-item \
+    --table-name NovaCat \
+    --item "{
+      \"PK\": {\"S\": \"WORKQUEUE\"},
+      \"SK\": {\"S\": \"${NOVA_ID}#${DIRTY_TYPE}#${NOW}\"},
+      \"nova_id\": {\"S\": \"${NOVA_ID}\"},
+      \"dirty_type\": {\"S\": \"${DIRTY_TYPE}\"},
+      \"source_workflow\": {\"S\": \"manual_operator\"},
+      \"job_run_id\": {\"S\": \"00000000-0000-0000-0000-000000000000\"},
+      \"correlation_id\": {\"S\": \"manual-regen-${NOW}\"},
+      \"created_at\": {\"S\": \"${NOW}\"},
+      \"ttl\": {\"N\": \"${TTL}\"}
+    }"
+done
+```
+
+Then trigger a manual sweep. The sentinel `job_run_id` and `source_workflow` values
+make manually created WorkItems identifiable in logs and batch plans.
+
+**Full catalog rebuild.**
+
+To regenerate all artifacts for every ACTIVE nova (e.g., after a generator bug fix
+or schema change), write synthetic WorkItems for all ACTIVE novae:
+
+```bash
+aws dynamodb scan \
+  --table-name NovaCat \
+  --filter-expression "#s = :active AND SK = :nova" \
+  --expression-attribute-names '{"#s": "status"}' \
+  --expression-attribute-values '{":active": {"S": "ACTIVE"}, ":nova": {"S": "NOVA"}}' \
+  --projection-expression "nova_id" \
+  --query 'Items[*].nova_id.S' \
+  --output text \
+| tr '\t' '\n' \
+| while read NOVA_ID; do
+    # Write WorkItems for each nova (same pattern as above)
+    ...
+  done
+```
+
+This is an infrequent operation (expected only after significant code changes) and
+is acceptable as a manual script. If it becomes frequent, it should be formalized
+as an operator CLI command in `tools/novacat-tools/`.
+
+**Roll back to a previous release.**
+
+```bash
+echo '{"release_id":"<previous-release-id>","generated_at":"<timestamp>"}' \
+  | aws s3 cp - s3://<public-site-bucket>/current.json \
+    --content-type application/json
+```
+
+Takes effect within ~60 seconds (pointer TTL). For immediate effect, follow with:
+
+```bash
+aws cloudfront create-invalidation \
+  --distribution-id <distribution-id> \
+  --paths "/current.json"
+```
+
+The target release must still exist in S3 (not yet expired by the 7-day lifecycle
+rule). To check available releases:
+
+```bash
+aws s3 ls s3://<public-site-bucket>/releases/ --recursive | head -20
+```
+
+**Abandon a stuck batch plan.**
+
+If a `RegenBatchPlan` is stuck in `PENDING` or `IN_PROGRESS` and the corresponding
+Step Functions execution has terminated, the coordinator will handle it automatically
+on the next invocation (§4.2 — abandon and rebuild). No manual intervention is needed.
+
+If the operator wants to force an immediate resolution:
+
+```bash
+aws dynamodb update-item \
+  --table-name NovaCat \
+  --key '{"PK": {"S": "REGEN_PLAN"}, "SK": {"S": "<created_at>#<plan_id>"}}' \
+  --update-expression "SET #s = :abandoned" \
+  --expression-attribute-names '{"#s": "status"}' \
+  --expression-attribute-values '{":abandoned": {"S": "ABANDONED"}}'
+```
+
+Then trigger a manual sweep.
+
+### 15.6 Failure Investigation
+
+When a sweep fails, the investigation follows a standard path:
+
+1. **Check the Step Functions execution.** The `regenerate_artifacts` workflow's
+   execution history in the AWS console shows which state failed (UpdatePlanInProgress,
+   RunArtifactGenerator, Finalize, or FailHandler) and the error output.
+
+2. **If RunArtifactGenerator failed:** The Fargate task crashed or timed out. Check
+   the Fargate task's CloudWatch log group for the error. Common causes: OOM (the task
+   hit its memory ceiling on a large nova), S3 access denied (IAM misconfiguration),
+   or a generator bug. The per-nova result ledger in the task's output shows which novae
+   succeeded before the crash.
+
+3. **If Finalize failed:** The Fargate task succeeded but the cleanup step crashed.
+   Check the Finalize Lambda's CloudWatch logs. Common causes: DDB throttling during
+   WorkItem deletion (unlikely at MVP scale), or a bug in the count writeback logic.
+   The artifacts are already published to S3 — the failure is in the bookkeeping, not
+   the data. A manual sweep will retry the Finalize step.
+
+4. **If a specific nova fails repeatedly:** The nova appears in multiple consecutive
+   batch plans with a failure status, and its WorkItems accumulate stale warnings.
+   The Fargate task's logs for that nova (filterable by `nova_id`) will show which
+   generator or upload step failed. Common causes: corrupt DDB data (missing required
+   fields), missing S3 files (raw FITS deleted or never acquired), or an edge case in
+   a generator's computation logic.
+
+### 15.7 Orphaned Artifact Cleanup
+
+Orphaned artifacts arise in two scenarios:
+
+**Novae that transition out of ACTIVE.** When a nova is quarantined or deprecated,
+it drops out of the DDB Scan (§11.2) and is excluded from future releases. Its
+artifacts persist in old releases until the 7-day lifecycle rule cleans them up. In
+new releases, the copy-forward step (§12.5, Phase 2) only copies ACTIVE novae —
+determined by the same DDB Scan used for catalog.json generation — so non-ACTIVE
+novae are automatically excluded from new releases. No manual cleanup is required.
+
+**Failed sweeps leaving partial releases.** If a sweep fails before the pointer
+update (§12.9), partially written artifacts exist under the new release prefix but
+are never referenced by `current.json`. The 7-day lifecycle rule on the `releases/`
+prefix cleans these up automatically. No manual cleanup is required.
+
+In both cases, the S3 lifecycle rule is the cleanup mechanism. No operator
+intervention, no custom garbage collection code.
+
+### 15.8 Cost Monitoring
+
+Given that cost minimization is the project's top priority, the operator should
+track actual spend against the estimates documented in this design:
+
+| Component | Estimated | Where to check |
+|---|---|---|
+| S3 storage (releases) | ~$0.32/month (§12.12) | AWS Cost Explorer → S3 |
+| S3 API requests (copies) | ~$0.21/month (§12.5) | AWS Cost Explorer → S3 |
+| CloudFront transfer | ~$0.44/month (§13.12) | AWS Cost Explorer → CloudFront |
+| DynamoDB (Scan + WorkItems) | <$0.01/month (§11.2) | AWS Cost Explorer → DynamoDB |
+| Fargate task runtime | Varies by batch size | AWS Cost Explorer → ECS |
+| Vercel | $0.00 (free tier) | Vercel dashboard |
+
+The total regeneration pipeline cost should be well under $2/month at MVP scale.
+If any line item exceeds its estimate by more than 3x, it warrants investigation —
+likely a misconfigured lifecycle rule, unexpectedly large bundles, or a bot hitting
+the CloudFront distribution.
+
+**AWS Budgets.** A simple monthly budget alert at $5 for the combined S3 + CloudFront
++ ECS spend provides an early warning if costs drift. This is a one-time setup in the
+AWS Budgets console (or CDK, though budgets are typically account-level and managed
+outside the application stack).
+
+### 15.9 EventBridge Rule Management
+
+The sweep schedule is controlled by an EventBridge rule. Common operational needs:
+
+**Temporarily disable sweeps** (e.g., during a bulk ingestion session where you want
+to ingest everything first, then sweep once):
+
+```bash
+aws events disable-rule --name <sweep-rule-name>
+```
+
+**Re-enable after bulk ingestion:**
+
+```bash
+aws events enable-rule --name <sweep-rule-name>
+```
+
+**Check current schedule and status:**
+
+```bash
+aws events describe-rule --name <sweep-rule-name>
+```
+
+The rule name is exported as a CDK output. Disabling the rule does not affect
+in-flight sweeps — it only prevents new scheduled invocations. Manual invocations
+(§15.5) still work regardless of rule state.
+
+### 15.10 Release Inspection
+
+To inspect the contents of a release (e.g., to verify a sweep produced the expected
+artifacts):
+
+**List the current release ID:**
+
+```bash
+aws s3 cp s3://<public-site-bucket>/current.json - | python3 -m json.tool
+```
+
+**List all novae in a release:**
+
+```bash
+aws s3 ls s3://<public-site-bucket>/releases/<release-id>/nova/ \
+  | awk '{print $NF}' | sed 's/\/$//'
+```
+
+**List artifacts for a specific nova:**
+
+```bash
+aws s3 ls s3://<public-site-bucket>/releases/<release-id>/nova/<nova-id>/
+```
+
+**Compare two releases** (e.g., to see what changed in today's sweep):
+
+```bash
+diff \
+  <(aws s3 ls s3://<public-site-bucket>/releases/<old-id>/nova/ --recursive | awk '{print $NF}') \
+  <(aws s3 ls s3://<public-site-bucket>/releases/<new-id>/nova/ --recursive | awk '{print $NF}')
+```
+
+These are ad-hoc CLI commands, not automated scripts. If release inspection becomes
+routine, a `novacat-tools` command wrapping these patterns would be appropriate.
+
 
 ---
 
 ## 16. Open Questions
 
-| # | Question | Source | Blocking? |
+| # | Question | Source | Status |
 |---|---|---|---|
-| OQ-1 | **`nova_type` enrichment.** The Nova DDB item does not currently carry a `nova_type` field, and the `initialize_nova` workflow no longer classifies novae as classical vs. recurrent. A post-MVP enrichment mechanism is needed — likely paired with discovery date refinement. Until then, `nova_type` is `null` in published artifacts. | §5.3 | No (nullable for MVP) |
-| OQ-2 | **Outburst MJD resolution strategy.** Multiple generators (`spectra.json`, `photometry.json`) require an `outburst_mjd` value. The proposed approach: use `discovery_date` when available (converted to MJD), fall back to earliest observation + 1 day when not, and carry an `outburst_mjd_is_estimated` boolean flag in the artifact schema. The "+1 day" convention avoids day-zero issues on log-scaled temporal axes. The flag enables a frontend warning so users are not misled. This needs to be finalized before §7/§8 are drafted. | §5 design discussion | Blocks §7, §8 |
-| OQ-3 | **`discovery_date` → MJD conversion for imprecise dates.** When `discovery_date` has `00` for the day component (month precision only), what MJD value is produced? Proposed: default to the 1st of the month. When both month and day are `00` (year precision only), default to January 1st. Document the imprecision in the `outburst_mjd_is_estimated` flag. | §5 design discussion | Blocks §7, §8 |
-| OQ-4 | **References in the bundle.** Whether to include a `references.bib` or equivalent file in the downloadable bundle. ADR-014 Open Question 1. | ADR-014 | Blocks §10 |
+| OQ-1 | **`nova_type` enrichment.** The Nova DDB item does not currently carry a `nova_type` field, and the `initialize_nova` workflow no longer classifies novae as classical vs. recurrent. A post-MVP enrichment mechanism is needed — likely paired with discovery date refinement. Until then, `nova_type` is `null` in published artifacts. P-6 creates the field; this question concerns the mechanism that populates it with real values. | §5.3 | **Open** (non-blocking; nullable for MVP) |
+| ~~OQ-2~~ | ~~**Outburst MJD resolution strategy.**~~ Resolved. §7.6 specifies the full resolution algorithm: use `discovery_date` when available (converted to MJD), fall back to earliest observation − 1 day when not, carry `outburst_mjd_is_estimated` boolean flag. Imprecise date handling defined (day `00` → 1st of month; month+day `00` → January 1st). Recurrent nova edge case handled (always use earliest-observation fallback). | §7.6 | **Resolved** |
+| ~~OQ-3~~ | ~~**`discovery_date` → MJD conversion for imprecise dates.**~~ Resolved. Folded into the outburst MJD shared utility (§7.6): day component `00` defaults to the 1st of the month; year-only precision (`00-00`) defaults to January 1st. Imprecision is reflected in `outburst_mjd_is_estimated = true` only when the fallback (earliest observation) path is used — imprecise-but-present discovery dates still set the flag to `false`, which is correct: the date is from a literature source, even if approximate. | §7.6 | **Resolved** |
+| ~~OQ-4~~ | ~~**References in the bundle.**~~ Resolved. §10.3 includes `<n>_references.bib` in the bundle structure. §10.8 specifies the BibTeX generation logic. This resolves ADR-014 Open Question 1. | §10.3, §10.8 | **Resolved** |
+| OQ-5 | **Bundle filename discovery.** The bundle S3 key includes a date stamp (`<primary-name>_bundle_<YYYYMMDD>.zip`), and the date reflects when the bundle was generated — which varies per nova and persists across copy-forward sweeps. The frontend needs to construct the download URL, but no published artifact currently exposes the bundle filename. `nova.json` is generated before `bundle.zip` in the dependency order (§4.4), so it cannot reference the bundle's output without reordering. Three options: (a) add a `bundle_filename` field to `nova.json` and reorder generation so the bundle runs first or the filename is computed deterministically before the bundle is built, (b) use a stable bundle key without the date stamp (loses the human-readable date convention), or (c) add a lightweight per-nova `download.json` artifact that carries the bundle URL. | §10, §14.8 | **Open** (blocks frontend bundle download integration) |
+| OQ-6 | **Band registry loading mechanism for Fargate.** §8.2 specifies that the band registry is loaded once per Fargate execution. ADR-017 defines the registry as a versioned data artifact, and it is already operational in the ticket-driven ingestion pipeline. The Fargate task needs to use the same access mechanism (S3 read of the registry artifact, or bundled in the container image). This is an implementation detail rather than a design question, but the Fargate task's IAM role and startup code must account for it. | §8.2, ADR-017 | **Open** (non-blocking; implementation detail for Epic 2) |
 
 ---
 
 ## 17. Work Decomposition
 
-_To be written after design is complete._
+## 17. Work Decomposition
+
+### 17.1 Overview
+
+This section decomposes the regeneration pipeline into implementation epics. Each
+epic is a meaningful deliverable — independently testable and, where possible,
+independently deployable. The epics are presented in dependency order; each builds
+on the outputs of the previous one.
+
+Prerequisites identified in the generator sections (P-1 through P-7) are folded
+into the epic where they are first needed rather than isolated as a standalone
+backfill phase.
+
+```mermaid
+flowchart TD
+    E1[Epic 1\nData Backfill &\nWorkItem Integration]
+    E2[Epic 2\nPipeline\nInfrastructure]
+    E3[Epic 3\nArtifact\nGenerators]
+    E4[Epic 4\nCatalog Generation\n& Publication]
+    E5[Epic 5\nDelivery\nInfrastructure]
+    E6[Epic 6\nOperational\nReadiness]
+
+    E1 --> E2
+    E2 --> E3
+    E3 --> E4
+    E1 --> E5
+    E4 --> E6
+    E5 --> E6
+```
+
+Note: Epic 5 (Delivery Infrastructure) depends only on Epic 1 (for the S3 bucket
+CDK changes) and can proceed in parallel with Epics 2–4. The frontend integration
+portion of Epic 5 requires the CloudFront distribution domain, but not the
+generators or publication logic.
+
+---
+
+### 17.2 Epic 1 — Data Backfill & WorkItem Integration
+
+**Goal:** Prepare the data layer for artifact generation and wire up the change
+detection mechanism.
+
+**Why this is first:** Every generator assumes certain fields exist on DynamoDB
+items and certain derived files exist in S3. Without this epic, the generators
+have nothing to read. The WorkItem integration is bundled here because it touches
+the same ingestion workflows that the backfill modifies.
+
+**Scope:**
+
+- **P-1:** Validate that all ACTIVE Nova items have `ra_deg` and `dec_deg`
+  populated. Write a one-time audit script; manually fix or quarantine any items
+  that fail. (§5.8)
+- **P-2:** Add `instrument` and `telescope` as first-class fields on SPECTRA
+  DataProduct items. Update `spectra_validator` and `ingest_ticket` (spectra
+  branch) to populate them at write time from FITS headers. Backfill existing
+  VALID items via a one-time script reading FITS headers from S3. (§7.9)
+- **P-3:** Add `observation_date_mjd` to SPECTRA DataProduct items. Same
+  update/backfill pattern as P-2. (§7.9)
+- **P-4:** Implement web-ready CSV generation. After a spectrum is validated,
+  write a downsampled (≤2,000 points), wavelength-in-nm CSV to
+  `derived/spectra/<nova_id>/<data_product_id>/web_ready.csv`. Add this step to
+  `spectra_validator` and `ingest_ticket` (spectra branch). Backfill existing
+  VALID spectra via a one-time script. (§7.9)
+- **P-5:** Add `flux_unit` to SPECTRA DataProduct items, populated from the FITS
+  `BUNIT` header keyword. Same update/backfill pattern. (§7.9)
+- **P-6:** Add `nova_type` to the Nova DDB item. Initially populated as `null`
+  for all novae; enrichment mechanism is post-MVP (OQ-1). The field must exist
+  for the outburst MJD shared utility (§7.6) to reference it. (§8.13)
+- **WorkItem writes:** Add WorkItem creation to the three ingestion workflows
+  (`ingest_ticket`, `acquire_and_validate_spectra`, `refresh_references`) as a
+  best-effort final step before `FinalizeJobRunSuccess`. (§3.3)
+
+**Deliverable:** All existing VALID spectra have the enriched DataProduct fields
+and web-ready CSVs. Ingestion workflows emit WorkItems on success. Verified by
+unit tests on the updated handlers and a backfill audit confirming field
+population.
+
+---
+
+### 17.3 Epic 2 — Pipeline Infrastructure
+
+**Goal:** Build the sweep coordination machinery — everything between "WorkItems
+exist" and "a Fargate task is running with a plan."
+
+**Scope:**
+
+- **Coordinator Lambda** (`artifact_coordinator`): Query `WORKQUEUE`, build
+  per-nova manifests via the dependency matrix (§3.4), persist a
+  `RegenBatchPlan` item, launch the Step Functions workflow. Handle stale plan
+  detection and abandonment (§4.2). Handle empty queue (exit immediately).
+  Handle in-progress plan (exit with log). (§4.2–§4.3)
+- **Step Functions workflow** (`regenerate_artifacts`): Four states —
+  UpdatePlanInProgress, RunArtifactGenerator (.sync ECS integration),
+  Finalize, FailHandler. Standard workflow. (§4.5)
+- **Fargate task definition (CDK):** Task definition, container image build,
+  IAM role (S3 read/write on both buckets, DDB read on both tables, DDB write
+  on main table), VPC/networking configuration, resource sizing (2 vCPU / 8 GB
+  for MVP). (§4.4)
+- **Fargate task scaffold:** Main loop that loads a batch plan, iterates novae,
+  calls generator stubs, tracks per-nova success/failure, and emits a result
+  payload. Generators are no-ops at this stage — the scaffold proves the
+  control flow. (§4.4)
+- **Finalize Lambda** (`artifact_finalizer`): Read the Fargate result payload.
+  For succeeded novae: delete consumed WorkItems, write counts to the Nova DDB
+  item (P-7: `spectra_count`, `photometry_count`, `references_count`,
+  `has_sparkline`). Update `RegenBatchPlan` status. (§4.5, §11.10)
+- **EventBridge rule:** Scheduled invocation of the coordinator Lambda.
+  Cadence configurable via CDK context parameter. (§4.1)
+
+**Deliverable:** A manual coordinator invocation with synthetic WorkItems launches
+a Fargate task that processes the plan, calls generator stubs, and the Finalize
+Lambda commits the results. The full sweep lifecycle is exercisable end-to-end
+with no-op generators.
+
+---
+
+### 17.4 Epic 3 — Artifact Generators
+
+**Goal:** Implement all six per-nova artifact generators. This is the largest
+epic by code volume.
+
+**Scope:**
+
+- **Shared utilities:** Outburst MJD resolution (§7.6), coordinate formatting
+  (§5.3), `generated_at` timestamp, LTTB downsampling algorithm (§9.5).
+- **`references.json` generator** (§6): DDB query for NovaReference + Reference
+  items, orphan handling, year-descending sort.
+- **`spectra.json` generator** (§7): DDB query for VALID DataProducts, S3 reads
+  for web-ready CSVs, peak-flux normalization, epoch sorting, output mapping.
+- **`photometry.json` generator** (§8): DDB query against dedicated photometry
+  table, regime grouping, upper limit suppression, LTTB subsampling per band,
+  kd-tree band offset computation, days-since-outburst derivation, output
+  mapping. Retain full unfiltered dataset in per-nova context for the bundle
+  generator.
+- **`sparkline.svg` generator** (§9): Band selection algorithm, coordinate
+  transform to 90×55px viewport, SVG polyline + fill polygon construction, edge
+  case handling (single point, identical magnitudes, no optical data).
+- **`nova.json` generator** (§5): Coordinate formatting, discovery date
+  pass-through, count assembly from in-process context.
+- **`bundle.zip` generator** (§10): README template, metadata JSON, sources JSON,
+  BibTeX generation, consolidated photometry FITS table via astropy, streaming
+  ZIP assembly from raw spectra FITS files in S3, manifest generation.
+
+**Deliverable:** Each generator is independently unit-tested against fixture data.
+Integration test: a manual sweep with real WorkItems for a test nova produces all
+seven per-nova artifacts with correct content. Generators are wired into the
+Fargate task scaffold from Epic 2, replacing the no-op stubs.
+
+---
+
+### 17.5 Epic 4 — Catalog Generation & Publication
+
+**Goal:** Generate the global catalog artifact and publish all artifacts to S3
+using the immutable release model.
+
+**Scope:**
+
+- **`catalog.json` generator** (§11): DDB Scan of ACTIVE novae, merge with
+  in-memory sweep results, stats block computation, sort by spectra_count
+  descending, output mapping.
+- **Release publication logic** (§12): Four-phase publish — write swept novae
+  artifacts to `releases/<YYYYMMDD-HHMMSS>/`, copy unchanged novae from
+  previous release, write `catalog.json`, update `current.json` pointer.
+  Bootstrap handling (no previous release exists).
+- **S3 bucket CDK updates** (§12.7): Update `ExpireOldReleases` lifecycle rule
+  from 730 days to 7 days. Bucket versioning remains off.
+- **Fargate task IAM update:** Add `s3:CopyObject` and `s3:GetObject`
+  permissions for the copy-forward step and `current.json` read.
+
+**Deliverable:** A full sweep writes a complete release to S3, including freshly
+generated artifacts, copied-forward unchanged novae, catalog.json, and the
+`current.json` pointer. A second sweep with a different set of dirty novae
+produces a new release that correctly copies forward the first sweep's novae.
+Verified by inspecting S3 contents and comparing the two releases.
+
+---
+
+### 17.6 Epic 5 — Delivery Infrastructure
+
+**Goal:** Make published artifacts accessible to browsers and connect the
+frontend to the data layer.
+
+This epic can proceed in parallel with Epics 2–4. The CloudFront distribution
+and frontend data client are independent of the generators and publication logic —
+they only need S3 objects at known paths to function. Test data (hand-placed
+artifacts in S3) can substitute for real sweep output during development.
+
+**Scope:**
+
+- **CloudFront distribution (CDK)** (§13): OAC on public site bucket, two
+  cache behaviors (pointer at 60s, releases at 7d), CORS response headers
+  policy, 403→404 error response, Price Class All, compression enabled.
+  Export distribution domain as CDK output.
+- **Frontend data client** (§14): New `src/lib/dataClient.ts` module with
+  `resolveRelease()`, `getArtifactUrl()`, and `fetchArtifact<T>()`. Dev-mode
+  fallback to local fixtures when `NEXT_PUBLIC_DATA_URL` is unset.
+- **Frontend call site updates** (§14.10): Update pages and components to use
+  the data client instead of direct mock data imports. Sparkline `<img>` src
+  and bundle download `<a>` href construction via `getArtifactUrl()`.
+- **Vercel configuration** (§14.2): Set `NEXT_PUBLIC_DATA_URL` environment
+  variable to the CloudFront distribution domain.
+
+**Deliverable:** Hand-placed test artifacts in S3 (a mock release with a
+`current.json` pointer) are accessible via CloudFront and render correctly in the
+Vercel-deployed frontend. The dev workflow (`npm run dev` with local fixtures)
+continues to work unchanged.
+
+---
+
+### 17.7 Epic 6 — Operational Readiness
+
+**Goal:** Verify the full end-to-end pipeline and set up the monitoring
+infrastructure for ongoing operations.
+
+**Scope:**
+
+- **End-to-end verification:** Ingest test data through the real ingestion
+  pipeline → confirm WorkItems appear → trigger a sweep → confirm artifacts
+  are generated and published → confirm the frontend renders the data via
+  CloudFront. This is the first time the entire chain runs without mocks or
+  manual intervention.
+- **CloudWatch alarms** (§15.4): Sweep failure alarm and sweep skip alarm
+  (48-hour no-success detection). Wire to existing SNS topic.
+- **AWS Budget alert** (§15.8): $5/month budget on S3 + CloudFront + ECS
+  combined spend.
+- **Operator verification of manual recipes** (§15.5): Test each manual
+  intervention — force-regenerate a single nova, rollback to a previous
+  release, abandon a stuck plan — against the live system to confirm the
+  documented CLI commands work as specified.
+
+**Deliverable:** The regeneration pipeline is running on the production schedule.
+Alarms are active. The operator has verified all manual intervention recipes.
+The system is ready for routine ingestion and publication.
+
+---
+
+### 17.8 Estimated Effort
+
+Effort estimates are rough, assuming a single developer familiar with the
+codebase. They reflect code, tests, and CDK infrastructure — not documentation.
+
+| Epic | Description | Estimated effort |
+|---|---|---|
+| 1 | Data Backfill & WorkItem Integration | 3–4 days |
+| 2 | Pipeline Infrastructure | 4–5 days |
+| 3 | Artifact Generators | 8–12 days |
+| 4 | Catalog Generation & Publication | 3–4 days |
+| 5 | Delivery Infrastructure | 2–3 days |
+| 6 | Operational Readiness | 1–2 days |
+| | **Total** | **21–30 days** |
+
+Epic 3 dominates because it contains six generators with distinct input sources,
+computation logic, and output schemas. The `photometry.json` generator (§8) and
+`bundle.zip` generator (§10) are the most complex individual components. Epics 5
+and 6 are the lightest — mostly CDK configuration and verification.
+
+The parallel path (Epic 5 alongside Epics 2–4) can shorten the calendar timeline
+if development sessions are interleaved.
