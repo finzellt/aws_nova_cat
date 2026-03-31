@@ -172,8 +172,7 @@ ensures consistent downsampling across all spectra.
 
 #### Decision 5 — Add `flux_unit` to SPECTRA DataProduct Items (P-5)
 
-**What:** Add `flux_unit` as a field on SPECTRA DataProduct items, populated from the
-FITS `BUNIT` header keyword.
+What: Add `flux_unit` as a field on SPECTRA DataProduct items, populated from the flux unit string determined during profile validation (typically derived from the FITS `BUNIT` primary-header keyword, the `TUNIT` column descriptor on the spectrum BinTable, or a profile-level default — whichever the profile considers authoritative for the instrument).
 
 **Why:** The `spectra.json` generator emits `flux_unit` as a per-spectrum metadata field
 for tooltip display of original flux values (DESIGN-003 §7.4, ADR-014 spectrum record
@@ -181,7 +180,12 @@ schema). The value varies per spectrum (different archives use different flux
 calibrations), so it must be stored per DataProduct item.
 
 **Implementation:** Same forward-write and backfill pattern as Decisions 2–3. The field
-is `string | null`. The backfill script handles this in the same pass as the other
+is `string | null`.
+
+For the forward-write path, the value is taken from NormalizedSpectrum.flux_units as resolved
+by the profile; for the backfill script, the same per-profile extraction logic applies (read
+BUNIT, fall back to TUNIT, then to profile default). An empty string from the FITS header is
+normalized to null. The backfill script handles this in the same pass as the other
 FITS-header-derived fields.
 
 **Verification:** Same audit pattern as Decision 2.

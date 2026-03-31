@@ -54,13 +54,25 @@ class SpectrumFailure:
 
 @dataclass(frozen=True)
 class SpectrumResult:
-    """Successful per-spectrum processing result."""
+    """Successful per-spectrum processing result.
+
+    The enrichment fields (instrument, telescope, observation_date_mjd,
+    flux_unit) are extracted from the metadata CSV / ticket during read and
+    surfaced here so that spectra_writer can persist them on the DataProduct
+    DDB item (ADR-031 Decisions 2, 3, 5).
+    """
 
     spectrum_filename: str
     data_product_id: uuid.UUID
     locator_identity: str
     s3_key: str
     fits_bytes: bytes
+
+    # --- ADR-031 enrichment fields (Decisions 2, 3, 5) ---
+    instrument: str | None = None
+    telescope: str | None = None
+    observation_date_mjd: float | None = None
+    flux_unit: str | None = None
 
 
 @dataclass(frozen=True)
@@ -69,6 +81,15 @@ class SpectraReadResult:
 
     results: list[SpectrumResult]
     failures: list[SpectrumFailure]
+
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+# JD epoch offset: JD 0.0 = MJD −2400000.5
+# Consistent with photometry_reader._JD_TO_MJD_OFFSET.
+_JD_TO_MJD_OFFSET: float = 2_400_000.5
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +111,27 @@ def _jd_to_iso(jd: float) -> str:
     from astropy.time import Time
 
     return str(Time(jd, format="jd").to_value("iso", subfmt="date"))
+
+
+def _to_mjd(raw_value: float, time_system: str) -> float:
+    """Convert a raw temporal value to Modified Julian Date.
+
+    Mirrors the conversion logic in photometry_reader._convert_time but
+    returns only the MJD float — the spectra path does not need provenance
+    metadata (time_bary_corr, time_orig_sys).
+
+    Supported time systems: JD, MJD, HJD, BJD.
+    HJD and BJD are treated identically to JD for MJD conversion (the
+    heliocentric/barycentric correction is sub-minute and does not affect
+    waterfall plot ordering).
+
+    Raises ValueError for unrecognised time systems.
+    """
+    if time_system == "MJD":
+        return raw_value
+    if time_system in {"JD", "HJD", "BJD"}:
+        return raw_value - _JD_TO_MJD_OFFSET
+    raise ValueError(f"Unrecognised time_system: {time_system!r}")
 
 
 def _derive_data_product_id(
@@ -217,6 +259,46 @@ def _build_keyword_dict(
     return keywords
 
 
+def _extract_enrichment_fields(
+    keywords: dict[str, Any],
+    row: list[str],
+    ticket: SpectraTicket,
+) -> dict[str, Any]:
+    """Extract ADR-031 enrichment fields from the built keywords and raw row.
+
+    Reads instrument, telescope, and flux_unit from the already-resolved
+    keywords dict to avoid duplicating resolution logic.  observation_date_mjd
+    is computed from the raw date column value and the ticket's time_system.
+
+    Returns a dict suitable for splatting into the SpectrumResult constructor.
+    All values are None when the source data is absent.
+    """
+    # instrument and telescope: read from keywords (already resolved by
+    # _build_keyword_dict from the metadata CSV via _col_value).
+    instrument: str | None = keywords.get("INSTRUME")
+    telescope: str | None = keywords.get("TELESCOP")
+
+    # flux_unit: read from BUNIT keyword, normalize empty string to None
+    # (ADR-031 contract: null means absent).
+    raw_bunit: str = keywords.get("BUNIT", "")
+    flux_unit: str | None = raw_bunit if raw_bunit else None
+
+    # observation_date_mjd: convert the raw date value using the ticket's
+    # time_system.  The date column is required on SpectraTicket, but the
+    # cell value may be NA for a given row.
+    observation_date_mjd: float | None = None
+    date_raw = row[ticket.date_col].strip()
+    if date_raw not in _NA_SENTINELS:
+        observation_date_mjd = _to_mjd(float(date_raw), ticket.time_system)
+
+    return {
+        "instrument": instrument,
+        "telescope": telescope,
+        "observation_date_mjd": observation_date_mjd,
+        "flux_unit": flux_unit,
+    }
+
+
 def _read_spectrum_arrays(
     spectrum_path: Path,
     wav_col: int,
@@ -313,17 +395,15 @@ def read_spectra(
         next(reader)
 
         for row in reader:
-            # Spectrum filename is the anchor for failure reporting; read it
-            # first so failures can be attributed even if later steps blow up.
             spectrum_filename = row[ticket.filename_col].strip()
 
             try:
-                # ── Two-hop: read inner column indices from metadata row ──
+                # ── Resolve inner column indices ─────────────────────────
                 wav_col = _inner_col(row, ticket.wavelength_col)
-                flux_col_inner = _inner_col(row, ticket.flux_col)
-
                 if wav_col is None:
                     raise ValueError("Wavelength column index is NA in metadata CSV.")
+
+                flux_col_inner = _inner_col(row, ticket.flux_col)
                 if flux_col_inner is None:
                     raise ValueError("Flux column index is NA in metadata CSV.")
 
@@ -342,6 +422,9 @@ def read_spectra(
                 wav_start = float(wav_arr[0]) if len(wav_arr) > 0 else 0.0
                 keywords = _build_keyword_dict(ticket, row, nova_id, wav_start)
 
+                # ── Extract ADR-031 enrichment fields ────────────────────
+                enrichment = _extract_enrichment_fields(keywords, row, ticket)
+
                 # ── Construct FITS bytes ─────────────────────────────────
                 fits_bytes = build_fits(wav_arr, flux_arr, ferr_arr, keywords)
 
@@ -359,6 +442,10 @@ def read_spectra(
                         locator_identity=locator_identity,
                         s3_key=s3_key,
                         fits_bytes=fits_bytes,
+                        instrument=enrichment["instrument"],
+                        telescope=enrichment["telescope"],
+                        observation_date_mjd=enrichment["observation_date_mjd"],
+                        flux_unit=enrichment["flux_unit"],
                     )
                 )
 

@@ -33,6 +33,11 @@ Task responsibilities:
     product. Clears eligibility (eligibility=NONE) and removes GSI1PK/GSI1SK
     so the product is no longer visible in the EligibilityIndex.
 
+    On the VALID path, also persists enrichment fields extracted from the
+    validated spectrum (ADR-031 Decisions 2, 3, 5): instrument, telescope,
+    observation_date_mjd, flux_unit. These are consumed by artifact generators
+    (DESIGN-003 §7) and must not require FITS header reads at generation time.
+
   RecordDuplicateLinkage:
     Marks a byte-level duplicate product. Sets duplicate_of_data_product_id,
     acquisition_status=SKIPPED_DUPLICATE, clears eligibility and GSI1 attributes.
@@ -54,6 +59,7 @@ import os
 import pathlib
 from collections.abc import Callable
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import boto3
@@ -254,6 +260,10 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
       normalization_notes       — list[str]
       quarantine_reason         — str | None
       quarantine_reason_code    — str | None
+      instrument                — str | None  (ADR-031 P-2; VALID path only)
+      telescope                 — str | None  (ADR-031 P-2; VALID path only)
+      observation_date_mjd      — float | None (ADR-031 P-3; VALID path only)
+      flux_unit                 — str | None  (ADR-031 P-5; VALID path only)
     """
     nova_id: str = event["nova_id"]
     provider: str = event["provider"]
@@ -365,6 +375,18 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
             },
         )
 
+    # --- Extract enrichment fields from validated spectrum (ADR-031 P-2/P-3/P-5) ---
+    # These flow through $.validation in the ASL state and are persisted on the
+    # DataProduct item by RecordValidationResult, so artifact generators can read
+    # them directly from DDB without parsing FITS headers at generation time.
+    spectrum = result.spectrum
+    instrument: str | None = spectrum.instrument if spectrum else None
+    telescope: str | None = spectrum.telescope if spectrum else None
+    observation_date_mjd: float | None = spectrum.observation_mjd if spectrum else None
+    # Normalize empty string to None: ADR-031 contract is null-means-absent.
+    raw_flux_unit: str | None = spectrum.flux_units if spectrum else None
+    flux_unit: str | None = raw_flux_unit if raw_flux_unit else None
+
     logger.info(
         "ValidateBytes complete",
         extra={
@@ -372,6 +394,10 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
             "profile_id": result.profile_id,
             "is_duplicate": duplicate_id is not None,
             "normalization_notes_count": len(result.normalization_notes),
+            "instrument": instrument,
+            "telescope": telescope,
+            "observation_date_mjd": observation_date_mjd,
+            "flux_unit": flux_unit,
         },
     )
 
@@ -385,6 +411,10 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
         "normalization_notes": result.normalization_notes,
         "quarantine_reason": None,
         "quarantine_reason_code": None,
+        "instrument": instrument,
+        "telescope": telescope,
+        "observation_date_mjd": observation_date_mjd,
+        "flux_unit": flux_unit,
     }
 
 
@@ -408,6 +438,8 @@ def _handle_record_validation_result(event: dict[str, Any], context: object) -> 
     VALID:
       validation_status=VALID, acquisition_status=ACQUIRED,
       fits_profile_id, header_signature_hash, normalization_notes persisted.
+      ADR-031 enrichment fields (instrument, telescope, observation_date_mjd,
+      flux_unit) are persisted when present in the validation payload.
 
     QUARANTINED:
       validation_status=QUARANTINED, acquisition_status=ACQUIRED,
@@ -422,7 +454,8 @@ def _handle_record_validation_result(event: dict[str, Any], context: object) -> 
       acquisition  — {sha256, byte_length, etag, raw_s3_bucket, raw_s3_key}
       validation   — {validation_outcome, fits_profile_id, header_signature_hash,
                       normalization_notes, quarantine_reason_code, quarantine_reason,
-                      profile_selection_inputs}
+                      profile_selection_inputs,
+                      instrument, telescope, observation_date_mjd, flux_unit}
 
     Returns:
       persisted_outcome — the validation_outcome that was written
@@ -494,6 +527,25 @@ def _handle_record_validation_result(event: dict[str, Any], context: object) -> 
     if validation.get("quarantine_reason_code"):
         set_expr_parts.append("quarantine_reason_code = :qrc")
         values[":qrc"] = validation["quarantine_reason_code"]
+
+    # --- ADR-031 enrichment fields (Decisions 2, 3, 5) ---
+    # Written only on the VALID path — the QUARANTINED/TERMINAL_INVALID payloads
+    # do not carry these fields, so the guards below are no-ops for those paths.
+    if validation.get("instrument") is not None:
+        set_expr_parts.append("instrument = :instrument")
+        values[":instrument"] = validation["instrument"]
+
+    if validation.get("telescope") is not None:
+        set_expr_parts.append("telescope = :telescope")
+        values[":telescope"] = validation["telescope"]
+
+    if validation.get("observation_date_mjd") is not None:
+        set_expr_parts.append("observation_date_mjd = :obs_mjd")
+        values[":obs_mjd"] = Decimal(str(validation["observation_date_mjd"]))
+
+    if validation.get("flux_unit") is not None:
+        set_expr_parts.append("flux_unit = :flux_unit")
+        values[":flux_unit"] = validation["flux_unit"]
 
     update_expression = "SET " + ", ".join(set_expr_parts) + " REMOVE GSI1PK, GSI1SK"
 

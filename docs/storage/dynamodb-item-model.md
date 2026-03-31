@@ -311,6 +311,31 @@ Example locator object:
 
 ---
 
+#### Spectrum metadata (ADR-031 enrichment fields)
+
+Populated at validation/write time from FITS headers (archive path) or from
+the metadata CSV (ticket path). Used by artifact generators (DESIGN-003 §7)
+to avoid parsing FITS headers at generation time. All fields are nullable —
+null indicates the source data did not contain the value.
+
+- `instrument`
+  (string | null; from FITS `INSTRUME` keyword or metadata CSV instrument column)
+
+- `telescope`
+  (string | null; from FITS `TELESCOP` keyword or metadata CSV telescope column)
+
+- `observation_date_mjd`
+  (number | null; Modified Julian Date of the observation; derived from FITS
+  `MJD-OBS` or `DATE-OBS`, or from the metadata CSV date column converted via
+  the ticket's time system)
+
+- `flux_unit`
+  (string | null; original flux unit as resolved by the profile — typically from
+  FITS `BUNIT`, `TUNIT` column descriptor, or a profile-level default; empty
+  string from the source is normalized to null)
+
+---
+
 #### QUARANTINE gating
 
 - `quarantine_reason_code`
@@ -407,6 +432,10 @@ Example locator object:
     "header_signature_hash": "hsig:2f91...aa1c"
   },
   "normalization_notes": ["Mapped WAVE axis from ESO keyword set; units Å -> m."],
+  "instrument": "UVES",
+  "telescope": "ESO-VLT-U2",
+  "observation_date_mjd": 56082.05,
+  "flux_unit": "erg/s/cm2/Angstrom",
   "raw_s3_bucket": "nova-cat-private-data",
   "raw_s3_key": "raw/spectra/4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1/2c7d1f4d-5b7a-4a4d-9f31-8d3b4fd0d4d9/primary.fits",
   "updated_at": "2026-02-23T18:12:00Z",
