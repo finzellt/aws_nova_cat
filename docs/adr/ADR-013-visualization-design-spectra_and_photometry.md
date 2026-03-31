@@ -3,6 +3,19 @@
 Status: Proposed
 Date: 2026-03-17
 
+> **⚠ Amended by ADR-031** (2026-03-31)
+> ADR-031 (Data Layer Readiness for Artifact Generation, Decision 10) corrects the
+> backend/frontend responsibility boundary for Days Post-Outburst (DPO) computation.
+> DPO is pre-computed backend-side during artifact generation (DESIGN-003 §7.4, §8.9)
+> and delivered as `days_since_outburst` in both the spectra and photometry artifacts
+> (ADR-014). The boundary tables below are amended accordingly.
+>
+> ADR-031 Decision 8 also notes that the sparkline input pool (Catalog Sparkline
+> section) is broadened by DESIGN-003 §9.2 beyond "Optical band only" to include the
+> consolidated optical regime per DESIGN-003 §8.11.
+>
+> See: `docs/adr/ADR-031-data-layer-readiness-for-artifact-generation.md`
+
 ---
 
 ## Context
@@ -87,13 +100,12 @@ required to keep the frontend free of computation-heavy transforms.
 - Where outburst date cannot be determined from the literature, substituting the earliest
   available observation (photometric or spectroscopic) as the Day 1 reference, and
   recording a flag indicating the substitution was made
-- Pre-computing all data required for Days Post-Outburst (DPO) calculation client-side
-  (i.e., outburst reference date must be present in the artifact)
+- Pre-computing Days Post-Outburst (DPO) per spectrum (`days_since_outburst` field in
+  the artifact; see ADR-014 and DESIGN-003 §7.4)
 
 ### Frontend responsibilities (performed at render time)
 
 - Axis scaling and epoch label format toggling
-- DPO calculation from outburst reference date and per-spectrum MJD
 - Spectral lane amplitude scaling (dynamic, based on inter-spectrum gap)
 - Representative subset sampling for dense plots
 - Temporal gap metric calculation for default scale selection
@@ -555,7 +567,6 @@ No server round-trips are required.
 
 **Frontend computes (at render time):**
 
-- DPO from MJD and outburst reference date
 - Default log/linear time scale selection (gap-ratio rule)
 - Y-axis range (excluding upper limits from fitting)
 - Band color assignment
