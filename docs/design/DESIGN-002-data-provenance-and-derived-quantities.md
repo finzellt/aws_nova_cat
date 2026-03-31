@@ -63,7 +63,7 @@ and *what* `ColorRow` must represent. It does not decide:
 - The `ColorRow` storage target and persistence format (a future ADR, TBD as ADR-022)
 - The band registry schema (ADR-017) and disambiguation algorithm (ADR-018), which
   `ColorRow` band resolution depends on
-- The full donation workflow design (proposed DESIGN-003; see §6)
+- The full donation workflow design (proposed DESIGN-005; see §6)
 
 ### 2.3 Document Class and Schema Disclaimer
 
@@ -322,7 +322,7 @@ processes it.
 
 These fields are populated by the donation API and are not present in operator-prepared
 sidecars. They are defined here for forward-compatibility planning; the donation API will
-populate them programmatically. See §6 and the proposed DESIGN-003 for full context.
+populate them programmatically. See §6 and the proposed DESIGN-005 for full context.
 
 | Field | Type | Description |
 |---|---|---|
@@ -942,9 +942,9 @@ that any workflow architecture must implement.
 ## 6. Donation Workflow Context
 
 > **Scope note.** The donation workflow is sufficiently complex and important to warrant
-> its own dedicated design document, proposed as DESIGN-003. This section is intentionally
+> its own dedicated design document, proposed as DESIGN-005. This section is intentionally
 > high-level: it establishes the forward-compatibility constraints that decisions made now
-> must satisfy, and identifies the key provenance-related design questions that DESIGN-003
+> must satisfy, and identifies the key provenance-related design questions that DESIGN-005
 > will need to resolve. It is not a complete donation workflow design.
 
 ### 6.1 Relationship to the MVP Operator Path
@@ -986,7 +986,7 @@ are the mechanism for this. The ingestion pipeline must respect embargo status: 
 with a future `embargo_end_date` should be ingested and stored, but excluded from the
 public catalog publication until the embargo lapses. The full design of embargo
 enforcement — which layer checks it, how the publication gate implements it — is deferred
-to DESIGN-003.
+to DESIGN-005.
 
 ### 6.3 The Sidecar as the Donor's Voice
 
@@ -1050,8 +1050,8 @@ donation API is introduced. The specific forward-compatibility constraints are:
 | 8 | What is the canonical storage target and persistence format for `ColorRow` records? | TBD (likely ADR-020 extension or ADR-022) | May share the photometry Parquet target with a `row_type` partition. |
 | 9 | What is the deduplication key for `ColorRow` records? | ADR-022 | The `PhotometryRow` bibcode + band + epoch key is not directly applicable. |
 | 10 | ~~What is the inline header keyword controlled vocabulary and synonym registry for Layer 0 header extraction?~~ **Resolved:** `synonyms.json` is expanded in scope to cover all ingestion metadata fields, not just `PhotometryRow` fields. Inline header extraction reuses this expanded registry. | ADR-021 | Decision reached in ADR-021 conversation. |
-| 11 | How does embargo status interact with the publication gate? Which layer enforces embargo exclusion? | DESIGN-003 / publication gate ADR (TBD) | Not in scope for the ingestion pipeline; flagged for DESIGN-003. |
-| 12 | What is the full donation workflow design, including the upload API, donor trust tiers, donor registry, abuse prevention, and embargo enforcement? | DESIGN-003 | §6 establishes forward-compatibility constraints only. |
+| 11 | How does embargo status interact with the publication gate? Which layer enforces embargo exclusion? | DESIGN-005 / publication gate ADR (TBD) | Not in scope for the ingestion pipeline; flagged for DESIGN-005. |
+| 12 | What is the full donation workflow design, including the upload API, donor trust tiers, donor registry, abuse prevention, and embargo enforcement? | DESIGN-005 | §6 establishes forward-compatibility constraints only. |
 
 ---
 
@@ -1091,12 +1091,12 @@ implementation mirrors the `PhotometryRow` chain: band registry (ADR-017) and
 disambiguation algorithm (ADR-018) must be complete before a `ColorRow` adapter can be
 implemented.
 
-**New design document — Donation Workflow (DESIGN-003, proposed):**
+**New design document — Donation Workflow (DESIGN-005, proposed):**
 
 The full donation workflow — upload API design, donor trust tiers, donor registry, abuse
 prevention, embargo enforcement, donation UX — warrants a dedicated design document.
 §6 of this document establishes the forward-compatibility constraints and the provenance
-framework that DESIGN-003 must build on; it is not itself a complete donation design.
+framework that DESIGN-005 must build on; it is not itself a complete donation design.
 
 **Not a new epic.** The sidecar and provenance framework do not require implementation
 of new standalone components. They manifest as:
@@ -1119,6 +1119,6 @@ of new standalone components. They manifest as:
 | `ADR-020` (forthcoming) | The ingestion provenance record (§4.4.1) and column mapping manifest (§4.4.2) define the logical content of the `FinalizeIngestion` outputs. Storage format and location are decisions for ADR-020. | Author ADR-020 using §4.4 of this document as input. |
 | `ADR-021` (forthcoming) | The full sidecar contract (§3), inline header extraction (§3.4), `ColorRow` routing (§5.5), and associated open questions are the primary inputs to ADR-021. | Author ADR-021 using §3, §3.4, and §5.5 of this document as input. |
 | `ADR-022` (proposed, forthcoming) | The `ColorRow` schema (§5.3), band registry relationship (§5.4), workflow architecture (§5.5), and open questions (§5.6, §7 Questions 6–9) are inputs. | Propose ADR-022 once ADR-017 and ADR-018 are adopted. |
-| `DESIGN-003` (proposed, forthcoming) | Full donation workflow design. §6 of this document establishes the forward-compatibility constraints and provenance framework that DESIGN-003 builds on. | Propose DESIGN-003 when the donation pathway becomes an active development target. |
+| `DESIGN-005` (proposed, forthcoming) | Full donation workflow design. §6 of this document establishes the forward-compatibility constraints and provenance framework that DESIGN-005 builds on. | Propose DESIGN-005 when the donation pathway becomes an active development target. |
 | `contracts/models/entities.py` | Current `PhotometryRow` Section 5 fields are the baseline for this document. The Tier 1 and Tier 2 additions will be implemented in Epic C. | No action now; Epic C is the vehicle. |
 | `photometry_table_model.md` | Under revision in Epic C. The provenance framework additions here should be incorporated into v2.0. | No action now; input to Epic C. |
