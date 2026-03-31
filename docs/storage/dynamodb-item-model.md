@@ -76,6 +76,7 @@ Canonical nova record.
 - `discovery_date` (optional, derived from references)
 - `aliases` (string list; raw alias strings)
 - `status` (ACTIVE | QUARANTINED | MERGED | DEPRECATED)
+- `nova_type` (string | null; nova classification — e.g. `"recurrent"`, `"symbiotic"`.
 - `created_at`, `updated_at` (ISO-8601 UTC)
 
 #### Example:
@@ -95,6 +96,7 @@ Canonical nova record.
   "coord_epoch": "J2000",
   "resolver_source": "SIMBAD",
   "aliases": ["NOVA Sco 2012", "Gaia DR3 4043499439062100096", "MOA 2012-BLG-320"],
+  "nova_type": null,
   "discovery_date": "2012-06-01",
   "created_at": "2026-02-21T20:00:00Z",
   "updated_at": "2026-02-23T18:10:00Z"
@@ -850,6 +852,65 @@ condition_expression=attribute_not_exists(PK).
   "duration_ms": 8423,
   "created_at": "2026-02-23T18:10:10Z",
   "updated_at": "2026-02-23T18:10:18Z"
+}
+```
+
+---
+
+### 10) WorkItem (regeneration pipeline work order)
+
+WorkItems are additive work orders for the artifact regeneration pipeline
+(DESIGN-003 §3). Each ingestion event writes a discrete WorkItem to signal
+that a nova has new data. The coordinator consumes these items to build
+per-nova regeneration manifests, then deletes them on success.
+
+WorkItems live in a dedicated global partition, separate from per-nova
+partitions.
+
+#### Key
+
+- `PK = "WORKQUEUE"`
+- `SK = "<nova_id>#<dirty_type>#<created_at>"`
+
+The sort key orders items by nova → dirty_type → timestamp. All items for
+a given nova are contiguous, and within a nova, all items of the same
+dirty_type are contiguous. The coordinator can derive the per-nova
+regeneration manifest directly from the sort key structure.
+
+---
+
+#### Fields
+
+- `entity_type = "WorkItem"`
+- `schema_version` (internal item evolution; current default 1.0.0)
+- `nova_id` (UUID string; which nova needs regeneration)
+- `dirty_type` (`spectra` | `photometry` | `references`)
+- `source_workflow` (string; e.g. `acquire_and_validate_spectra`,
+  `ingest_ticket`, `refresh_references`)
+- `job_run_id` (UUID string; audit trail to the specific ingestion JobRun)
+- `correlation_id` (string; cross-workflow tracing identifier)
+- `created_at` (ISO-8601 UTC)
+- `ttl` (number; DynamoDB TTL attribute, Unix epoch seconds, 30 days from
+  `created_at`)
+
+WorkItem writes are best-effort: a failed write logs a warning but does
+not fail the ingestion. The data is already persisted, and a manual
+operator-triggered regeneration can recover.
+
+#### Example:
+```json
+{
+  "PK": "WORKQUEUE",
+  "SK": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1#spectra#2026-03-25T14:30:00Z",
+  "entity_type": "WorkItem",
+  "schema_version": "1.0.0",
+  "nova_id": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
+  "dirty_type": "spectra",
+  "source_workflow": "acquire_and_validate_spectra",
+  "job_run_id": "5a4fce02-3b02-4b5c-8d06-541d9f2d4f60",
+  "correlation_id": "a1b2c3d4-9e8f-7a6b-5c4d-3e2f1a0b9c8d",
+  "created_at": "2026-03-25T14:30:00Z",
+  "ttl": 1745677800
 }
 ```
 

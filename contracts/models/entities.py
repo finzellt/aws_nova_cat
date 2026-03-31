@@ -159,6 +159,18 @@ class Nova(PersistentBase):
         ),
     )
 
+    nova_type: str | None = Field(
+        default=None,
+        description=(
+            "Nova classification — e.g. 'recurrent', 'symbiotic'. "
+            "Initially null for all novae. Populated via manual operator "
+            "tagging; automated classification deferred post-MVP. "
+            "SIMBAD no longer provides a recurrent nova object type, so "
+            "this field cannot be derived from archive resolution."
+        ),
+        max_length=64,
+    )
+
     aliases: list[str] = Field(
         default_factory=list,
         description=(

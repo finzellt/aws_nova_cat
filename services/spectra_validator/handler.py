@@ -38,6 +38,11 @@ Task responsibilities:
     observation_date_mjd, flux_unit. These are consumed by artifact generators
     (DESIGN-003 §7) and must not require FITS header reads at generation time.
 
+  ValidateBytes also writes a web-ready CSV (ADR-031 Decision 4) to
+    derived/spectra/<nova_id>/<data_product_id>/web_ready.csv in the private
+    S3 bucket after successful validation. This is best-effort: a failed
+    write does not affect the validation outcome. Skipped for duplicates.
+
   RecordDuplicateLinkage:
     Marks a byte-level duplicate product. Sets duplicate_of_data_product_id,
     acquisition_status=SKIPPED_DUPLICATE, clears eligibility and GSI1 attributes.
@@ -68,6 +73,8 @@ from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError
 from nova_common.logging import configure_logging, logger
 from nova_common.tracing import tracer
+from nova_common.web_ready_csv import build_web_ready_csv, write_web_ready_csv_to_s3
+from nova_common.work_item import DirtyType, write_work_item
 from profiles import validate_spectrum  # type: ignore[import-not-found]
 
 
@@ -387,6 +394,35 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
     raw_flux_unit: str | None = spectrum.flux_units if spectrum else None
     flux_unit: str | None = raw_flux_unit if raw_flux_unit else None
 
+    # --- Write web-ready CSV (ADR-031 P-4) ---
+    # Best-effort: a failed write logs a warning but does not fail the
+    # validation.  The CSV is a derived artifact that can be regenerated
+    # from the raw FITS via the backfill script.
+    # Skipped for duplicates — the canonical product's CSV already exists.
+    if not duplicate_id and spectrum:
+        try:
+            csv_content = build_web_ready_csv(
+                wavelength=spectrum.spectral_axis,
+                flux=spectrum.flux_axis,
+                spectral_units=spectrum.spectral_units,
+            )
+            write_web_ready_csv_to_s3(
+                csv_content=csv_content,
+                nova_id=nova_id,
+                data_product_id=data_product_id,
+                s3=_s3,
+                bucket=_PRIVATE_BUCKET,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to write web-ready CSV — validation result unaffected",
+                extra={
+                    "data_product_id": data_product_id,
+                    "nova_id": nova_id,
+                },
+                exc_info=True,
+            )
+
     logger.info(
         "ValidateBytes complete",
         extra={
@@ -570,6 +606,19 @@ def _handle_record_validation_result(event: dict[str, Any], context: object) -> 
             "last_attempt_outcome": last_attempt_outcome,
         },
     )
+
+    # --- ADR-031 Decision 7: WorkItem for the regeneration pipeline ---
+    # Best-effort; only on the VALID path (QUARANTINED/TERMINAL don't
+    # produce data that needs artifact regeneration).
+    if validation_outcome == "VALID":
+        write_work_item(
+            _table,
+            nova_id=nova_id,
+            dirty_type=DirtyType.spectra,
+            source_workflow="acquire_and_validate_spectra",
+            job_run_id=event.get("job_run_id", event.get("correlation_id", "unknown")),
+            correlation_id=event.get("correlation_id", "unknown"),
+        )
 
     return {"persisted_outcome": validation_outcome}
 

@@ -232,9 +232,9 @@ def _create_nova_id(event: dict[str, Any], context: object) -> dict[str, Any]:
             "primary_name": candidate_name,
             "primary_name_normalized": normalized_candidate_name,
             "status": "ACTIVE",
+            "nova_type": None,
             "created_by_job_run_id": job_run_id,
             "created_at": now,
-            "updated_at": now,
         }
     )
 

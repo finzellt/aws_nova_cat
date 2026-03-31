@@ -440,6 +440,11 @@ class NovaCatCompute(Construct):
             tracing=lambda_.Tracing.ACTIVE,
         )
         self._functions["spectra_validator"] = spectra_validator
+        # ADR-031 Decision 4: web-ready CSV uploads to derived/spectra/
+        private_bucket.grant_write(
+            spectra_validator,
+            "derived/*",
+        )
 
         # ------------------------------------------------------------------
         # archive_resolver — DockerImageFunction
@@ -666,6 +671,11 @@ class NovaCatCompute(Construct):
         private_bucket.grant_write(
             self._functions["ticket_ingestor"],
             "diagnostics/*",
+        )
+        # ADR-031 Decision 4: web-ready CSV uploads to derived/spectra/
+        private_bucket.grant_write(
+            self._functions["ticket_ingestor"],
+            "derived/*",
         )
         photometry_table.grant_write_data(self._functions["ticket_ingestor"])
         table.grant_read_write_data(self._functions["ticket_ingestor"])

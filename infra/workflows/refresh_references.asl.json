@@ -68,6 +68,25 @@
                     "ResultPath": "$.error"
                 }
             ],
+            "Next": "EnsureAttributes"
+        },
+        "EnsureAttributes": {
+            "Type": "Choice",
+            "Comment": "Guard for the optional $.attributes field. FetchReferenceCandidates uses a hard JSONPath reference (\"attributes.$\": \"$.attributes\") which throws States.Runtime if the field is absent. When refresh_references is launched by workflow_launcher (the normal path), no attributes field is present — only operator-triggered re-runs include it. This Choice + Pass pair guarantees $.attributes exists before FetchReferenceCandidates runs.",
+            "Choices": [
+                {
+                    "Variable": "$.attributes",
+                    "IsPresent": true,
+                    "Next": "FetchReferenceCandidates"
+                }
+            ],
+            "Default": "DefaultAttributes"
+        },
+        "DefaultAttributes": {
+            "Type": "Pass",
+            "Comment": "Inject an empty attributes dict so FetchReferenceCandidates can safely dereference $.attributes.",
+            "Result": {},
+            "ResultPath": "$.attributes",
             "Next": "FetchReferenceCandidates"
         },
         "FetchReferenceCandidates": {

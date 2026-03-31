@@ -13,11 +13,31 @@ build_fits(wavelength, flux, flux_err, keywords) -> bytes
 from __future__ import annotations
 
 import io
+import os
+import pathlib
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
-from astropy.io import fits
+
+
+def _bootstrap_astropy(base: str = "/tmp") -> None:
+    """Redirect astropy/astroquery cache dirs to /tmp for Lambda compatibility."""
+    os.environ.setdefault("ASTROPY_CONFIGDIR", f"{base}/astropy/config")
+    os.environ.setdefault("ASTROPY_CACHE_DIR", f"{base}/astropy/cache")
+    os.environ.setdefault("XDG_CACHE_HOME", f"{base}/.cache")
+    os.environ.setdefault("HOME", base)
+    for p in (
+        os.environ["ASTROPY_CONFIGDIR"],
+        os.environ["ASTROPY_CACHE_DIR"],
+        os.environ["XDG_CACHE_HOME"],
+    ):
+        pathlib.Path(p).mkdir(parents=True, exist_ok=True)
+
+
+# Must run before astropy import
+_bootstrap_astropy()
+from astropy.io import fits  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Public

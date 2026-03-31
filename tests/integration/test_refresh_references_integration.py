@@ -517,6 +517,16 @@ class TestHappyPath:
         nova = _get_nova(table)
         assert nova["discovery_date"] == "1992-01-00"
 
+        # ADR-031 Decision 7: WorkItem written for the regeneration pipeline
+        wq_resp = table.query(
+            KeyConditionExpression=(
+                Key("PK").eq("WORKQUEUE") & Key("SK").begins_with(f"{_NOVA_ID}#references#")
+            ),
+        )
+        assert len(wq_resp["Items"]) >= 1, (
+            "No WorkItem found in WORKQUEUE for references after refresh_references"
+        )
+
     def test_publication_dates_normalized_correctly(self, table: Any) -> None:
         """ADS date strings are stored as YYYY-MM-00 (day discarded)."""
         with mock_aws():
