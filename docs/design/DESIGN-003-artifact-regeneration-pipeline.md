@@ -2285,12 +2285,26 @@ set is `spectra_count`, `photometry_count`, `references_count`, and `has_sparkli
 
 Publication is the act of writing generated artifacts from the Fargate task to S3,
 making them available for delivery to browsers via CloudFront (§13). This section
-defines the target bucket, key structure, upload mechanics, and cleanup behavior.
+defines the target bucket, key structure, release model, upload mechanics, and
+cleanup behavior.
 
-Publication is not a separate pipeline stage — it happens inline during the Fargate
-task's per-nova processing loop (§4.4). As each artifact is generated, it is written
-to S3 immediately. catalog.json is written last, after all per-nova processing
-completes.
+Publication uses an **immutable release model**. Each sweep writes all artifacts —
+both freshly generated and unchanged — to a new, uniquely prefixed release directory.
+A stable pointer file (`current.json`) at the bucket root identifies the active
+release. The frontend reads the pointer first, then constructs all artifact URLs
+relative to the release prefix.
+
+This model provides three properties that an in-place overwrite model does not:
+
+- **Atomic switchover.** Users see either the previous complete release or the new
+  complete release. There is no window during which some artifacts reflect one sweep
+  and others reflect another.
+- **Trivial rollback.** Reverting to a previous release is a single `put_object` call
+  that updates the pointer. No per-artifact version restoration is required.
+- **Cache-friendly delivery.** Every release produces new URL paths. CloudFront edge
+  locations serve fresh content immediately on pointer update, without TTL expiration
+  or active invalidation for release-prefixed content. Only the pointer file requires
+  a short TTL (§13).
 
 ### 12.2 Target Bucket
 
@@ -2300,52 +2314,91 @@ CloudFront distribution (§13). It is not directly accessible to browsers — al
 access is blocked at the bucket level, and CloudFront reads from it via an Origin
 Access Control (OAC).
 
-The public site bucket's role is narrower than originally specified in s3-layout.md.
-The `releases/<release_id>/...` immutable release model described there is retired —
-it was designed for a full-site snapshot publish model that predates the incremental
-sweep pipeline. Artifacts are now written in-place at stable paths and overwritten on
-each regeneration.
+The public site bucket's `releases/` prefix structure, originally specified in
+s3-layout.md, is retained with an updated release cadence model. The original design
+envisioned infrequent, full-site snapshot publishes; the updated model writes a new
+release on every sweep, with unchanged artifacts copied forward rather than
+regenerated.
 
 > **s3-layout.md update required.** The Public Site Bucket section should be updated
-> to reflect the in-place artifact model defined here, replacing the release-based
-> layout.
+> to reflect the incremental release model defined here — specifically the
+> `YYYYMMDD-HHMMSS` release ID format, the `current.json` pointer mechanism, and the
+> 7-day lifecycle rule for old releases.
 
-### 12.3 Key Structure
+### 12.3 Release ID and Pointer
 
-Artifact S3 keys match the ADR-014 path convention directly. No prefix wrapping
-(no `releases/`, no `data/`). The CloudFront distribution serves the bucket root,
-so S3 keys map 1:1 to URL paths.
+**Release ID format:** `YYYYMMDD-HHMMSS` (UTC). Example: `20260330-143022`.
+
+The timestamp format is human-readable (an operator can identify when a release was
+created by inspecting the S3 prefix), naturally sortable, and unique across both
+scheduled and manual sweeps. It is generated once at the start of the Fargate task's
+publication phase and used consistently for all writes in that sweep.
+
+**Pointer file:** `current.json` at the bucket root.
+
+```json
+{
+  "release_id": "20260330-143022",
+  "generated_at": "2026-03-30T14:30:22Z"
+}
+```
+
+The pointer is the last object written during a successful sweep. It is the sole
+mechanism by which the frontend discovers the active release. CloudFront serves it
+with a short TTL (~60 seconds); all release-prefixed content uses long TTLs (§13).
+
+The pointer is never updated if the sweep fails (§12.8). Between sweeps, it points
+to the most recent successful release.
+
+### 12.4 Key Structure
+
+All artifacts live under a release prefix. The ADR-014 path convention is preserved
+within the release directory — the paths are identical to those specified in ADR-014,
+just nested one level deeper.
+
+**Pointer (bucket root):**
+
+```
+current.json
+```
 
 **Global artifact:**
 
 ```
-catalog.json
+releases/<release_id>/catalog.json
 ```
 
 **Per-nova artifacts:**
 
 ```
-nova/<nova_id>/nova.json
-nova/<nova_id>/references.json
-nova/<nova_id>/spectra.json
-nova/<nova_id>/photometry.json
-nova/<nova_id>/sparkline.svg
-nova/<nova_id>/<primary-name-hyphenated>_bundle_<YYYYMMDD>.zip
+releases/<release_id>/nova/<nova_id>/nova.json
+releases/<release_id>/nova/<nova_id>/references.json
+releases/<release_id>/nova/<nova_id>/spectra.json
+releases/<release_id>/nova/<nova_id>/photometry.json
+releases/<release_id>/nova/<nova_id>/sparkline.svg
+releases/<release_id>/nova/<nova_id>/<primary-name-hyphenated>_bundle_<YYYYMMDD>.zip
 ```
 
 **Bundle manifest (operational, not served to browsers):**
 
 ```
-nova/<nova_id>/manifest.json
+releases/<release_id>/nova/<nova_id>/manifest.json
 ```
 
 The `<nova_id>` path segment is the nova's stable UUID, consistent with the routing
 model (ADR-010). The `<primary-name-hyphenated>` segment in the bundle filename uses
 the hyphenated slug convention (spaces replaced with hyphens) established in ADR-014.
 
-### 12.4 Upload Mechanics
+### 12.5 Upload Mechanics
 
-Each artifact is uploaded via `s3.put_object()` with explicit metadata:
+The Fargate task builds a new release in two phases: write freshly generated artifacts
+for swept novae, then copy forward unchanged artifacts for non-swept novae.
+
+**Phase 1 — Write swept novae.**
+
+As the Fargate task processes each nova sequentially (§4.4), it writes each generated
+artifact directly to the new release prefix via `s3.put_object()` with explicit
+metadata:
 
 | Artifact type | `Content-Type` | `Content-Disposition` |
 |---|---|---|
@@ -2362,137 +2415,715 @@ programmatically by the frontend application, not downloaded by users.
 at the CloudFront layer (§13) via cache behaviors, avoiding duplicated policy that
 could drift between the two layers.
 
-**Upload order within a nova.** Artifacts are uploaded in the same dependency order
-they are generated (§4.4): `references.json` → `spectra.json` → `photometry.json` →
-`sparkline.svg` → `nova.json` → `bundle.zip`. The bundle is uploaded last because it
-may reference counts from the other generators. `nova.json` is uploaded after the data
-artifacts so that if a user navigates to the nova page mid-upload, the metadata header
-doesn't show updated counts before the corresponding data artifacts are available.
-This is a best-effort ordering, not a hard consistency guarantee — the transient
-inconsistency during sweeps is accepted (§12.7).
+Upload order within a nova follows the generation dependency order (§4.4):
+`references.json` → `spectra.json` → `photometry.json` → `sparkline.svg` →
+`nova.json` → `bundle.zip`.
 
-**catalog.json upload.** Written once, after all per-nova processing is complete
-(§4.4, step 4). This is the last S3 write the Fargate task performs before exiting.
+**Phase 2 — Copy unchanged novae.**
 
-### 12.5 Bundle Cleanup
+After all per-nova artifact generation completes (and before `catalog.json`
+generation), the Fargate task copies forward artifacts for every ACTIVE nova that was
+not in the current sweep batch.
 
-The bundle filename includes a `YYYYMMDD` date stamp, so each regeneration writes a
-new key. Old bundles accumulate unless explicitly deleted.
+The task discovers the previous release ID by reading `current.json` from S3 at the
+start of its execution. For each non-swept nova, it issues `s3.copy_object()` calls
+to copy all artifacts from the previous release prefix to the new one:
 
-The Fargate task handles cleanup inline, immediately after a successful new bundle
-upload:
+```
+Source: releases/<previous_release_id>/nova/<nova_id>/<artifact>
+Target: releases/<new_release_id>/nova/<nova_id>/<artifact>
+```
 
-1. Write the new bundle ZIP to S3. Confirm the `put_object` succeeds.
-2. List objects under `nova/<nova_id>/` matching the pattern `*_bundle_*.zip`.
-3. Delete any matching objects whose key differs from the key just written.
+The set of artifacts to copy per nova is determined by listing keys under the nova's
+prefix in the previous release. `copy_object` within the same bucket incurs no data
+transfer charges — only API request costs ($0.005 per 1,000 requests).
 
-This ensures the old bundle is only removed after its replacement is confirmed in S3.
-If the new bundle write fails, the old bundle remains — the nova still has a
-downloadable bundle, just a stale one. This is consistent with the general failure
-principle: failure leaves previous state intact.
+**Cost at scale.** At 200 novae with 5 swept per day: 195 unchanged novae × ~7
+artifacts = ~1,365 copy calls per sweep. At $0.005 per 1,000 requests, this is
+$0.007 per sweep or approximately $2.50/year. Storage for duplicate objects within
+the 7-day lifecycle window adds negligible cost — each release's unique objects are
+only the artifacts that changed; the copies share the same underlying S3 data for
+identical content.
 
-The bundle manifest (`nova/<nova_id>/manifest.json`) is overwritten in-place (it has
-a stable key, not a date-stamped one), so it does not accumulate.
+**Phase 3 — Write catalog.json.**
 
-### 12.6 S3 Bucket Configuration Updates
+After both Phase 1 and Phase 2 complete, the Fargate task generates `catalog.json`
+(§11) and writes it to the new release prefix. This is the last artifact written
+before the pointer update.
 
-The public site bucket requires two configuration changes from its current CDK
-definition:
+**Phase 4 — Update pointer.**
 
-**Enable versioning.** Versioning provides a rollback safety net — if a sweep
-publishes a corrupt artifact, the previous version can be restored with a single
-`aws s3api get-object --version-id` command. At MVP artifact volumes, the storage
-cost of noncurrent versions is negligible (estimated $0.15–$0.40/month).
+After all artifacts (including `catalog.json`) are confirmed written, the Fargate
+task writes `current.json` to the bucket root. This is the atomic switchover — the
+single operation that makes the new release visible to users. No state is mutated,
+no WorkItems are deleted, and no DDB counts are updated until this write succeeds.
 
-**Add noncurrent version expiration.** A lifecycle rule expires noncurrent object
-versions after 7 days. This bounds the storage cost of versioning while providing a
-reasonable window for detecting and rolling back problems. The rule applies to the
-entire bucket (no prefix scoping needed — all objects in the bucket are published
-artifacts).
+### 12.6 Bootstrap
+
+On the very first sweep, no `current.json` exists. The Fargate task detects this
+(the `get_object` call returns a `NoSuchKey` error) and skips Phase 2 entirely. The
+first release contains only the artifacts for novae in the initial sweep batch. Novae
+that are ACTIVE but not in the first sweep batch are absent from the release — their
+catalog entries show zero counts (§11.3), which is correct because no artifacts have
+been published for them.
+
+The second sweep reads the first release's `current.json`, copies forward the first
+batch's artifacts, and adds any newly swept novae. After a small number of sweeps,
+the release contains the full catalog.
+
+This bootstrapping is self-correcting and requires no special-case code beyond the
+`current.json` existence check.
+
+### 12.7 S3 Bucket Configuration Updates
+
+The public site bucket requires one configuration change from its current CDK
+definition.
+
+**Update the existing lifecycle rule.** The `ExpireOldReleases` rule already exists
+in the CDK construct with a 730-day expiration on the `releases/` prefix. Update it
+to expire objects after 7 days. This provides a reasonable window for detecting and
+rolling back problems while bounding storage costs.
+
+Versioning is **not** enabled on the public site bucket. The immutable release model
+provides its own rollback mechanism — reverting to a previous release is a pointer
+update, not an object version restoration. Versioning would add cost (~$5/year at MVP
+scale) for a capability that the release model already provides natively.
 
 ```python
 # CDK changes to NovaCatStorage.public_site_bucket:
-versioned=True,  # Changed from False
+# versioned remains False (unchanged from current)
 lifecycle_rules=[
     s3.LifecycleRule(
-        id="ExpireNoncurrentVersions",
-        noncurrent_version_expiration=cdk.Duration.days(7),
+        id="ExpireOldReleases",
+        prefix="releases/",
+        expiration=cdk.Duration.days(7),  # Changed from 730
     ),
-    # The existing ExpireOldReleases rule (prefix "releases/") can be removed
-    # once s3-layout.md is updated and any existing release objects are cleaned up.
 ],
 ```
 
 **Fargate task IAM permissions.** The Fargate task's execution role requires
-`s3:PutObject`, `s3:ListBucket`, and `s3:DeleteObject` on the public site bucket.
-These are granted via the CDK construct that provisions the Fargate task definition
-(to be designed alongside the Fargate infrastructure). `s3:ListBucket` is needed for
-the bundle cleanup `list_objects_v2` call. `s3:DeleteObject` is needed for old bundle
-deletion.
+`s3:PutObject`, `s3:GetObject`, `s3:ListBucket`, and `s3:CopyObject` on the public
+site bucket. These are granted via the CDK construct that provisions the Fargate task
+definition (to be designed alongside the Fargate infrastructure). `s3:GetObject` is
+needed to read `current.json` at sweep start. `s3:ListBucket` is needed to enumerate
+artifacts under a nova's prefix when copying unchanged novae. `s3:CopyObject` is
+needed for the Phase 2 copy-forward step.
 
-### 12.7 Consistency Model
+Note: `s3:DeleteObject` is no longer required. Old releases are cleaned up by the S3
+lifecycle rule, not by the Fargate task.
 
-Artifacts are written to S3 individually as each nova completes processing. There is
-no atomic switchover mechanism. During a sweep, the system passes through a transient
-state where:
+### 12.8 Consistency Model
 
-- Some per-nova artifacts reflect the current sweep (freshly written).
-- Other per-nova artifacts reflect the previous sweep (not yet updated, or not in
-  this sweep's batch).
-- `catalog.json` reflects the previous sweep until the current sweep completes.
+The release model provides **snapshot consistency** by construction. All artifacts in
+a release — freshly generated and copied forward — are written to the new release
+prefix before the pointer is updated. Users reading from the previous release see a
+complete, internally consistent set of artifacts. Users reading from the new release
+(after the pointer update) see a complete, internally consistent set of artifacts.
+There is no intermediate state visible to users.
 
-This transient inconsistency is accepted at MVP scale. The inconsistency window is
-bounded by the sweep duration (minutes for a typical batch of 5–50 novae). The
-nature of the inconsistency is cosmetic — count mismatches between the catalog table
-and individual nova pages — not data corruption or broken rendering.
+The only consistency nuance is the pointer propagation delay. After `current.json` is
+updated, CloudFront edge locations continue serving the cached previous pointer until
+its short TTL (~60 seconds) expires. During this window, some users may still resolve
+the previous release. This is benign — the previous release is still complete and
+valid, and the delay is bounded by the pointer TTL.
 
-The inconsistency is self-resolving: once `catalog.json` is written at the end of
-the sweep, all artifacts are consistent with respect to the current sweep's changes.
-Non-swept novae were already consistent (their artifacts and catalog entries both
-reflect their last successful sweep).
+### 12.9 Error Handling
 
-If sweep duration grows to the point where the inconsistency window becomes
-noticeable (e.g., processing hundreds of novae), a mitigation is available without
-architectural change: write `catalog.json` twice — once at the start of the sweep
-with current DDB values (ensuring it's never more than one sweep behind), and once
-at the end with fresh in-memory values. This is a single-line change to the Fargate
-task's control flow.
-
-### 12.8 Error Handling
+The release model simplifies error handling to a single principle: **if the sweep
+does not complete successfully, the pointer is not updated.**
 
 **Per-artifact upload failure.** If `put_object` fails for a single artifact within
-a nova (e.g., `spectra.json` upload fails), the entire nova is recorded as failed in
-the Fargate task's per-nova result ledger. Artifacts that were already uploaded for
-that nova during this sweep remain in S3 alongside the previous sweep's artifacts for
-the same nova. This creates a mixed state — some artifacts from the current sweep,
-some from the previous — but the next successful sweep will overwrite all of them
-consistently. The Finalize Lambda does not update counts or delete WorkItems for
-failed novae.
+a nova, the entire nova is recorded as failed in the Fargate task's per-nova result
+ledger. The sweep continues with remaining novae. The failed nova's artifacts from
+the previous release are copied forward in Phase 2 (if they exist), so the new
+release still contains a complete — if stale — set of artifacts for that nova. The
+Finalize Lambda does not update counts or delete WorkItems for failed novae.
 
-**catalog.json upload failure.** If the final catalog.json upload fails, the Fargate
-task logs the error and exits with a failure status. The previous catalog.json remains
-in S3 and continues serving. Per-nova artifacts written during the sweep are still
-valid — they just won't be reflected in the catalog until the next successful sweep
-writes a new catalog.json.
+**Copy failure for unchanged novae.** If `copy_object` fails for an unchanged nova,
+the Fargate task logs the error and records the nova as failed. The new release will
+be missing that nova's artifacts. If any copy failures occur, the Fargate task
+should not update the pointer — the release is incomplete. The previous release
+remains active and the next sweep will retry.
 
-**Bundle cleanup failure.** If the old bundle deletion fails after a successful new
-bundle write, the nova has two bundles in S3 temporarily. This is harmless — the
-frontend links to the bundle using the nova's download URL (constructed from the
-primary name and current date), not by listing S3 objects. The extra bundle
-consumes storage until the next successful sweep cleans it up.
+**catalog.json generation or upload failure.** The Fargate task does not update the
+pointer. The previous release remains active. Per-nova artifacts already written to
+the new release prefix are orphaned — the lifecycle rule will clean them up within
+7 days.
+
+**Pointer update failure.** If the `current.json` write itself fails after all
+artifacts have been successfully written, the Fargate task logs the error and exits
+with a failure status. The new release exists in S3 but is not referenced. The
+operator can manually update the pointer to recover, or the next sweep will produce
+a new release. The orphaned release is cleaned up by the lifecycle rule.
+
+**Fargate task crash.** If the task crashes at any point, no pointer update occurs.
+The previous release continues serving. Partially written artifacts in the new
+release prefix are cleaned up by the lifecycle rule. All WorkItems are retained for
+the next sweep.
+
+### 12.10 Rollback
+
+To revert to a previous release, the operator updates `current.json` to point to the
+desired release ID:
+
+```bash
+echo '{"release_id":"20260329-140000","generated_at":"2026-03-29T14:00:00Z"}' \
+  | aws s3 cp - s3://<public-site-bucket>/current.json \
+    --content-type application/json
+```
+
+This takes effect within the pointer's CloudFront TTL (~60 seconds). No per-artifact
+operations are required. The target release must still exist in S3 (i.e., not yet
+expired by the 7-day lifecycle rule).
+
+For rollbacks beyond the 7-day window, the operator would need to trigger a full
+regeneration sweep. This is an acceptable limitation — problems not detected within
+a week are unlikely to be resolved by reverting to stale data.
+
+### 12.11 Interaction with §4.5 (Finalize Lambda)
+
+The Finalize Lambda's responsibilities are unchanged by the release model. It still
+performs the atomic commit sequence — deleting consumed WorkItems, writing observation
+counts to Nova DDB items, and updating the `RegenBatchPlan` status — after the
+Fargate task completes successfully. The pointer update in Phase 4 is the Fargate
+task's responsibility and happens before the Step Functions workflow transitions to
+the Finalize state.
+
+The ordering is: Fargate writes all artifacts → Fargate updates pointer → Fargate
+exits successfully → Step Functions transitions to Finalize → Finalize commits DDB
+state. This means the pointer is updated (and users can see the new release) slightly
+before the DDB counts are persisted. This is acceptable — the DDB counts are only
+consumed by the next sweep's catalog.json generation (§11), not by the frontend
+directly.
+
+### 12.12 File Size and Storage Costs
+
+At MVP scale (~200 novae, ~7 artifacts per nova), a single release contains
+approximately 1,400 objects. With a 7-day lifecycle rule and daily sweeps, up to 7
+releases coexist at any time — roughly 10,000 objects total.
+
+Per-nova JSON artifacts range from 1 KB (`nova.json`) to several hundred KB
+(`spectra.json` for data-rich novae). The bundle ZIPs are the largest objects,
+potentially reaching hundreds of megabytes for novae with extensive spectral datasets.
+
+At typical MVP volumes (200 novae, average 50 KB per JSON artifact, average 10 MB per
+bundle), a single release is approximately 2 GB. Seven concurrent releases total
+approximately 14 GB. At S3 Standard pricing ($0.023/GB/month), this is roughly
+$0.32/month or ~$4/year in storage.
+
+Combined with the copy API costs (~$2.50/year from §12.5), the total incremental cost
+of the release model over a single-copy baseline is approximately **$6.50/year**.
 
 
 ---
 
 ## 13. Delivery: CloudFront
 
-_To be designed._
+### 13.1 Overview
+
+CloudFront serves as the delivery layer between the public site S3 bucket and
+browsers. It provides edge caching, automatic compression, CORS headers, and
+access control — transforming the private S3 bucket into a globally accessible,
+performant data API for the frontend application.
+
+The distribution is configured entirely via CDK. No manual console configuration
+is required or expected.
+
+### 13.2 Origin and Access Control
+
+The CloudFront distribution has a single origin: the public site bucket
+(`NovaCatStorage.public_site_bucket`).
+
+Access uses **Origin Access Control (OAC)**, the current AWS-recommended mechanism
+(replacing the legacy Origin Access Identity). The OAC grants the CloudFront
+distribution read access to the bucket; the bucket's `BlockPublicAccess` setting
+remains fully enabled. No other principal can read from the bucket.
+
+The OAC is provisioned in CDK alongside the distribution. The bucket policy granting
+`s3:GetObject` to the distribution's OAC is added automatically by CDK when using
+the `S3BucketOrigin.withOriginAccessControl()` integration.
+
+### 13.3 Domain and TLS
+
+**MVP: Default CloudFront domain.** The distribution uses its auto-assigned
+`<id>.cloudfront.net` domain with the default CloudFront TLS certificate. No custom
+domain, no ACM certificate, no DNS configuration.
+
+The frontend references this domain via a `NEXT_PUBLIC_DATA_URL` environment variable
+on Vercel (§14). Changing to a custom domain later requires three steps: provision an
+ACM certificate in `us-east-1`, add the domain as an alternate domain name (CNAME) on
+the distribution, and create a DNS record pointing to the distribution. None of these
+change the architecture — they are CDK parameter additions.
+
+> **Deferred: Custom domain.** A custom subdomain (e.g., `data.nova-cat.org`) is
+> desirable for professional presentation and CDN-independence. It should be
+> configured once the project's domain and funding situation are settled. The
+> distribution, bucket policy, and frontend environment variable are the only
+> artifacts that change.
+
+### 13.4 Price Class
+
+**Price Class All** (all edge locations globally).
+
+At MVP traffic volumes, the cost difference between price classes is negligible.
+The per-GB rate differential between the cheapest regions (North America / Europe,
+~$0.085/GB) and the most expensive (Asia / Oceania, ~$0.14/GB) amounts to less than
+$0.10/month at expected MVP transfer volumes (~5 GB/month). Researchers are globally
+distributed; restricting edge locations to save a fraction of a dollar per month
+would degrade the experience for users outside North America and Europe.
+
+If traffic grows significantly post-MVP, price class can be narrowed as a
+cost-optimization measure. This is a single CDK parameter change with no
+architectural impact.
+
+### 13.5 Cache Behaviors
+
+The distribution uses two cache behaviors to reflect the two categories of content
+in the bucket: the mutable pointer file and the immutable release content.
+
+**Behavior 1 — Pointer file (`current.json`)**
+
+| Setting | Value |
+|---|---|
+| Path pattern | `/current.json` |
+| TTL (min / default / max) | 0 / 60 / 60 seconds |
+| Cache policy | Custom: `NovaCat-Pointer` |
+| Allowed methods | GET, HEAD |
+| Compress | Yes |
+| Viewer protocol | Redirect HTTP to HTTPS |
+
+The 60-second TTL is the maximum staleness window after a sweep updates the pointer.
+During this window, some edge locations may still resolve the previous release. This
+is benign — the previous release is complete and valid (§12.8). A shorter TTL (e.g.,
+10 seconds) would reduce the window but increase origin reads on a file that only
+changes once per day; 60 seconds is a reasonable balance.
+
+The minimum TTL of 0 allows the operator to force-refresh the pointer by issuing a
+CloudFront invalidation on `/current.json` if an immediate switchover is needed
+(e.g., after a manual rollback per §12.10). Under normal operations, invalidation
+is never required.
+
+**Behavior 2 — Release content (`releases/*`)**
+
+| Setting | Value |
+|---|---|
+| Path pattern | `/releases/*` |
+| TTL (min / default / max) | 86400 / 604800 / 604800 seconds (1d / 7d / 7d) |
+| Cache policy | Custom: `NovaCat-Releases` |
+| Allowed methods | GET, HEAD |
+| Compress | Yes |
+| Viewer protocol | Redirect HTTP to HTTPS |
+
+Content under `releases/` is immutable — a given release ID's artifacts never change
+after publication. The 7-day default TTL matches the S3 lifecycle rule that expires
+old releases after 7 days. Edge locations will cache release content for up to 7 days,
+which is the maximum useful lifetime of any release.
+
+The 1-day minimum TTL provides a floor that prevents accidental short-caching if a
+misconfigured origin header slips through. Since no `Cache-Control` headers are set
+at the S3 object level (§12.5), the CloudFront cache policy TTL values are
+authoritative.
+
+**Default behavior (catch-all)**
+
+Any request not matching `/current.json` or `/releases/*` receives the default
+behavior. This covers unexpected paths (typos, probes, bots). The default behavior
+uses the same settings as the release content behavior — there is no content at
+these paths, so the 403→404 error response (§13.8) handles them.
+
+### 13.6 Compression
+
+Automatic compression is enabled on all behaviors. CloudFront compresses eligible
+content types (including `application/json` and `image/svg+xml`) using gzip or
+Brotli based on the viewer's `Accept-Encoding` header. This is free — no additional
+CloudFront charges — and reduces data transfer volume by 60–80% for JSON artifacts.
+
+At MVP artifact sizes (catalog.json ~50–500 KB, per-nova JSON ~1–200 KB), compression
+reduces the effective transfer per page load from tens of kilobytes to single-digit
+kilobytes for most artifacts. This benefits both cost (less data transfer billed) and
+user experience (faster page loads, especially for researchers on institutional
+networks with higher latency).
+
+### 13.7 CORS
+
+The frontend application (hosted on Vercel) and the data layer (served from
+CloudFront) are different origins. Browser security policy requires CORS headers on
+cross-origin requests.
+
+CORS is configured via a **CloudFront response headers policy** attached to both
+cache behaviors:
+
+| Header | Value |
+|---|---|
+| `Access-Control-Allow-Origin` | `*` |
+| `Access-Control-Allow-Methods` | `GET, HEAD` |
+| `Access-Control-Max-Age` | `86400` (seconds) |
+
+The wildcard origin (`*`) is appropriate because the data is public scientific
+content with no authentication or user-specific responses. Restricting to specific
+Vercel origins would add configuration maintenance burden (the origin changes if the
+Vercel domain or custom domain changes) for no security benefit.
+
+The `Access-Control-Max-Age` of 24 hours allows browsers to cache the preflight
+response, avoiding redundant OPTIONS requests on subsequent artifact fetches within
+the same session.
+
+CORS headers are applied via a CloudFront response headers policy rather than S3
+bucket CORS configuration. This keeps all delivery-layer concerns in CloudFront and
+avoids split configuration that could drift.
+
+### 13.8 Error Responses
+
+When CloudFront requests an object from S3 via OAC and the object does not exist,
+S3 returns a `403 Forbidden` (not `404 Not Found` — this is standard OAC behavior,
+as the CloudFront principal has `s3:GetObject` permission but the key does not
+exist).
+
+A custom error response maps this to a clean 404:
+
+| Setting | Value |
+|---|---|
+| HTTP error code | 403 |
+| Response code | 404 |
+| Response page path | (none — empty body) |
+| Error caching TTL | 60 seconds |
+
+The 60-second error caching TTL prevents a missing-key lookup from hammering S3 on
+every request, while ensuring that a newly published artifact becomes visible within
+a minute of publication. This aligns with the pointer file's TTL — after a sweep,
+both the pointer and any previously-missing artifacts become resolvable within the
+same ~60-second window.
+
+The frontend handles 404 responses gracefully: nova pages show a "nova not found"
+state, and missing optional artifacts (e.g., `sparkline.svg` for a nova without
+photometry) are handled as empty states per ADR-012.
+
+### 13.9 Origin Shield
+
+Origin Shield is **not enabled** for MVP.
+
+Origin Shield adds an additional caching layer between regional edge caches and the
+S3 origin, reducing origin reads for popular content. At MVP traffic levels (low
+request volume, most content cached at edge after first request), Origin Shield
+would cost more than it saves — it charges per 10,000 requests routed through the
+shield region, and the origin read savings at low traffic do not offset this.
+
+If traffic grows to the point where S3 request costs become a meaningful line item,
+Origin Shield can be enabled as a single CDK parameter change. The immutable release
+model makes it particularly effective — release-prefixed content is cacheable
+indefinitely, so Origin Shield would achieve a very high hit ratio.
+
+### 13.10 Invalidation
+
+Under normal operations, **no CloudFront invalidations are required.** This is a
+direct benefit of the immutable release model (§12):
+
+- Release-prefixed content is immutable. New content gets new URLs via the release
+  ID. Edge locations never serve stale release content because the content at a given
+  release path never changes.
+- The pointer file (`current.json`) has a 60-second TTL. After a sweep updates it,
+  all edge locations pick up the new pointer within one minute without invalidation.
+
+Invalidation is available as an **emergency operator tool** for two scenarios:
+
+1. **Immediate pointer propagation.** After a manual rollback (§12.10), the operator
+   can invalidate `/current.json` to force all edge locations to fetch the updated
+   pointer immediately rather than waiting up to 60 seconds. Cost: free (within the
+   1,000 free invalidation paths/month).
+
+2. **Edge cache poisoning.** If an edge location somehow caches a corrupt response
+   for a release-prefixed path (extremely unlikely but theoretically possible), a
+   targeted invalidation on that path clears it. This is a break-glass scenario, not
+   an operational workflow.
+
+The first 1,000 invalidation paths per month are free. At one sweep per day and no
+routine invalidations, NovaCat will never approach this limit.
+
+### 13.11 CDK Implementation
+
+The CloudFront distribution is provisioned as a new CDK construct, either within
+`NovaCatStorage` or as a sibling construct that receives the public site bucket as a
+dependency. The key resources:
+
+- `cloudfront.Distribution` with the public site bucket as an S3 origin via OAC
+- Two `cloudfront.CachePolicy` resources (`NovaCat-Pointer` and `NovaCat-Releases`)
+- One `cloudfront.ResponseHeadersPolicy` resource (CORS headers)
+- A custom error response configuration (403 → 404)
+- Price class: `PriceClass.PRICE_CLASS_ALL`
+
+The distribution's domain name is exported as a CDK output and consumed by the Vercel
+environment configuration (§14) as `NEXT_PUBLIC_DATA_URL`.
+
+```python
+# Illustrative CDK structure (not production code):
+distribution = cloudfront.Distribution(
+    self, "ArtifactDistribution",
+    default_behavior=cloudfront.BehaviorOptions(
+        origin=origins.S3BucketOrigin.with_origin_access_control(
+            public_site_bucket
+        ),
+        cache_policy=releases_cache_policy,
+        response_headers_policy=cors_policy,
+        viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        compress=True,
+    ),
+    additional_behaviors={
+        "/current.json": cloudfront.BehaviorOptions(
+            origin=origins.S3BucketOrigin.with_origin_access_control(
+                public_site_bucket
+            ),
+            cache_policy=pointer_cache_policy,
+            response_headers_policy=cors_policy,
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            compress=True,
+        ),
+    },
+    price_class=cloudfront.PriceClass.PRICE_CLASS_ALL,
+    error_responses=[
+        cloudfront.ErrorResponse(
+            http_status=403,
+            response_http_status=404,
+            ttl=cdk.Duration.seconds(60),
+        ),
+    ],
+)
+```
+
+### 13.12 Cost Estimate
+
+At MVP traffic levels (~100 daily users, ~5 GB/month data transfer):
+
+| Component | Estimated monthly cost |
+|---|---|
+| Data transfer out | $0.43 (5 GB × $0.085/GB) |
+| HTTP requests | $0.01 (~10,000 requests × $0.0075/10K) |
+| Invalidations | $0.00 (no routine invalidations) |
+| **Total** | **~$0.44/month** |
+
+The AWS free tier (first 12 months) includes 1 TB of data transfer and 10 million
+requests per month, so the actual cost during the first year is $0.00.
+
+Even well beyond MVP — at 1,000 daily users and 50 GB/month — the CloudFront bill
+would remain under $5/month. CloudFront is not a meaningful cost driver for this
+project at any foreseeable scale.
+
 
 ---
 
 ## 14. Delivery: Vercel ↔ S3 Integration
 
-_To be designed._
+### 14.1 Overview
+
+The Open Nova Catalog has two independent origins: the **Vercel-hosted Next.js
+application** (HTML, CSS, JavaScript — the app itself) and the **CloudFront-served
+S3 bucket** (data artifacts — catalog.json, nova.json, spectra.json, etc.). A user's
+browser loads the app from Vercel, then the app's JavaScript fetches data artifacts
+from CloudFront.
+
+This section defines how the frontend discovers and fetches data artifacts in
+production, how the development environment differs, and what changes are required
+to the existing frontend codebase.
+
+### 14.2 Environment Variable
+
+A single Vercel environment variable connects the app to the data layer:
+
+```
+NEXT_PUBLIC_DATA_URL=https://d1234abcd.cloudfront.net
+```
+
+The `NEXT_PUBLIC_` prefix exposes the variable to browser-side code per Next.js
+convention. The value is the CloudFront distribution domain — the default
+`*.cloudfront.net` domain for MVP, replaceable with a custom domain (e.g.,
+`https://data.nova-cat.org`) when that configuration is ready (§13.3).
+
+This is the only Vercel configuration change required to connect the frontend to the
+data layer. No Vercel build hooks, webhooks, or redeployment triggers are involved —
+the app is fully decoupled from the sweep pipeline.
+
+### 14.3 Release Resolution
+
+On each page load, the frontend fetches `current.json` from the CloudFront root to
+discover the active release ID:
+
+```
+GET ${NEXT_PUBLIC_DATA_URL}/current.json
+→ { "release_id": "20260330-143022", "generated_at": "2026-03-30T14:30:22Z" }
+```
+
+The release ID is used to construct all subsequent artifact URLs for that page load.
+It is not cached across navigations — each page load fetches `current.json` fresh.
+Since CloudFront caches this file with a 60-second TTL (§13.5), the actual origin
+read happens at most once per minute per edge location; repeated fetches within that
+window are served from the edge cache at negligible cost.
+
+**Per-navigation resolution** is chosen over per-session caching for simplicity.
+With daily sweeps, the probability of a user straddling a release boundary
+mid-session is low, and the consequence (a cosmetic count mismatch between pages)
+is trivial. Per-navigation resolution avoids session-level state management and
+ensures users always see the freshest available data.
+
+### 14.4 Artifact URL Construction
+
+Once the release ID is resolved, artifact URLs follow a predictable pattern:
+
+```
+${NEXT_PUBLIC_DATA_URL}/releases/${releaseId}/catalog.json
+${NEXT_PUBLIC_DATA_URL}/releases/${releaseId}/nova/${novaId}/nova.json
+${NEXT_PUBLIC_DATA_URL}/releases/${releaseId}/nova/${novaId}/spectra.json
+${NEXT_PUBLIC_DATA_URL}/releases/${releaseId}/nova/${novaId}/photometry.json
+${NEXT_PUBLIC_DATA_URL}/releases/${releaseId}/nova/${novaId}/references.json
+${NEXT_PUBLIC_DATA_URL}/releases/${releaseId}/nova/${novaId}/sparkline.svg
+${NEXT_PUBLIC_DATA_URL}/releases/${releaseId}/nova/${novaId}/<bundle_filename>.zip
+```
+
+These paths mirror the S3 key structure defined in §12.4, with the CloudFront
+domain prepended.
+
+### 14.5 Data Client Module
+
+A new utility module at `frontend/src/lib/dataClient.ts` centralizes all data
+fetching logic. This is consistent with the existing `src/lib/` convention for shared
+utilities (epoch conversion, catalog data loading).
+
+The module exports three functions:
+
+**`resolveRelease(): Promise<string>`** — Fetches `current.json` and returns the
+release ID string. Throws on network error or missing pointer (the app's error
+boundary handles this as a "data unavailable" state).
+
+**`getArtifactUrl(releaseId: string, path: string): string`** — Constructs the full
+URL for an artifact given a release ID and an ADR-014-style path (e.g.,
+`catalog.json` or `nova/<id>/spectra.json`). Pure function, no network call.
+
+**`fetchArtifact<T>(path: string): Promise<T>`** — Convenience wrapper that calls
+`resolveRelease()`, constructs the URL via `getArtifactUrl()`, fetches the artifact,
+and parses the JSON response. Typed generically so callers get type-safe artifacts:
+
+```typescript
+const catalog = await fetchArtifact<CatalogArtifact>('catalog.json');
+const spectra = await fetchArtifact<SpectraArtifact>(`nova/${novaId}/spectra.json`);
+```
+
+The module is a plain TypeScript module, not a React hook. This keeps it usable in
+both server-side and client-side contexts — relevant for Next.js, where data loading
+can occur in server components, route handlers, or client components depending on the
+page.
+
+### 14.6 Development Mode
+
+In development (`npm run dev`), the `NEXT_PUBLIC_DATA_URL` environment variable is
+not set. The data client detects this and falls back to reading mock fixtures from
+`frontend/public/data/` — the same path the frontend uses today.
+
+In this mode:
+
+- `resolveRelease()` returns a fixed string (e.g., `"local"`) without a network call.
+- `getArtifactUrl()` constructs paths relative to `/data/` (the Next.js public
+  directory), with no release prefix: `/data/catalog.json`,
+  `/data/nova/<id>/spectra.json`, etc.
+- No `current.json` fetch occurs.
+
+This preserves the existing development workflow — `npm run dev` works with local
+fixtures, no AWS credentials or network access required. The same data client code
+path is exercised in both modes; only the URL construction differs.
+
+### 14.7 Sparkline URLs
+
+Sparklines are loaded as images via `<img>` tags in the catalog table, not fetched as
+JSON. The data client's `getArtifactUrl()` function is used to construct the `src`
+attribute:
+
+```tsx
+<img src={getArtifactUrl(releaseId, `nova/${novaId}/sparkline.svg`)} />
+```
+
+In development mode, this resolves to `/data/nova/<id>/sparkline.svg`. In production,
+it resolves to the full CloudFront release-prefixed URL. No special handling is needed.
+
+### 14.8 Bundle Download URLs
+
+Bundle downloads are triggered by a standard `<a>` tag with the `download` attribute.
+The URL is constructed using `getArtifactUrl()`:
+
+```tsx
+<a href={getArtifactUrl(releaseId, `nova/${novaId}/${bundleFilename}`)} download>
+  Download Bundle
+</a>
+```
+
+The `Content-Disposition: attachment` header set at S3 upload time (§12.5) ensures
+the browser triggers a download dialog with the human-readable filename rather than
+navigating to the ZIP content.
+
+In development mode, the bundle file would need to exist in `public/data/` for the
+download link to work. If mock bundles are not available, the download link can be
+hidden or disabled in development mode — this is a minor frontend detail, not an
+architectural decision.
+
+### 14.9 Error Handling
+
+**`current.json` fetch failure.** If the pointer file is unreachable (CloudFront
+down, network error, DNS failure), the app cannot resolve any artifact URLs. The
+data client throws, and the app's error boundary renders a "data temporarily
+unavailable" state. The app shell (navigation, footer, static pages like `/about`
+and `/docs`) remains functional — only data-dependent regions are affected.
+
+**Artifact fetch failure (404).** A 404 on a per-nova artifact (e.g., the user
+navigated to a nova that doesn't exist in the current release) is handled by the
+consuming component's error state per ADR-012: inline error message with a
+`CircleAlert` icon, scoped to the affected region. The rest of the page remains
+functional.
+
+**Artifact fetch failure (network error).** Transient network errors on individual
+artifact fetches are handled identically to 404s — the component shows its error
+state. No automatic retry is implemented at MVP. The user can retry by refreshing
+the page.
+
+**Schema version mismatch.** Per ADR-014, the frontend checks `schema_version` on
+artifact load. If the major version does not match the expected value, the component
+surfaces a graceful error rather than attempting to render potentially mismatched
+data. This protects against a stale Vercel deployment consuming artifacts from a
+newer schema version (or vice versa during a schema migration).
+
+### 14.10 Frontend Codebase Changes
+
+The following changes to the existing frontend codebase are required to integrate
+with the production data layer:
+
+1. **New file: `src/lib/dataClient.ts`.** The data client module described in §14.5.
+   This is the only new file.
+
+2. **Update: data loading call sites.** Pages and components that currently import
+   mock data directly from `public/data/` (or read via a filesystem utility for SSG)
+   are updated to call `fetchArtifact()` or `getArtifactUrl()` from the data client.
+   The call sites change; the component rendering logic does not.
+
+3. **New file: `.env.local` (not committed).** Local development environment file
+   with `NEXT_PUBLIC_DATA_URL` unset (or absent), preserving the dev-mode fallback.
+
+4. **Vercel environment configuration.** Set `NEXT_PUBLIC_DATA_URL` to the
+   CloudFront distribution domain in the Vercel project settings. This is a one-time
+   manual step after the CloudFront distribution is provisioned.
+
+No changes to `next.config.ts`, `package.json`, or the build pipeline are required.
+No new dependencies are introduced — the data client uses the browser-native `fetch`
+API.
+
+### 14.11 Vercel Cost
+
+Vercel's free tier (Hobby plan) includes 100 GB of bandwidth per month and unlimited
+static deployments. At MVP traffic levels (~100 daily users), the Vercel bill is
+$0.00/month. The app itself is lightweight — the JavaScript bundle, HTML, and CSS
+total well under 5 MB, and most page loads are served from Vercel's edge cache.
+
+The data artifacts are served from CloudFront, not Vercel, so artifact transfer does
+not count against the Vercel bandwidth quota.
+
+If the project outgrows the Hobby plan (unlikely at MVP scale), Vercel's Pro plan is
+$20/month. This would only become relevant at sustained high traffic levels well
+beyond the expected researcher audience.
+
 
 ---
 
