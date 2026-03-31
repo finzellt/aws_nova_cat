@@ -597,7 +597,7 @@ photometry table and includes only those it can successfully process.
 
 | ADR-014 field | Source | Transformation |
 |---|---|---|
-| `schema_version` | Constant | `"1.0"` |
+| `schema_version` | Constant | `"1.1"` |
 | `generated_at` | Runtime | ISO 8601 UTC timestamp at generation time (shared utility) |
 | `nova_id` | Nova item `.nova_id` | Direct |
 | `primary_name` | Nova item `.primary_name` | Direct |
@@ -953,6 +953,12 @@ for a lazy-loaded per-nova file.
 3. **`outburst_mjd_is_estimated`** — New boolean field at the top level. `true` when
    `outburst_mjd` was derived from the earliest observation rather than from a
    literature discovery date. Schema version incremented from `"1.0"` to `"1.1"`.
+
+4. **ADR-014 OQ-5 resolution.** ADR-014 Open Question 5 ("Recurrent nova outburst
+   selection") is resolved by §7.6: recurrent novae always use the earliest-observation
+   fallback regardless of `discovery_date`, and always set `outburst_mjd_is_estimated =
+   true`. Full outburst segmentation for recurrent novae is deferred to a dedicated
+   post-MVP ADR (§16, OQ-1).
 
 ### 7.9 Prerequisites
 
@@ -1673,6 +1679,25 @@ No prerequisites unique to the sparkline generator. It consumes the §8 output
 (available in-process) and uses only the Python standard library for SVG construction.
 The LTTB algorithm is a pure utility function with no external dependencies.
 
+### 9.11 ADR-014 / ADR-013 Amendment Notes
+
+1. **Band selection expansion.** ADR-014's sparkline specification states "V-band only"
+   for the photometric band property. The band selection algorithm defined in §9.3
+   expands this: V-band is preferred when it meets the minimum point threshold, but the
+   algorithm falls back to the best-sampled optical band when V-band data is absent or
+   insufficient. This ensures sparklines are generated for novae that have photometry
+   but lack V-band coverage — a meaningful improvement in catalog browsing experience.
+   ADR-014's sparkline specification should be amended to reference this section for the
+   authoritative band selection behavior.
+
+2. **Input pool broadening.** ADR-013's Catalog Sparkline section specifies "Optical
+   band only" for sparkline content. The sparkline generator's input pool (§9.2) draws
+   from the full set of observations consolidated into the optical tab by §8.11, which
+   includes UV, NIR, and MIR observations alongside core optical bands. This broadening
+   is an implementation consequence of the photometry.json generator's regime
+   consolidation, not an independent design decision — the sparkline consumes whatever
+   the optical tab contains. ADR-013's sparkline section should be amended to note this
+   broadening.
 
 ---
 
@@ -3233,8 +3258,6 @@ beyond the expected researcher audience.
 
 ## 15. Operational Model
 
-## 15. Operational Model
-
 ### 15.1 Overview
 
 This section defines how a solo operator monitors, maintains, and intervenes in the
@@ -3616,8 +3639,6 @@ routine, a `novacat-tools` command wrapping these patterns would be appropriate.
 
 ## 17. Work Decomposition
 
-## 17. Work Decomposition
-
 ### 17.1 Overview
 
 This section decomposes the regeneration pipeline into implementation epics. Each
@@ -3687,6 +3708,39 @@ the same ingestion workflows that the backfill modifies.
 - **WorkItem writes:** Add WorkItem creation to the three ingestion workflows
   (`ingest_ticket`, `acquire_and_validate_spectra`, `refresh_references`) as a
   best-effort final step before `FinalizeJobRunSuccess`. (§3.3)
+- **P-8: Add ADR-014/ADR-013 Amendment Notes to sparkline section (§9).** The
+   sparkline generator is the only per-nova generator without an amendment notes
+   subsection. Two amendments are needed: (a) the band selection algorithm (§9.3)
+   expands beyond ADR-014's "V-band only" spec to include a fallback that can select
+   non-V bands; (b) the input pool (§9.2) draws from the consolidated optical regime
+   including UV/NIR/MIR per §8.11, broadening ADR-013's "Optical band only" language.
+- **P-9: Flag resolution of ADR-014 Open Question 5 (recurrent nova outburst selection).**
+   §7.6 resolves this — recurrent novae always use the earliest-
+   observation fallback regardless of `discovery_date`. Neither document cross-
+   references the resolution. Add a note to §7.8 and flag ADR-014 OQ-5 for
+   annotation as resolved by DESIGN-003 §7.6.
+- **P-10: Flag ADR-013 responsibility boundary deviation for `days_since_outburst`.**
+   ADR-013 lists DPO computation under "Frontend computes (at render time)" for both
+   spectra and photometry. DESIGN-003 §7.4 and §8.9 pre-compute it backend-side, and
+   ADR-014 carries it as a pre-computed field. Flag ADR-013's responsibility boundary
+   tables for amendment.
+- **P-11: Flag sparkline promotion from Post-MVP to MVP.** ADR-012 classifies the
+   sparkline column as Post-MVP. DESIGN-003 includes it in Epic 3 (MVP), and
+   `has_sparkline` is part of the catalog.json schema (§11.5). Flag ADR-012's
+   Post-MVP Columns table for amendment.
+- **P-12: Flag supersession of ADR-020 Decision 7 (`generate_nova_bundle`).** ADR-020
+   Decision 7 specifies a standalone `generate_nova_bundle` Fargate task with per-nova
+   idempotency guards. DESIGN-003 replaces this with a unified Fargate task where bundle
+   generation is step 6 in the per-nova dependency chain (§4.4), coordinated via
+   WorkItem/RegenBatchPlan. Flag ADR-020 Decision 7 for annotation as superseded by
+   DESIGN-003 §4.4 and §10.
+- **P-13: Reassign DESIGN-003 identifier or update DESIGN-002 forward references.**
+   DESIGN-002 §6, §7 (OQ-11, OQ-12), and §9 all forward-reference "DESIGN-003" as the
+   future *donation workflow* document. The actual DESIGN-003 is the Artifact
+   Regeneration Pipeline. Either: (a) renumber this document to DESIGN-004 and reserve
+   DESIGN-003 for the donation workflow, or (b) update DESIGN-002's forward references
+   to a new identifier (e.g., DESIGN-TBD-DONATION).
+
 
 **Deliverable:** All existing VALID spectra have the enriched DataProduct fields
 and web-ready CSVs. Ingestion workflows emit WorkItems on success. Verified by

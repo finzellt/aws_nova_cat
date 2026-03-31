@@ -3,6 +3,14 @@
 Status: Proposed
 Date: 2026-03-16
 
+> **⚠ Amended by ADR-031** (2026-03-31)
+> ADR-031 (Data Layer Readiness for Artifact Generation, Decision 11) promotes the
+> light curve sparkline column from Post-MVP to MVP. The sparkline generator is fully
+> specified in DESIGN-003 §9 and included in Epic 3 scope. The catalog table column
+> specification below reflects this change.
+>
+> See: `docs/adr/ADR-031-data-layer-readiness-for-artifact-generation.md`
+
 ---
 
 ## Context
@@ -478,6 +486,7 @@ but their UI is not implemented until the relevant data pipeline is ready.
 | Spectra | Count | Integer count of validated spectra. Default sort key (descending). Right-aligned, tabular figures. |
 | Photometry | Count | Integer count of photometric observations. Displays `—` when none available. Right-aligned. |
 | References | Count | Integer count of associated literature references. Right-aligned. |
+| Light curve sparkline | SVG thumbnail | Inline pre-rendered SVG of the optical light curve (90×55px). Displays `—` placeholder when no photometry is available. Visual spec in ADR-013; generation spec in DESIGN-003 §9. |
 
 **Default sort:** Descending by spectra count.
 **Pagination:** 25 rows per page.
@@ -487,7 +496,6 @@ but their UI is not implemented until the relevant data pipeline is ready.
 
 | Column | Notes |
 |---|---|
-| Light curve sparkline | Inline thumbnail of the photometric light curve. Column slot present from launch with a `—` placeholder; fills in when photometry pipeline is ready. Visual spec deferred to ADR-013. |
 | Wavelength coverage | Compact icon strip indicating data availability across regimes: Radio, UV, Optical, X-ray, Gamma. Each regime shown as a small colored indicator — present or absent. Signals data richness at a glance. |
 | Recurrent flag | Boolean badge. Indicates the nova has been observed to erupt more than once. Under consideration for the catalog table given its scientific significance. |
 | Extragalactic flag | Boolean badge. Indicates the nova is located outside the Milky Way. Under consideration alongside the recurrent flag. |

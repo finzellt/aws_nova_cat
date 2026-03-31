@@ -3,6 +3,16 @@
 Status: Draft
 Date: 2026-03-19
 
+> **⚠ Amended by ADR-031** (2026-03-31)
+> ADR-031 (Data Layer Readiness for Artifact Generation, Decision 12) notes that
+> Decision 7's execution model — a standalone `generate_nova_bundle` Fargate task
+> with per-nova idempotency guards — is superseded by DESIGN-003 §4.4 and §10.
+> Bundle generation is now step 6 in the unified artifact regeneration Fargate task,
+> coordinated via WorkItem/RegenBatchPlan. The DDB-read logic described in Decision 7
+> remains valid; the standalone task and `idempotency_guard` scoping do not.
+>
+> See: `docs/adr/ADR-031-data-layer-readiness-for-artifact-generation.md`
+
 ---
 
 ## Context
@@ -245,17 +255,28 @@ data exists, rather than attempting to read a file that may or may not be presen
 
 ## Decision 7 — Bundle Generation Reads from DynamoDB
 
+> **⚠ Execution model superseded by DESIGN-003** (2026-03-31)
+> The standalone `generate_nova_bundle` Fargate task and its `idempotency_guard`
+> scoping described below are superseded by DESIGN-003 §4.4 and §10. Bundle
+> generation is now step 6 in the unified artifact regeneration Fargate task's
+> per-nova dependency chain, coordinated via WorkItem/RegenBatchPlan rather than
+> per-nova idempotency guards. The DDB-read pattern (paginated `Query` against the
+> nova partition for `PHOT#` and `COLOR#` items) remains valid and is adopted by the
+> bundle generator specified in DESIGN-003 §10.
+
 The `generate_nova_bundle` Fargate task reads `PHOT#` and `COLOR#` items directly from
 DynamoDB via paginated `Query` calls against the nova partition, converts them to the
 appropriate output format (CSV or FITS per ADR-014), and writes the zip artifact to S3.
 
-Bundle regeneration fan-in (both ingest workflows completing near-simultaneously)
+~~Bundle regeneration fan-in (both ingest workflows completing near-simultaneously)
 is handled via `idempotency_guard`, scoped to `bundle_generation#{nova_id}#{time_bucket}`.
-The first invocation acquires the lock; the second exits cleanly.
+The first invocation acquires the lock; the second exits cleanly.~~
 
-> **Open question (OQ-3):** The bundle structure ADR must specify the output format
+> **Open question (OQ-3):** ~~The bundle structure ADR must specify the output format
 > (CSV vs. FITS per ADR-014) and filename convention for photometry and color artifacts
-> within the zip.
+> within the zip.~~ **Resolved by DESIGN-003 §10.** The bundle uses consolidated FITS
+> for photometry (§10.6) and original FITS files for spectra (§10.5). Filename
+> conventions are specified in §10.3. OQ-3 is closed.
 
 ---
 
@@ -265,8 +286,8 @@ The first invocation acquires the lock; the second exits cleanly.
 |---|---|---|
 | Photometry snapshot (schema boundary only) | `derived/photometry/<nova_id>/snapshots/schema=<version>/photometry_rows.parquet` | schema migration workflow |
 | Color snapshot (schema boundary only) | `derived/photometry/<nova_id>/snapshots/schema=<version>/color_rows.parquet` | schema migration workflow |
-| Bundle photometry artifact | TBD — see bundle structure ADR | `generate_nova_bundle` |
-| Bundle color artifact | TBD — see bundle structure ADR | `generate_nova_bundle` |
+| Bundle photometry artifact | `<release>/nova/<nova_id>/<name>_bundle_<YYYYMMDD>.zip` | artifact regeneration Fargate task (DESIGN-003 §10) |
+| Bundle color artifact | (included in bundle photometry FITS table) | artifact regeneration Fargate task (DESIGN-003 §10) |
 
 ---
 
