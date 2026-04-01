@@ -1,2 +1,11 @@
 pydantic>=2.0.0,<3.0.0
 boto3>=1.28.0
+# --- Epic 3: Artifact generator dependencies ---
+# Coordinate formatting (SkyCoord), MJD conversion (Time), FITS I/O
+# for bundle generator consolidated photometry table.
+astropy>=6.0.0,<7.0.0
+# Array operations: flux normalization, wavelength arrays, photometry
+# data manipulation.  Explicit pin even though astropy depends on it.
+numpy>=1.26.0,<3.0.0
+# kd-tree for photometry band magnitude offset computation (§8.6).
+scipy>=1.12.0,<2.0.0

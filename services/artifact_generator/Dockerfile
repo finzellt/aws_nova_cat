@@ -9,8 +9,11 @@
 # nova_common is installed directly from source (not as a layer) because
 # Lambda layers are not available to Fargate tasks.
 #
-# Epic 2 scope: boto3 + pydantic only. Epic 3 adds astropy for FITS I/O
-# and the base image may change to accommodate compiled dependencies.
+# Epic 3 scope: astropy (coordinate formatting, MJD conversion, FITS I/O),
+# numpy (array operations), and scipy (kd-tree for band offsets) are added
+# to support the artifact generators.  The python:3.11-slim base image is
+# retained — compiled wheels for these packages are available on PyPI and
+# do not require additional system-level dependencies.
 
 FROM python:3.11-slim
 
@@ -25,7 +28,8 @@ COPY nova_common_layer/python/nova_common /app/nova_common/
 # Copy shared contracts models (pydantic regeneration models)
 COPY contracts/ /app/contracts/
 
-# Copy the task entrypoint
+# Copy the task entrypoint and generator modules
 COPY artifact_generator/main.py .
+COPY artifact_generator/generators/ ./generators/
 
 CMD ["python", "main.py"]
