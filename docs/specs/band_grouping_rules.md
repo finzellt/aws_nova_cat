@@ -82,22 +82,34 @@ convention for CCD observers using standard filter sets).
 AAVSO band labels are mapped to canonical SVO filter IDs as follows. The canonical
 filter serves as the representative for its band group:
 
-| AAVSO band | Canonical SVO filter | Band group |
-|---|---|---|
-| `U` | `Generic/Bessell.U` | U |
-| `B` | `Generic/Bessell.B` | B |
-| `V` | `Generic/Bessell.V` | V |
-| `R` / `Rc` | `Generic/Bessell.R` | R |
-| `I` | `Generic/Bessell.I` | I |
-| `Ic` | *Cousins Ic representative (TBD from SVO)* | Ic |
-| `J` | `2MASS/2MASS.J` | J |
-| `H` | `2MASS/2MASS.H` | H |
-| `K` | `2MASS/2MASS.Ks` | Ks |
-| `u'` / `SU` | `SLOAN/SDSS.u` | u |
-| `g'` / `SG` | `SLOAN/SDSS.g` | g |
-| `r'` / `SR` | `SLOAN/SDSS.r` | r |
-| `i'` / `SI` | `SLOAN/SDSS.i` | i |
-| `z'` / `SZ` | `SLOAN/SDSS.z` | z |
+| AAVSO band | Reference SVO profile | Band group | NovaCat `band_id` |
+|---|---|---|---|
+| `U` | `HCT/HFOSC.Bessell_U` | U | `Generic_U` |
+| `B` | `HCT/HFOSC.Bessell_B` | B | `Generic_B` |
+| `V` | `HCT/HFOSC.Bessell_V` | V | `Generic_V` |
+| `R` / `Rc` | `HCT/HFOSC.Bessell_R` | R | `Generic_R` |
+| `I` | `HCT/HFOSC.Bessell_I` | I | `Generic_I` |
+| `Ic` | *Cousins Ic representative (TBD from SVO)* | Ic | — |
+| `J` | `2MASS/2MASS.J` | J | `Generic_J` |
+| `H` | `2MASS/2MASS.H` | H | `Generic_H` |
+| `K` | `2MASS/2MASS.Ks` | Ks | `Generic_K` |
+| `u'` / `SU` | `SLOAN/SDSS.u` | u | `SLOAN_SDSS_u` |
+| `g'` / `SG` | `SLOAN/SDSS.g` | g | `SLOAN_SDSS_g` |
+| `r'` / `SR` | `SLOAN/SDSS.r` | r | `SLOAN_SDSS_r` |
+| `i'` / `SI` | `SLOAN/SDSS.i` | i | `SLOAN_SDSS_i` |
+| `z'` / `SZ` | `SLOAN/SDSS.z` | z | `SLOAN_SDSS_z` |
+
+> **Note (2026-04-01):** The previous version of this table listed `Generic/Bessell.*`
+> as canonical SVO filters for UBVRI. These filter IDs do not exist in the SVO FPS
+> database. The actual reference profiles are `HCT/HFOSC.Bessell_*` — the Bessell (1990)
+> transmission curves as implemented on the HCT/HFOSC instrument. These are the same
+> profiles used as reference spectral data on the `Generic_*` band registry entries.
+> See `ADR-017-amendment-band-id-naming.md` § Alias Ownership Invariant.
+>
+> AAVSO band labels (`U`, `B`, `V`, `R`, `I`, `J`, `H`, `K`) resolve to `Generic_*`
+> entries in the band registry because these bare aliases are owned by Generic entries
+> per the alias ownership rule. This is correct: AAVSO data has unknown instrument
+> provenance and should resolve with `band_resolution_confidence: "low"`.
 
 ### Rule S5: Unknown Provenance
 
@@ -106,6 +118,14 @@ data), the measurement is assigned to the band group corresponding to its report
 label via Rule S4. No correction is applied. The `filter_provenance` field on the
 `PhotometryRow` is set to `band_label_only` to indicate that the exact filter is
 unknown.
+
+> **Band registry interaction (2026-04-01):** Unknown-provenance measurements resolve
+> to `Generic_*` band registry entries (e.g. `Generic_V` for a bare `"V"` filter
+> string) with `band_resolution_type: "generic_fallback"` and
+> `band_resolution_confidence: "low"`. The `Generic_*` entries carry Bessell/2MASS
+> reference spectral data (lambda_eff, fwhm, calibration) but make no claim about the
+> actual observing instrument — `observatory_facility` and `instrument` are `null`.
+> See ADR-017 amendment § Alias Ownership Invariant; DESIGN-004 §6.5.
 
 ---
 
@@ -177,6 +197,12 @@ Ic. This is the primary source of the I/Ic split in Rule S3.
 
 ### Band Registry Integration (ADR-017)
 
+> **Status note (2026-04-01):** The `band_group` fields listed below are proposed
+> additions to the band registry schema. They are not yet implemented. The current
+> registry schema (ADR-017 Decision 3) does not include these fields. When implemented,
+> they should be added to `band_specs.json` and the `BandRegistryEntry` Pydantic model
+> via a minor schema version bump (1.1.x → 1.2.0).
+
 Each band registry entry should carry:
 
 - `band_group`: the grouping label used for light curve display (Tier 1)
@@ -186,6 +212,10 @@ Each band registry entry should carry:
 - `overlap_threshold_tier1`: 0.60 (for outlier exclusion)
 - `overlap_threshold_tier2`: 0.90 (for strict grouping)
 - `is_outlier`: boolean, true if mean intra-band overlap < 0.60
+
+Note: for `Generic_*` entries, `canonical_filter_id` is the same as `svo_filter_id`
+(the Bessell or 2MASS reference profile). For instrument-specific entries, it may
+differ if the entry's own filter is not the band group representative.
 
 ### Frontend Light Curve Panel (ADR-013, ADR-014)
 

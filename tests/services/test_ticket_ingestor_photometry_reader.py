@@ -70,17 +70,18 @@ class _MockEntry:
 
 
 # Registry contents used across tests:
-#   "V"              → JohnsonCousins_V (canonical, not excluded)
+#   "V"              → Generic_V (alias on Generic entry per ADR-017
+#                      amendment § Alias Ownership Invariant)
 #   "EXCLUDED_BAND"  → Generic_EXCLUDED_BAND (alias exists, but excluded)
 #   "Gg"             → no alias, but Generic_Gg entry exists (generic fallback)
 #   "XYZ"            → no alias, no Generic_XYZ entry (unresolvable)
 _V_ENTRY = _MockEntry(
-    band_id="JohnsonCousins_V",
+    band_id="Generic_V",
     regime="optical",
-    svo_filter_id="Generic/Bessell_V.dat",
-    lambda_eff=5448.0,
+    svo_filter_id="HCT/HFOSC.Bessell_V",
+    lambda_eff=5696.92,
     spectral_coord_unit=SpectralCoordUnit.angstrom,
-    bandpass_width=840.0,
+    bandpass_width=1584.54,
 )
 _GENERIC_GG_ENTRY = _MockEntry(
     band_id="Generic_Gg",
@@ -98,11 +99,11 @@ class _MockRegistry:
     """In-memory registry stub satisfying BandRegistryProtocol."""
 
     _ALIAS_INDEX: dict[str, str] = {
-        "V": "JohnsonCousins_V",
+        "V": "Generic_V",
         "EXCLUDED_BAND": "Generic_EXCLUDED_BAND",
     }
     _ENTRIES: dict[str, _MockEntry] = {
-        "JohnsonCousins_V": _V_ENTRY,
+        "Generic_V": _V_ENTRY,
         "Generic_Gg": _GENERIC_GG_ENTRY,
         "Generic_EXCLUDED_BAND": _EXCLUDED_ENTRY,
     }
@@ -211,38 +212,38 @@ def sample_csv(tmp_path: Path, v4739_ticket: PhotometryTicket) -> Path:
 class TestDeriveRowId:
     def test_deterministic(self) -> None:
         """Same inputs always produce the same UUID."""
-        a = _derive_row_id(_NOVA_ID, "2452148.839", "JohnsonCousins_V", "7.46", "data.csv")
-        b = _derive_row_id(_NOVA_ID, "2452148.839", "JohnsonCousins_V", "7.46", "data.csv")
+        a = _derive_row_id(_NOVA_ID, "2452148.839", "Generic_V", "7.46", "data.csv")
+        b = _derive_row_id(_NOVA_ID, "2452148.839", "Generic_V", "7.46", "data.csv")
         assert a == b
 
     def test_different_epoch_produces_different_id(self) -> None:
-        a = _derive_row_id(_NOVA_ID, "2452148.839", "JohnsonCousins_V", "7.46", "data.csv")
-        b = _derive_row_id(_NOVA_ID, "2452148.840", "JohnsonCousins_V", "7.46", "data.csv")
+        a = _derive_row_id(_NOVA_ID, "2452148.839", "Generic_V", "7.46", "data.csv")
+        b = _derive_row_id(_NOVA_ID, "2452148.840", "Generic_V", "7.46", "data.csv")
         assert a != b
 
     def test_different_band_produces_different_id(self) -> None:
-        a = _derive_row_id(_NOVA_ID, "2452148.839", "JohnsonCousins_V", "7.46", "data.csv")
+        a = _derive_row_id(_NOVA_ID, "2452148.839", "Generic_V", "7.46", "data.csv")
         b = _derive_row_id(_NOVA_ID, "2452148.839", "JohnsonCousins_B", "7.46", "data.csv")
         assert a != b
 
     def test_different_magnitude_produces_different_id(self) -> None:
-        a = _derive_row_id(_NOVA_ID, "2452148.839", "JohnsonCousins_V", "7.46", "data.csv")
-        b = _derive_row_id(_NOVA_ID, "2452148.839", "JohnsonCousins_V", "7.47", "data.csv")
+        a = _derive_row_id(_NOVA_ID, "2452148.839", "Generic_V", "7.46", "data.csv")
+        b = _derive_row_id(_NOVA_ID, "2452148.839", "Generic_V", "7.47", "data.csv")
         assert a != b
 
     def test_different_nova_id_produces_different_id(self) -> None:
         other_nova = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
-        a = _derive_row_id(_NOVA_ID, "2452148.839", "JohnsonCousins_V", "7.46", "data.csv")
-        b = _derive_row_id(other_nova, "2452148.839", "JohnsonCousins_V", "7.46", "data.csv")
+        a = _derive_row_id(_NOVA_ID, "2452148.839", "Generic_V", "7.46", "data.csv")
+        b = _derive_row_id(other_nova, "2452148.839", "Generic_V", "7.46", "data.csv")
         assert a != b
 
     def test_different_filename_produces_different_id(self) -> None:
-        a = _derive_row_id(_NOVA_ID, "2452148.839", "JohnsonCousins_V", "7.46", "data_a.csv")
-        b = _derive_row_id(_NOVA_ID, "2452148.839", "JohnsonCousins_V", "7.46", "data_b.csv")
+        a = _derive_row_id(_NOVA_ID, "2452148.839", "Generic_V", "7.46", "data_a.csv")
+        b = _derive_row_id(_NOVA_ID, "2452148.839", "Generic_V", "7.46", "data_b.csv")
         assert a != b
 
     def test_returns_uuid(self) -> None:
-        result = _derive_row_id(_NOVA_ID, "123.456", "JohnsonCousins_V", "7.0", "f.csv")
+        result = _derive_row_id(_NOVA_ID, "123.456", "Generic_V", "7.0", "f.csv")
         assert isinstance(result, UUID)
 
 
@@ -291,8 +292,10 @@ class TestConvertTime:
 
 class TestResolveBand:
     def test_alias_match_returns_canonical_high(self) -> None:
+        # "V" is a direct alias on Generic_V per alias ownership rule.
+        # Step 1 (alias lookup) fires → canonical / high.
         res = _resolve_band("V", _REGISTRY)
-        assert res.band_id == "JohnsonCousins_V"
+        assert res.band_id == "Generic_V"
         assert res.resolution_type == BandResolutionType.canonical
         assert res.confidence == BandResolutionConfidence.high
 
@@ -432,7 +435,7 @@ class TestReadPhotometryCsv:
         assert first.time_bary_corr is False
         assert first.magnitude == pytest.approx(7.46)
         assert first.mag_err == pytest.approx(0.009)
-        assert first.band_id == "JohnsonCousins_V"
+        assert first.band_id == "Generic_V"
         assert first.regime == "optical"
         assert first.nova_id == _NOVA_ID
         assert first.primary_name == _PRIMARY_NAME

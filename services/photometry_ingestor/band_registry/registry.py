@@ -105,7 +105,6 @@ class BandRegistryEntry(BaseModel):
     svo_filter_id: str | None = None
     band_name: str | None = None
     regime: str | None = None
-    photometric_system: str | None = None
 
     # ── Instrument provenance ────────────────────────────────────────────
     detector_type: str | None = None

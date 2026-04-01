@@ -150,6 +150,14 @@ specific photometric system or instrument is not. They are the conservative fall
 when disambiguation cannot resolve to a more specific filter class. See ADR-018 for the
 disambiguation algorithm that governs when Generic entries are selected.
 
+> **Amendment (alias ownership correction, 2026-04-01):** Generic entries own all bare
+> single-letter aliases (`U`, `B`, `V`, `R`, `I`, `J`, `H`, `K`) and legacy system
+> names (`Johnson_V`, `Cousins_R`, etc.). Instrument-specific entries carry only their
+> own `band_id` as an alias. Generic optical entries (U–I) carry Bessell reference
+> spectral data from `HCT/HFOSC.Bessell_*` SVO profiles; Generic NIR entries (J, H)
+> carry 2MASS reference data. See `ADR-017-amendment-band-id-naming.md` § Alias
+> Ownership Invariant for the full rule and rationale.
+
 ---
 
 ### Decision 3 — Registry Entry Schema
@@ -172,32 +180,36 @@ and other amateur observatory data — will have most SVO-derived fields as `nul
 schema is designed to accommodate this gracefully. A valid entry requires only `band_id`,
 `aliases`, `excluded`, and either `exclusion_reason` (if excluded) or `regime` (if not).
 
-**Example entry (legitimate band):**
+**Example entry (instrument-specific band):**
 
+> **Amendment (alias ownership correction, 2026-04-01):** This example is updated.
+> The instrument-specific entry carries only its own `band_id` as an alias. Bare
+> aliases (`V`, `Johnson_V`, etc.) are now on `Generic_V`. See
+> `ADR-017-amendment-band-id-naming.md` Amended Decision 3 for the corrected examples.
 ```json
 {
-  "band_id": "Johnson_V",
-  "svo_filter_id": "Generic/Johnson.V",
+  "band_id": "HCT_HFOSC_Bessell_V",
+  "svo_filter_id": "HCT/HFOSC.Bessell_V",
   "band_name": "V",
   "regime": "optical",
   "detector_type": "photon",
-  "observatory_facility": "Generic",
-  "instrument": null,
-  "aliases": ["Johnson_V", "V", "Johnson V", "Vmag"],
+  "observatory_facility": "HCT",
+  "instrument": "HFOSC",
+  "aliases": ["HCT_HFOSC_Bessell_V"],
   "excluded": false,
   "exclusion_reason": null,
-  "lambda_eff": 5512.0,
-  "lambda_pivot": 5482.0,
-  "lambda_min": 4750.0,
-  "lambda_max": 7000.0,
-  "fwhm": 827.0,
-  "effective_width": 756.0,
+  "lambda_eff": 5696.92,
+  "lambda_pivot": 5772.0,
+  "lambda_min": 4800.41,
+  "lambda_max": 7856.63,
+  "fwhm": 1584.54,
+  "effective_width": 1582.22,
   "calibration": {
     "vega": {
-      "zero_point_flux_lambda": 3.636e-9,
-      "zero_point_flux_nu": 3636.0,
-      "zeropoint_type": "Pogson",
-      "photcal_id": "Generic/Johnson.V/Vega"
+      "zero_point_flux_lambda": 3.11501e-09,
+      "zero_point_flux_nu": 3461.72,
+      "zeropoint_type": "Vega",
+      "photcal_id": "HCT/HFOSC.Bessell_V/Vega"
     },
     "ab": null,
     "st": null
@@ -206,28 +218,37 @@ schema is designed to accommodate this gracefully. A valid entry requires only `
 }
 ```
 
-**Example entry (Generic fallback):**
+**Example entry (Generic fallback — with Bessell reference data):**
 
+> **Amendment (alias ownership correction, 2026-04-01):** This example is updated.
+> Generic entries are no longer sparse — they carry reference spectral data from the
+> canonical SVO profile for their photometric system. Generic entries own all bare
+> ambiguous aliases. See `ADR-017-amendment-band-id-naming.md` Amended Decision 3.
 ```json
 {
   "band_id": "Generic_V",
-  "svo_filter_id": null,
+  "svo_filter_id": "HCT/HFOSC.Bessell_V",
   "band_name": "V",
   "regime": "optical",
-  "detector_type": null,
+  "detector_type": "photon",
   "observatory_facility": null,
   "instrument": null,
-  "aliases": ["Generic_V", "V"],
+  "aliases": ["Generic_V", "Johnson_V", "V", "Johnson V", "Vmag"],
   "excluded": false,
   "exclusion_reason": null,
-  "lambda_eff": 5500.0,
-  "lambda_pivot": null,
-  "lambda_min": null,
-  "lambda_max": null,
-  "fwhm": null,
-  "effective_width": null,
+  "lambda_eff": 5696.92,
+  "lambda_pivot": 5772.0,
+  "lambda_min": 4800.41,
+  "lambda_max": 7856.63,
+  "fwhm": 1584.54,
+  "effective_width": 1582.22,
   "calibration": {
-    "vega": null,
+    "vega": {
+      "zero_point_flux_lambda": 3.11501e-09,
+      "zero_point_flux_nu": 3461.72,
+      "zeropoint_type": "Vega",
+      "photcal_id": "HCT/HFOSC.Bessell_V/Vega"
+    },
     "ab": null,
     "st": null
   },
@@ -300,12 +321,19 @@ schema is designed to accommodate this gracefully. A valid entry requires only `
 Alias matching is case-sensitive. This is an intentional policy that preserves semantic
 distinctions that case-folding would destroy:
 
+> **Amendment (alias ownership correction, 2026-04-01):** This table is updated to
+> reflect corrected alias ownership. See `ADR-017-amendment-band-id-naming.md` Amended
+> Decision 4 for the expanded table with resolution types.
+
 | String | Correct band |
 |--------|-------------|
-| `V` | `Johnson_V` (or `Generic_V`) |
-| `i` | `Sloan_i` |
-| `I` | `Cousins_I` |
+| `V` | `Generic_V` |
+| `Johnson_V` | `Generic_V` |
+| `HCT_HFOSC_Bessell_V` | `HCT_HFOSC_Bessell_V` |
+| `i` | `SLOAN_SDSS_i` |
+| `I` | `Generic_I` |
 | `Ks` | `2MASS_Ks` |
+| `K` | `Generic_K` |
 
 Source files must be ingested with their original filter string casing preserved.
 Carries forward unchanged from ADR-016 Decision 2.
@@ -325,6 +353,11 @@ the introduction of `band_registry.json` are the same commit.
 ---
 
 ### Decision 6 — SVO Sync Pattern: One-Shot Seed, No Recurring Infrastructure
+
+> **Amendment (data/code separation, 2026-04-01):** Band definitions (aliases, SVO
+> candidates, metadata) have been extracted from the seed script into a standalone data
+> file at `tools/filter_band_reg/band_specs.json`. The seed script now loads this file
+> by default. See `ADR-017-amendment-band-id-naming.md` Amended Decision 10 for details.
 
 The registry is populated via a one-shot operator script (`scripts/seed_band_registry.py`)
 that queries the SVO Filter Profile Service via `astroquery.svo_fps`, retrieves the
@@ -461,6 +494,18 @@ section can be added without changing the versioning scheme.
 
 ### Decision 10 — Initial Population: 23 Entries Derived from VizieR Census
 
+> **Amendment (band_id naming revision, 2026-03-25):** Entry count increased to 32.
+> Instrument-specific entries use SVO-derived `band_id` values. Generic fallback entries
+> added for all ambiguous single-letter band aliases.
+>
+> **Amendment (alias ownership correction, 2026-04-01):** Bare aliases moved from
+> instrument-specific entries to Generic entries. Generic optical entries populated with
+> Bessell reference data; Generic NIR J/H entries populated with 2MASS reference data.
+> Band definitions extracted to `tools/filter_band_reg/band_specs.json`.
+>
+> See `ADR-017-amendment-band-id-naming.md` Amended Decision 10 for the current
+> population description.
+
 The initial registry population is the 23 entries present in the seed
 `band_registry.json` produced by the scan-then-seed process described in Decision 6.
 These entries cover every filter string that appears in the current VizieR catalog
@@ -507,7 +552,7 @@ All items resolved. This section retained for historical reference.
 | 5 | Python interface contract (Decision 8) | Resolved: four-function read-only API. See Decision 8. |
 | 6 | Versioning strategy (Decision 9) | Resolved: `_schema_version` semver field + Git history. See Decision 9. |
 | 7 | Initial population scope (Decision 10) | Resolved: 23 entries from VizieR census. See Decision 10. |
-| 8 | Confirm SVO `photometric_system` field maps cleanly to `SystemAbbrev` | Resolved: confirmed by the seed script execution. All 22 non-excluded entries successfully mapped `photometric_system` to `SystemAbbrev` with operator review. |
+| 8 | Confirm SVO `photometric_system` field maps cleanly to `SystemAbbrev` | Superseded (2026-03-25). `SystemAbbrev` derivation from `photometric_system` is abolished. `band_id` is now derived from SVO filter ID components per the ADR-017 amendment. |
 
 ---
 
