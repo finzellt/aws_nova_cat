@@ -29,8 +29,16 @@ import json
 import os
 
 import aws_cdk as cdk
+import aws_cdk.aws_cloudwatch as cloudwatch
+import aws_cdk.aws_dynamodb as dynamodb
+import aws_cdk.aws_ec2 as ec2
+import aws_cdk.aws_ecs as ecs
+import aws_cdk.aws_events as events
+import aws_cdk.aws_events_targets as events_targets
 import aws_cdk.aws_iam as iam
 import aws_cdk.aws_lambda as lambda_
+import aws_cdk.aws_s3 as s3
+import aws_cdk.aws_sns as sns
 import aws_cdk.aws_stepfunctions as sfn
 from constructs import Construct
 
@@ -51,6 +59,7 @@ class NovaCatWorkflows(Construct):
       discover_spectra_products  — the discover_spectra_products state machine
       acquire_and_validate_spectra — the acquire_and_validate_spectra state machine (placeholder stub)
       ingest_ticket              — the ingest_ticket state machine
+      regenerate_artifacts       — the artifact regeneration sweep workflow (Standard)
     """
 
     def __init__(
@@ -59,6 +68,12 @@ class NovaCatWorkflows(Construct):
         construct_id: str,
         *,
         compute: NovaCatCompute,
+        vpc: ec2.IVpc,
+        table: dynamodb.Table,
+        private_bucket: s3.Bucket,
+        public_site_bucket: s3.Bucket,
+        quarantine_topic: sns.Topic,
+        sweep_schedule_hours: int = 6,
         env_prefix: str = "nova-cat",
         cf_prefix: str = "NovaCat",
     ) -> None:
@@ -303,6 +318,248 @@ class NovaCatWorkflows(Construct):
         )
 
         # ------------------------------------------------------------------
+        # regenerate_artifacts — Fargate task definition (§4.4)
+        # ------------------------------------------------------------------
+
+        # ECS cluster — shared by all Fargate tasks (only one at MVP).
+        cluster = ecs.Cluster(
+            self,
+            "ArtifactCluster",
+            cluster_name=f"{env_prefix}-artifact-cluster",
+            vpc=vpc,
+        )
+
+        # Fargate task definition: 2 vCPU / 8 GB (§4.4 MVP sizing).
+        task_def = ecs.FargateTaskDefinition(
+            self,
+            "ArtifactGeneratorTaskDef",
+            family=f"{env_prefix}-artifact-generator",
+            cpu=2048,
+            memory_limit_mib=8192,
+        )
+
+        # Container — builds from services/artifact_generator/Dockerfile.
+        # The build context is services/ (same pattern as Docker Lambdas).
+        services_root = os.path.join(os.path.dirname(__file__), "../../services")
+        task_def.add_container(
+            "artifact-generator",
+            image=ecs.ContainerImage.from_asset(
+                services_root,
+                file="artifact_generator/Dockerfile",
+            ),
+            logging=ecs.LogDrivers.aws_logs(
+                stream_prefix="artifact-generator",
+            ),
+            environment={
+                "NOVA_CAT_TABLE_NAME": table.table_name,
+                "NOVA_CAT_PRIVATE_BUCKET": private_bucket.bucket_name,
+                "NOVA_CAT_PUBLIC_SITE_BUCKET": public_site_bucket.bucket_name,
+                "LOG_LEVEL": "INFO",
+                # PLAN_ID is injected at runtime via container overrides
+            },
+        )
+
+        # Task role grants (the Fargate task's runtime identity)
+        table.grant_read_write_data(task_def.task_role)
+        private_bucket.grant_read(task_def.task_role)
+        public_site_bucket.grant_read_write(task_def.task_role)
+
+        # Resolve subnet IDs for the ASL substitution.
+        # Use public subnets with auto-assign public IP for ECR image pull
+        # (avoids NAT Gateway cost at MVP — §15.8).
+        subnet_ids = [s.subnet_id for s in vpc.public_subnets]
+
+        # ------------------------------------------------------------------
+        # regenerate_artifacts — Standard Workflow (§4.5)
+        #
+        # Standard (not Express) because the .sync ECS integration can
+        # wait for hours.  Built directly rather than via
+        # _create_state_machine which hardcodes EXPRESS.
+        # ------------------------------------------------------------------
+        asl_path = os.path.join(self._workflows_dir, "regenerate_artifacts.asl.json")
+        with open(asl_path) as f:
+            asl_body = json.load(f)
+
+        # Inject subnet IDs directly into the ASL (resolved at synth time
+        # via VPC context lookup — avoids Fn::Sub escaping issues).
+        asl_body["States"]["RunArtifactGenerator"]["Parameters"]["NetworkConfiguration"][
+            "AwsvpcConfiguration"
+        ]["Subnets"] = subnet_ids
+
+        regen_role = iam.Role(
+            self,
+            "RegenerateArtifactsRole",
+            assumed_by=iam.ServicePrincipal("states.amazonaws.com"),
+            description=(f"Execution role for {env_prefix}-regenerate-artifacts Standard Workflow"),
+        )
+
+        # Lambda invoke for the finalizer (3 task_names: UpdatePlanInProgress,
+        # Finalize, FailHandler)
+        compute.artifact_finalizer.grant_invoke(regen_role)
+
+        # ECS RunTask for the .sync integration
+        regen_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["ecs:RunTask"],
+                resources=[task_def.task_definition_arn],
+            )
+        )
+        regen_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["ecs:StopTask", "ecs:DescribeTasks"],
+                resources=["*"],
+                conditions={
+                    "ArnEquals": {"ecs:cluster": cluster.cluster_arn},
+                },
+            )
+        )
+        # PassRole for the ECS task execution role and task role
+        regen_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["iam:PassRole"],
+                resources=[
+                    task_def.execution_role.role_arn if task_def.execution_role else "*",
+                    task_def.task_role.role_arn,
+                ],
+            )
+        )
+        # Events integration for .sync (SFn polls ECS on our behalf)
+        regen_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["events:PutTargets", "events:PutRule", "events:DescribeRule"],
+                resources=[
+                    cdk.Stack.of(self).format_arn(
+                        service="events",
+                        resource="rule",
+                        resource_name="StepFunctionsGetEventsForECSTaskRule",
+                    )
+                ],
+            )
+        )
+        # CloudWatch Logs
+        regen_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "logs:CreateLogDelivery",
+                    "logs:GetLogDelivery",
+                    "logs:UpdateLogDelivery",
+                    "logs:DeleteLogDelivery",
+                    "logs:ListLogDeliveries",
+                    "logs:PutResourcePolicy",
+                    "logs:DescribeResourcePolicies",
+                    "logs:DescribeLogGroups",
+                ],
+                resources=["*"],
+            )
+        )
+
+        regen_substitutions = {
+            "ArtifactFinalizerFunctionArn": compute.artifact_finalizer.function_arn,
+            "EcsClusterArn": cluster.cluster_arn,
+            "TaskDefinitionArn": task_def.task_definition_arn,
+        }
+
+        self.regenerate_artifacts = sfn.CfnStateMachine(
+            self,
+            "RegenerateArtifacts",
+            state_machine_name=f"{env_prefix}-regenerate-artifacts",
+            state_machine_type="STANDARD",
+            role_arn=regen_role.role_arn,
+            definition_substitutions=regen_substitutions,
+            definition_string=cdk.Fn.sub(
+                json.dumps(asl_body, separators=(",", ":")),
+                regen_substitutions,
+            ),
+        )
+
+        # ------------------------------------------------------------------
+        # Coordinator: sfn:StartExecution + env var injection
+        # ------------------------------------------------------------------
+        regen_sfn_arn = cdk.Stack.of(self).format_arn(
+            service="states",
+            resource="stateMachine",
+            resource_name=f"{env_prefix}-regenerate-artifacts",
+            arn_format=cdk.ArnFormat.COLON_RESOURCE_NAME,
+        )
+
+        compute.artifact_coordinator.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["states:StartExecution"],
+                resources=[regen_sfn_arn],
+            )
+        )
+
+        compute.artifact_coordinator.add_environment(
+            "REGENERATE_ARTIFACTS_STATE_MACHINE_ARN",
+            regen_sfn_arn,
+        )
+
+        # ------------------------------------------------------------------
+        # EventBridge rule: 6-hour sweep cadence (§4.1)
+        # ------------------------------------------------------------------
+        sweep_rule = events.Rule(
+            self,
+            "SweepScheduleRule",
+            rule_name=f"{env_prefix}-artifact-sweep",
+            schedule=events.Schedule.rate(
+                cdk.Duration.hours(sweep_schedule_hours),
+            ),
+            description=(
+                f"Invokes artifact_coordinator every {sweep_schedule_hours} hours "
+                f"to trigger artifact regeneration sweeps (DESIGN-003 §4.1)."
+            ),
+        )
+        sweep_rule.add_target(events_targets.LambdaFunction(compute.artifact_coordinator))
+
+        # ------------------------------------------------------------------
+        # CloudWatch alarms (§15.4)
+        # ------------------------------------------------------------------
+
+        # Sweep failure alarm — fires when the workflow enters FAILED state.
+        cloudwatch.Alarm(
+            self,
+            "SweepFailureAlarm",
+            alarm_name=f"{env_prefix}-sweep-failure",
+            metric=cloudwatch.Metric(
+                namespace="AWS/States",
+                metric_name="ExecutionsFailed",
+                dimensions_map={
+                    "StateMachineArn": self.regenerate_artifacts.attr_arn,
+                },
+                statistic="Sum",
+                period=cdk.Duration.minutes(5),
+            ),
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=(cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD),
+            alarm_description="Artifact regeneration sweep failed (DESIGN-003 §15.4)",
+            actions_enabled=True,
+        )
+
+        # Sweep skip alarm — fires when no sweep has succeeded in 48 hours.
+        cloudwatch.Alarm(
+            self,
+            "SweepSkipAlarm",
+            alarm_name=f"{env_prefix}-sweep-skip",
+            metric=cloudwatch.Metric(
+                namespace="AWS/States",
+                metric_name="ExecutionsSucceeded",
+                dimensions_map={
+                    "StateMachineArn": self.regenerate_artifacts.attr_arn,
+                },
+                statistic="Sum",
+                period=cdk.Duration.hours(48),
+            ),
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=(cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD),
+            alarm_description=(
+                "No artifact regeneration sweep has succeeded in 48 hours (DESIGN-003 §15.4)"
+            ),
+            actions_enabled=True,
+        )
+
+        # ------------------------------------------------------------------
         # Stack outputs
         # ------------------------------------------------------------------
         cdk.CfnOutput(
@@ -346,6 +603,13 @@ class NovaCatWorkflows(Construct):
             value=self.ingest_ticket.attr_arn,
             description="ingest_ticket Step Functions state machine ARN",
             export_name=f"{cf_prefix}-IngestTicketStateMachineArn",
+        )
+        cdk.CfnOutput(
+            self,
+            "RegenerateArtifactsStateMachineArn",
+            value=self.regenerate_artifacts.attr_arn,
+            description="regenerate_artifacts Step Functions state machine ARN (Standard Workflow)",
+            export_name=f"{cf_prefix}-RegenerateArtifactsStateMachineArn",
         )
 
     def _create_state_machine(

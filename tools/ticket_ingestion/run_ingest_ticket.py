@@ -31,6 +31,10 @@ Usage
       tickets/V4739_Sgr_Livingston_optical_Photometry.txt \\
       data/v4739_sgr/
 
+      OR
+python run_ingest_ticket.py tickets/V2572_Sgr_Bateson_optical_Photometry.txt data/v2572_Sgr/
+
+
   # Spectra ticket — data_dir contains metadata CSV + spectrum CSVs
   python tools/run_ingest_ticket.py \\
       tickets/GQ_Mus_Williams_Optical_Spectra.txt \\

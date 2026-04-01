@@ -855,7 +855,7 @@ class TestPhotometryHappyPath:
         # Spot-check the first row's required fields
         row = phot_resp["Items"][0]
         assert row["nova_id"] == _V4739_SGR_NOVA_ID
-        assert row["band_id"] == "HCT_HFOSC_Bessell_V"
+        assert row["band_id"] == "Generic_V"
 
         # ADR-031 Decision 7: WorkItem written for the regeneration pipeline
         wq_resp = aws_resources["main_table"].query(

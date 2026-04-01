@@ -396,6 +396,9 @@ The TTL on the plan itself is short (7 days) — plans are ephemeral operational
 not long-term audit artifacts. The JobRun records from the regeneration workflow provide
 the durable audit trail.
 
+> **Amendment note (Epic 2).** The `nova_results` field on `RegenBatchPlan` is the Fargate task's result channel to the Finalize Lambda. Each entry carries per-nova success/failure status, observation counts, and (from Epic 3 onward) structured error fields (`error_classification`, `error_type`). This avoids Step Functions output size limits and keeps the plan as the single inspectable record of sweep execution.
+
+
 ### 4.4 Execution Model: Single Fargate Task
 
 Artifact generation is performed by a **single Fargate task** that processes the entire
@@ -433,6 +436,8 @@ processes novae sequentially:
    aggregates.
 5. Report results as task output: success count, failure count, and per-nova status
    including computed observation counts for successful novae.
+
+> **Amendment note (Epic 2).** The per-nova result payload (`NovaResult`) should carry `error_classification` (`RETRYABLE | TERMINAL`) and `error_type` (exception class name) on failure, consistent with the `JobRun` error taxonomy defined in `execution-governance.md`. This enables structured failure triage from the batch plan without requiring log inspection. These fields are added to the `NovaResult` contract in Epic 3 when real generators can produce meaningful classifications. Epic 2 stubs do not fail under normal operation.
 
 A single nova's failure does not abort the batch. The task logs the failure, skips to the
 next nova, and continues. This ensures that one corrupt nova doesn't block regeneration
@@ -3783,6 +3788,8 @@ exist" and "a Fargate task is running with a plan."
 a Fargate task that processes the plan, calls generator stubs, and the Finalize
 Lambda commits the results. The full sweep lifecycle is exercisable end-to-end
 with no-op generators.
+
+**Amendments** See sections §4.3 and §4.4 for amendments/addtional work!
 
 ---
 

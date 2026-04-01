@@ -284,6 +284,28 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
         ),
         timeout=cdk.Duration.seconds(120),  # initialize_nova may take up to ~60s
     ),
+    # ------------------------------------------------------------------
+    # regenerate_artifacts workflow functions (Epic 2)
+    # ------------------------------------------------------------------
+    "artifact_coordinator": _FunctionSpec(
+        service_dir="artifact_coordinator",
+        description=(
+            "Sweep coordinator: queries WORKQUEUE, builds per-nova manifests, "
+            "persists RegenBatchPlan, launches regenerate_artifacts workflow. "
+            "Invoked by EventBridge (6h cron) or manually."
+        ),
+        timeout=cdk.Duration.seconds(60),  # paginated WORKQUEUE query + plan write + SFn start
+    ),
+    "artifact_finalizer": _FunctionSpec(
+        service_dir="artifact_finalizer",
+        description=(
+            "Commits succeeded novae: deletes consumed WorkItems, writes observation "
+            "counts to Nova items, updates RegenBatchPlan status. "
+            "Handles UpdatePlanInProgress, Finalize, FailHandler. "
+            "Used by: regenerate_artifacts."
+        ),
+        timeout=cdk.Duration.seconds(300),  # batch WorkItem deletes for large sweeps
+    ),
 }
 
 
@@ -313,6 +335,9 @@ class NovaCatCompute(Construct):
     ticket_parser: lambda_.Function
     nova_resolver_ticket: lambda_.Function
     ticket_ingestor: lambda_.DockerImageFunction
+    # regenerate_artifacts workflow (Epic 2)
+    artifact_coordinator: lambda_.Function
+    artifact_finalizer: lambda_.Function
 
     def __init__(
         self,
@@ -683,6 +708,20 @@ class NovaCatCompute(Construct):
             self._functions["ticket_ingestor"],
             "raw/*",
         )
+
+        # ------------------------------------------------------------------
+        # regenerate_artifacts workflow grants (Epic 2)
+        # ------------------------------------------------------------------
+
+        # artifact_coordinator: reads WORKQUEUE + REGEN_PLAN partitions,
+        # writes REGEN_PLAN items.  sfn:StartExecution on the
+        # regenerate_artifacts state machine is granted in workflows.py.
+        table.grant_read_write_data(self._functions["artifact_coordinator"])
+
+        # artifact_finalizer: reads REGEN_PLAN (plan loading), deletes
+        # WORKQUEUE items (batch_write_item), writes observation counts
+        # to Nova items (PK=<nova_id>, SK=NOVA), updates REGEN_PLAN status.
+        table.grant_read_write_data(self._functions["artifact_finalizer"])
 
 
 def _to_pascal(snake: str) -> str:
