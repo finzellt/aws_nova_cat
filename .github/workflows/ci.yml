@@ -51,7 +51,8 @@ jobs:
             -r services/spectra_validator/requirements.txt \
             -r services/nova_common_layer_requirements.txt \
             -r services/requirements.txt \
-            -r tools/novacat-tools/requirements.txt
+            -r tools/novacat-tools/requirements.txt \
+            -r services/artifact_generator/requirements.txt
 
       - name: Lint (ruff)
         if: steps.changes.outputs.run == 'true'

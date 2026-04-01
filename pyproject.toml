@@ -19,4 +19,4 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["tests","infra/tests", "services"]
 addopts = "-q"
-pythonpath = [".", "services/spectra_validator", "services/spectra_acquirer", "services/photometry_ingestor", "services/nova_common_layer/python"]
+pythonpath = [".", "services/spectra_validator", "services/spectra_acquirer", "services/photometry_ingestor", "services/nova_common_layer/python", "services/artifact_generator"]
