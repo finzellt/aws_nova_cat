@@ -31,7 +31,6 @@ import os
 import aws_cdk as cdk
 import aws_cdk.aws_cloudwatch as cloudwatch
 import aws_cdk.aws_dynamodb as dynamodb
-import aws_cdk.aws_ec2 as ec2
 import aws_cdk.aws_ecs as ecs
 import aws_cdk.aws_events as events
 import aws_cdk.aws_events_targets as events_targets
@@ -68,7 +67,6 @@ class NovaCatWorkflows(Construct):
         construct_id: str,
         *,
         compute: NovaCatCompute,
-        vpc: ec2.IVpc,
         table: dynamodb.Table,
         private_bucket: s3.Bucket,
         public_site_bucket: s3.Bucket,
@@ -321,12 +319,12 @@ class NovaCatWorkflows(Construct):
         # regenerate_artifacts — Fargate task definition (§4.4)
         # ------------------------------------------------------------------
 
-        # ECS cluster — shared by all Fargate tasks (only one at MVP).
-        cluster = ecs.Cluster(
+        # ECS cluster — L1 construct (no VPC dependency, no synth-time
+        # API calls).  Fargate tasks reference subnets directly in the ASL.
+        cluster = ecs.CfnCluster(
             self,
             "ArtifactCluster",
             cluster_name=f"{env_prefix}-artifact-cluster",
-            vpc=vpc,
         )
 
         # Fargate task definition: 2 vCPU / 8 GB (§4.4 MVP sizing).
@@ -367,7 +365,11 @@ class NovaCatWorkflows(Construct):
         # Resolve subnet IDs for the ASL substitution.
         # Use public subnets with auto-assign public IP for ECR image pull
         # (avoids NAT Gateway cost at MVP — §15.8).
-        subnet_ids = [s.subnet_id for s in vpc.public_subnets]
+        # Subnet IDs for Fargate networking, supplied via CDK context.
+        # Default placeholder allows synth in CI without credentials.
+        # Override at deploy time: cdk deploy -c subnet_ids=subnet-aaa,subnet-bbb
+        subnet_ids_raw: str = self.node.try_get_context("subnet_ids") or "subnet-placeholder"
+        subnet_ids = subnet_ids_raw.split(",")
 
         # ------------------------------------------------------------------
         # regenerate_artifacts — Standard Workflow (§4.5)
@@ -409,7 +411,7 @@ class NovaCatWorkflows(Construct):
                 actions=["ecs:StopTask", "ecs:DescribeTasks"],
                 resources=["*"],
                 conditions={
-                    "ArnEquals": {"ecs:cluster": cluster.cluster_arn},
+                    "ArnEquals": {"ecs:cluster": cluster.attr_arn},
                 },
             )
         )
@@ -455,7 +457,7 @@ class NovaCatWorkflows(Construct):
 
         regen_substitutions = {
             "ArtifactFinalizerFunctionArn": compute.artifact_finalizer.function_arn,
-            "EcsClusterArn": cluster.cluster_arn,
+            "EcsClusterArn": cluster.attr_arn,
             "TaskDefinitionArn": task_def.task_definition_arn,
         }
 

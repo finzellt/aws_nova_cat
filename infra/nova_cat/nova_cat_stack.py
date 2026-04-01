@@ -19,7 +19,6 @@ from __future__ import annotations
 from typing import Any
 
 import aws_cdk as cdk
-import aws_cdk.aws_ec2 as ec2
 import aws_cdk.aws_secretsmanager as secretsmanager
 from constructs import Construct
 from nova_constructs.compute import NovaCatCompute
@@ -87,7 +86,6 @@ class NovaCatStack(cdk.Stack):
             self,
             "Workflows",
             compute=self.compute,
-            vpc=ec2.Vpc.from_lookup(self, "DefaultVpc", is_default=True),
             table=self.storage.table,
             private_bucket=self.storage.private_bucket,
             public_site_bucket=self.storage.public_site_bucket,
