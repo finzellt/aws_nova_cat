@@ -1,0 +1,2 @@
+pydantic>=2.0.0,<3.0.0
+# contracts/ dir bundled by CDK; pydantic needed by contracts.models too

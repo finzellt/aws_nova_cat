@@ -1,0 +1,128 @@
+{
+    "Comment": "regenerate_artifacts workflow — wraps the Fargate artifact generation task with status tracking, failure capture, and finalization. Standard Workflow (DESIGN-003 §4.5).",
+    "StartAt": "UpdatePlanInProgress",
+    "States": {
+        "UpdatePlanInProgress": {
+            "Type": "Task",
+            "Comment": "Set RegenBatchPlan status to IN_PROGRESS and record the execution ARN (§4.5 state 1).",
+            "Resource": "${ArtifactFinalizerFunctionArn}",
+            "Parameters": {
+                "task_name": "UpdatePlanInProgress",
+                "plan_id.$": "$.plan_id",
+                "execution_arn.$": "$$.Execution.Id"
+            },
+            "ResultPath": "$.update_plan",
+            "TimeoutSeconds": 30,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "FailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "RunArtifactGenerator"
+        },
+        "RunArtifactGenerator": {
+            "Type": "Task",
+            "Comment": "Launch the Fargate task and wait for completion (§4.5 state 2). The .sync integration pattern means Step Functions polls ECS on our behalf until the task reaches a terminal state.",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+                "LaunchType": "FARGATE",
+                "Cluster": "${EcsClusterArn}",
+                "TaskDefinition": "${TaskDefinitionArn}",
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "Subnets": ["SUBNET_PLACEHOLDER"],
+                        "AssignPublicIp": "ENABLED"
+                    }
+                },
+                "Overrides": {
+                    "ContainerOverrides": [
+                        {
+                            "Name": "artifact-generator",
+                            "Environment": [
+                                {
+                                    "Name": "PLAN_ID",
+                                    "Value.$": "$.plan_id"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+            "ResultPath": "$.ecs_result",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "FailHandler",
+                    "ResultPath": "$.error"
+                }
+            ],
+            "Next": "Finalize"
+        },
+        "Finalize": {
+            "Type": "Task",
+            "Comment": "Commit succeeded novae: delete consumed WorkItems, write observation counts to Nova DDB items, update plan status (§4.5 state 3).",
+            "Resource": "${ArtifactFinalizerFunctionArn}",
+            "Parameters": {
+                "task_name": "Finalize",
+                "plan_id.$": "$.plan_id"
+            },
+            "ResultPath": "$.finalize",
+            "TimeoutSeconds": 300,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "End": true
+        },
+        "FailHandler": {
+            "Type": "Task",
+            "Comment": "Fargate task crashed or timed out — mark plan as FAILED. All WorkItems retained for next sweep (§4.5 state 4).",
+            "Resource": "${ArtifactFinalizerFunctionArn}",
+            "Parameters": {
+                "task_name": "FailHandler",
+                "plan_id.$": "$.plan_id"
+            },
+            "ResultPath": "$.fail_handler",
+            "TimeoutSeconds": 30,
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 4,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "End": true
+        }
+    }
+}

@@ -86,6 +86,10 @@ class NovaCatStack(cdk.Stack):
             self,
             "Workflows",
             compute=self.compute,
+            table=self.storage.table,
+            private_bucket=self.storage.private_bucket,
+            public_site_bucket=self.storage.public_site_bucket,
+            quarantine_topic=self.storage.quarantine_topic,
             env_prefix=env_prefix,
             cf_prefix=cf_prefix,
         )

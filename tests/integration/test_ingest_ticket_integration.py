@@ -548,7 +548,7 @@ def _write_v4739_sgr_data_dir(tmp_path: Path) -> tuple[Path, Path]:
     Populate tmp_path with a synthetic V4739 Sgr ticket and photometry CSV.
 
     Returns (ticket_path, data_dir).  Filter column uses "V" which must be
-    resolvable via the band_registry (alias → JohnsonCousins_V).
+    resolvable via the band_registry (alias → Generic_V).
     """
     ticket_path = tmp_path / "V4739_Sgr_Livingston_optical_Photometry.txt"
     ticket_path.write_text(_V4739_SGR_TICKET_TEXT, encoding="utf-8")
@@ -753,7 +753,7 @@ class TestPhotometryHappyPath:
     """
     Full photometry ingestion path using synthetic V4739 Sgr ticket + CSV data.
 
-    The band registry must resolve "V" to JohnsonCousins_V (alias lookup).
+    The band registry must resolve "V" to Generic_V (alias lookup).
     This is satisfied by the committed band_registry.json.
     """
 
@@ -855,7 +855,7 @@ class TestPhotometryHappyPath:
         # Spot-check the first row's required fields
         row = phot_resp["Items"][0]
         assert row["nova_id"] == _V4739_SGR_NOVA_ID
-        assert row["band_id"] == "HCT_HFOSC_Bessell_V"
+        assert row["band_id"] == "Generic_V"
 
         # ADR-031 Decision 7: WorkItem written for the regeneration pipeline
         wq_resp = aws_resources["main_table"].query(
