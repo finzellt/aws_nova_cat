@@ -1,5 +1,5 @@
 {
-    "Comment": "ingest_new_nova workflow — acquires idempotency lock, then launches refresh_references and discover_spectra_products in parallel.",
+    "Comment": "ingest_new_nova workflow \u2014 acquires idempotency lock, then launches refresh_references and discover_spectra_products in parallel.",
     "StartAt": "BeginJobRun",
     "States": {
         "BeginJobRun": {
@@ -16,7 +16,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -29,7 +31,7 @@
                     "ErrorEquals": [
                         "States.ALL"
                     ],
-                    "Comment": "If BeginJobRun fails there is no JobRun record to finalize — fail the execution directly.",
+                    "Comment": "If BeginJobRun fails there is no JobRun record to finalize \u2014 fail the execution directly.",
                     "Next": "BeginJobRunFailed",
                     "ResultPath": "$.error"
                 }
@@ -52,7 +54,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -73,7 +77,7 @@
         },
         "LaunchDownstream": {
             "Type": "Parallel",
-            "Comment": "Launch refresh_references and discover_spectra_products concurrently. Branches are independent — failure of one does not affect the other.",
+            "Comment": "Launch refresh_references and discover_spectra_products concurrently. Branches are independent \u2014 failure of one does not affect the other.",
             "Branches": [
                 {
                     "StartAt": "LaunchRefreshReferences",
@@ -91,7 +95,9 @@
                             "Retry": [
                                 {
                                     "ErrorEquals": [
-                                        "RetryableError"
+                                        "RetryableError",
+                                        "Lambda.TooManyRequestsException",
+                                        "Lambda.ServiceException"
                                     ],
                                     "IntervalSeconds": 2,
                                     "MaxAttempts": 3,
@@ -119,7 +125,9 @@
                             "Retry": [
                                 {
                                     "ErrorEquals": [
-                                        "RetryableError"
+                                        "RetryableError",
+                                        "Lambda.TooManyRequestsException",
+                                        "Lambda.ServiceException"
                                     ],
                                     "IntervalSeconds": 2,
                                     "MaxAttempts": 3,
@@ -161,7 +169,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -197,7 +207,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,

@@ -1,5 +1,5 @@
 {
-    "Comment": "refresh_references workflow — fetches ADS references for a nova, upserts global Reference entities, links them via NovaReference, and computes discovery_date.",
+    "Comment": "refresh_references workflow \u2014 fetches ADS references for a nova, upserts global Reference entities, links them via NovaReference, and computes discovery_date.",
     "StartAt": "BeginJobRun",
     "States": {
         "BeginJobRun": {
@@ -16,7 +16,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -51,7 +53,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -72,7 +76,7 @@
         },
         "EnsureAttributes": {
             "Type": "Choice",
-            "Comment": "Guard for the optional $.attributes field. FetchReferenceCandidates uses a hard JSONPath reference (\"attributes.$\": \"$.attributes\") which throws States.Runtime if the field is absent. When refresh_references is launched by workflow_launcher (the normal path), no attributes field is present — only operator-triggered re-runs include it. This Choice + Pass pair guarantees $.attributes exists before FetchReferenceCandidates runs.",
+            "Comment": "Guard for the optional $.attributes field. FetchReferenceCandidates uses a hard JSONPath reference (\"attributes.$\": \"$.attributes\") which throws States.Runtime if the field is absent. When refresh_references is launched by workflow_launcher (the normal path), no attributes field is present \u2014 only operator-triggered re-runs include it. This Choice + Pass pair guarantees $.attributes exists before FetchReferenceCandidates runs.",
             "Choices": [
                 {
                     "Variable": "$.attributes",
@@ -106,7 +110,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -164,7 +170,9 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
-                                    "RetryableError"
+                                    "RetryableError",
+                                    "Lambda.TooManyRequestsException",
+                                    "Lambda.ServiceException"
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 2,
@@ -203,7 +211,9 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
-                                    "RetryableError"
+                                    "RetryableError",
+                                    "Lambda.TooManyRequestsException",
+                                    "Lambda.ServiceException"
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 2,
@@ -236,7 +246,9 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
-                                    "RetryableError"
+                                    "RetryableError",
+                                    "Lambda.TooManyRequestsException",
+                                    "Lambda.ServiceException"
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 2,
@@ -272,7 +284,9 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
-                                    "RetryableError"
+                                    "RetryableError",
+                                    "Lambda.TooManyRequestsException",
+                                    "Lambda.ServiceException"
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 2,
@@ -311,7 +325,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
@@ -332,7 +348,7 @@
         },
         "UpsertDiscoveryDateMetadata": {
             "Type": "Task",
-            "Comment": "Write discovery_date to Nova item only if strictly earlier than current value (monotonically earlier invariant, ADR-005 §4). No-op if unchanged or no date computed.",
+            "Comment": "Write discovery_date to Nova item only if strictly earlier than current value (monotonically earlier invariant, ADR-005 \u00a74). No-op if unchanged or no date computed.",
             "Resource": "${ReferenceManagerFunctionArn}",
             "Parameters": {
                 "task_name": "UpsertDiscoveryDateMetadata",
@@ -348,7 +364,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -384,7 +402,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -420,7 +440,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,

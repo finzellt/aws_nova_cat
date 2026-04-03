@@ -25,6 +25,7 @@ import type {
   ReferencesArtifact,
   SpectraArtifact,
 } from '@/types/nova';
+import type { CatalogData } from '@/types/catalog';
 import { resolveRelease, getArtifactUrl } from '@/lib/dataClient';
 import ObjectSummary from './ObjectSummary';
 import ObservationsTable from './ObservationsTable';
@@ -109,10 +110,39 @@ export default function NovaPage({ identifier }: NovaPageProps) {
         return;
       }
 
+      // In production, S3 artifacts live under the nova UUID, not the
+      // display name. Fetch catalog.json to resolve name → nova_id.
+      // In dev mode (resolved === "local"), local fixtures use name-based
+      // paths, so skip the catalog lookup.
+      let novaPathSegment = encodedId;
+      if (resolved !== 'local') {
+        try {
+          const catalogUrl = getArtifactUrl(resolved, 'catalog.json');
+          const catRes = await fetch(catalogUrl);
+          if (!catRes.ok) throw new Error(`HTTP ${catRes.status}`);
+          const catalog: CatalogData = await catRes.json() as CatalogData;
+          const entry = catalog.novae.find(
+            (n) => n.primary_name === displayName,
+          );
+          if (!entry) {
+            if (!cancelled) {
+              setNovaState({ status: 'error', message: 'Nova not found in catalog' });
+            }
+            return;
+          }
+          novaPathSegment = entry.nova_id;
+        } catch {
+          if (!cancelled) {
+            setNovaState({ status: 'error', message: 'Data temporarily unavailable' });
+          }
+          return;
+        }
+      }
+
       // Construct the base path for this nova's artifacts.
-      // Dev:  /data/nova/<id>
-      // Prod: https://<cf-domain>/releases/<release>/nova/<id>
-      const novaBasePath = getArtifactUrl(resolved, `nova/${encodedId}`);
+      // Dev:  /data/nova/<displayName>
+      // Prod: https://<cf-domain>/releases/<release>/nova/<uuid>
+      const novaBasePath = getArtifactUrl(resolved, `nova/${novaPathSegment}`);
 
       if (!cancelled) {
         setReleaseId(resolved);
@@ -211,13 +241,10 @@ export default function NovaPage({ identifier }: NovaPageProps) {
 
   const nova = novaState.status === 'success' ? novaState.data : null;
 
-  // Bundle download URL (§14.8). Uses getArtifactUrl so the href points to
-  // the correct release prefix in production, or /data/ in dev mode.
-  const bundleHref = nova && releaseId
-    ? getArtifactUrl(
-        releaseId,
-        `nova/${encodedId}/${nova.primary_name.replace(/\s+/g, '-')}_bundle.zip`,
-      )
+  // Bundle download URL (§14.8). Derived from basePath (which already
+  // contains the correct path segment — display name in dev, UUID in prod).
+  const bundleHref = nova && basePath
+    ? `${basePath}/${nova.primary_name.replace(/\s+/g, '-')}_bundle.zip`
     : '#';
 
   return (

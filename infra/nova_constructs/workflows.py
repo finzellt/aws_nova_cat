@@ -30,7 +30,10 @@ import os
 
 import aws_cdk as cdk
 import aws_cdk.aws_cloudwatch as cloudwatch
+import aws_cdk.aws_cloudwatch_actions as cloudwatch_actions
 import aws_cdk.aws_dynamodb as dynamodb
+import aws_cdk.aws_ec2 as ec2
+import aws_cdk.aws_ecr_assets as ecr_assets
 import aws_cdk.aws_ecs as ecs
 import aws_cdk.aws_events as events
 import aws_cdk.aws_events_targets as events_targets
@@ -344,6 +347,7 @@ class NovaCatWorkflows(Construct):
             image=ecs.ContainerImage.from_asset(
                 services_root,
                 file="artifact_generator/Dockerfile",
+                platform=ecr_assets.Platform.LINUX_AMD64,
             ),
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix="artifact-generator",
@@ -367,11 +371,14 @@ class NovaCatWorkflows(Construct):
         # Resolve subnet IDs for the ASL substitution.
         # Use public subnets with auto-assign public IP for ECR image pull
         # (avoids NAT Gateway cost at MVP — §15.8).
-        # Subnet IDs for Fargate networking, supplied via CDK context.
-        # Default placeholder allows synth in CI without credentials.
-        # Override at deploy time: cdk deploy -c subnet_ids=subnet-aaa,subnet-bbb
-        subnet_ids_raw: str = self.node.try_get_context("subnet_ids") or "subnet-placeholder"
-        subnet_ids = subnet_ids_raw.split(",")
+        # Subnet IDs may be supplied explicitly via CDK context, otherwise
+        # look up the default VPC's public subnets (cached in cdk.context.json).
+        subnet_ids_raw: str = self.node.try_get_context("subnet_ids") or ""
+        if subnet_ids_raw:
+            subnet_ids = subnet_ids_raw.split(",")
+        else:
+            vpc = ec2.Vpc.from_lookup(self, "DefaultVpc", is_default=True)
+            subnet_ids = [s.subnet_id for s in vpc.public_subnets]
 
         # ------------------------------------------------------------------
         # regenerate_artifacts — Standard Workflow (§4.5)
@@ -518,9 +525,10 @@ class NovaCatWorkflows(Construct):
         # ------------------------------------------------------------------
         # CloudWatch alarms (§15.4)
         # ------------------------------------------------------------------
+        sns_action = cloudwatch_actions.SnsAction(quarantine_topic)
 
         # Sweep failure alarm — fires when the workflow enters FAILED state.
-        cloudwatch.Alarm(
+        sweep_failure_alarm = cloudwatch.Alarm(
             self,
             "SweepFailureAlarm",
             alarm_name=f"{env_prefix}-sweep-failure",
@@ -539,9 +547,10 @@ class NovaCatWorkflows(Construct):
             alarm_description="Artifact regeneration sweep failed (DESIGN-003 §15.4)",
             actions_enabled=True,
         )
+        sweep_failure_alarm.add_alarm_action(sns_action)
 
         # Sweep skip alarm — fires when no sweep has succeeded in 48 hours.
-        cloudwatch.Alarm(
+        sweep_skip_alarm = cloudwatch.Alarm(
             self,
             "SweepSkipAlarm",
             alarm_name=f"{env_prefix}-sweep-skip",
@@ -562,6 +571,7 @@ class NovaCatWorkflows(Construct):
             ),
             actions_enabled=True,
         )
+        sweep_skip_alarm.add_alarm_action(sns_action)
 
         # ------------------------------------------------------------------
         # Stack outputs

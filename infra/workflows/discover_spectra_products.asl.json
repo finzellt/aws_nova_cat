@@ -1,5 +1,5 @@
 {
-    "Comment": "discover_spectra_products — queries provider archives, assigns stable data_product_ids, persists DataProduct stubs with eligibility=ACQUIRE, and fans out acquire_and_validate_spectra executions. Providers are processed sequentially (MaxConcurrency=1 for MVP); per-provider failures are tolerated and do not abort the workflow.",
+    "Comment": "discover_spectra_products \u2014 queries provider archives, assigns stable data_product_ids, persists DataProduct stubs with eligibility=ACQUIRE, and fans out acquire_and_validate_spectra executions. Providers are processed sequentially (MaxConcurrency=1 for MVP); per-provider failures are tolerated and do not abort the workflow.",
     "StartAt": "EnsureCorrelationId",
     "States": {
         "EnsureCorrelationId": {
@@ -16,7 +16,7 @@
         },
         "GenerateCorrelationId": {
             "Type": "Pass",
-            "Comment": "correlation_id was absent — mint a fresh UUID via States.UUID() intrinsic.",
+            "Comment": "correlation_id was absent \u2014 mint a fresh UUID via States.UUID() intrinsic.",
             "Parameters": {
                 "nova_id.$": "$.nova_id",
                 "correlation_id.$": "States.UUID()"
@@ -38,7 +38,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -51,7 +53,7 @@
                     "ErrorEquals": [
                         "States.ALL"
                     ],
-                    "Comment": "If BeginJobRun fails there is no JobRun record to finalize — fail the execution directly.",
+                    "Comment": "If BeginJobRun fails there is no JobRun record to finalize \u2014 fail the execution directly.",
                     "Next": "BeginJobRunFailed",
                     "ResultPath": "$.error"
                 }
@@ -79,7 +81,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -100,7 +104,7 @@
         },
         "PrepareProviderList": {
             "Type": "Pass",
-            "Comment": "Inject the hardcoded provider list into state. To onboard a new provider (e.g. MAST), add an entry here — no other ASL changes required.",
+            "Comment": "Inject the hardcoded provider list into state. To onboard a new provider (e.g. MAST), add an entry here \u2014 no other ASL changes required.",
             "Result": [
                 {
                     "provider": "ESO"
@@ -111,7 +115,7 @@
         },
         "DiscoverAcrossProviders": {
             "Type": "Map",
-            "Comment": "Process each provider sequentially (MaxConcurrency=1 for MVP). ToleratedFailurePercentage=100 means a single provider failure does not abort the workflow — failed iterations are captured in $.discovery_results for observability and operator review.",
+            "Comment": "Process each provider sequentially (MaxConcurrency=1 for MVP). ToleratedFailurePercentage=100 means a single provider failure does not abort the workflow \u2014 failed iterations are captured in $.discovery_results for observability and operator review.",
             "ItemsPath": "$.providers",
             "ItemSelector": {
                 "provider.$": "$$.Map.Item.Value.provider",
@@ -150,7 +154,9 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
-                                    "RetryableError"
+                                    "RetryableError",
+                                    "Lambda.TooManyRequestsException",
+                                    "Lambda.ServiceException"
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 3,
@@ -177,7 +183,9 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
-                                    "RetryableError"
+                                    "RetryableError",
+                                    "Lambda.TooManyRequestsException",
+                                    "Lambda.ServiceException"
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 2,
@@ -203,7 +211,9 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
-                                    "RetryableError"
+                                    "RetryableError",
+                                    "Lambda.TooManyRequestsException",
+                                    "Lambda.ServiceException"
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 3,
@@ -230,7 +240,9 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
-                                    "RetryableError"
+                                    "RetryableError",
+                                    "Lambda.TooManyRequestsException",
+                                    "Lambda.ServiceException"
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 3,
@@ -243,7 +255,7 @@
                     },
                     "PublishAcquireAndValidateSpectraRequests": {
                         "Type": "Task",
-                        "Comment": "Start one acquire_and_validate_spectra SFN execution per newly eligible data_product_id. sfn:StartExecution is non-blocking — all N executions run in parallel as independent Standard Workflow state machines. ExecutionAlreadyExists is treated as idempotent success.",
+                        "Comment": "Start one acquire_and_validate_spectra SFN execution per newly eligible data_product_id. sfn:StartExecution is non-blocking \u2014 all N executions run in parallel as independent Standard Workflow state machines. ExecutionAlreadyExists is treated as idempotent success.",
                         "Resource": "${WorkflowLauncherFunctionArn}",
                         "Parameters": {
                             "task_name": "PublishAcquireAndValidateSpectraRequests",
@@ -257,7 +269,9 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
-                                    "RetryableError"
+                                    "RetryableError",
+                                    "Lambda.TooManyRequestsException",
+                                    "Lambda.ServiceException"
                                 ],
                                 "IntervalSeconds": 2,
                                 "MaxAttempts": 2,
@@ -290,7 +304,7 @@
                     },
                     "DownstreamSuppressed": {
                         "Type": "Pass",
-                        "Comment": "suppress_downstream=true — downstream acquisition launch skipped.",
+                        "Comment": "suppress_downstream=true \u2014 downstream acquisition launch skipped.",
                         "End": true
                     }
                 }
@@ -315,7 +329,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -351,7 +367,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,

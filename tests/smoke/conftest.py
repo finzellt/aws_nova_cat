@@ -299,7 +299,21 @@ def _wipe_smoke_test_table(table: Any) -> None:
 
 @pytest.fixture(autouse=True)
 def cleanup_smoke_items(stack: StackOutputs, dynamodb_resource: Any) -> Any:
-    """Wipe both smoke test tables after each test."""
-    yield  # test runs here
+    """Wipe both smoke test tables before each test.
+
+    Cleanup runs BEFORE the test, not after. This is deliberate:
+    initialize_nova fires async downstream workflows (ingest_new_nova →
+    refresh_references, discover_spectra_products) via non-blocking
+    StartExecution. Those workflows may still be running when the test
+    returns. Wiping after the test would delete the Nova item while
+    refresh_references is trying to read it, causing spurious
+    "Nova not found in DDB" TerminalErrors.
+
+    Wiping before the next test gives async workflows from the previous
+    test time to complete (pytest overhead + fixture setup is typically
+    several seconds — more than enough for Express workflows). Each test
+    still starts with a clean table.
+    """
     _wipe_smoke_test_table(dynamodb_resource.Table(stack.table_name))
     _wipe_smoke_test_table(dynamodb_resource.Table(stack.photometry_table_name))
+    yield

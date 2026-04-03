@@ -1,5 +1,5 @@
 {
-    "Comment": "initialize_nova — Name-only front door for establishing a nova in Nova Cat. See workflow spec: initialize-nova.md",
+    "Comment": "initialize_nova \u2014 Name-only front door for establishing a nova in Nova Cat. See workflow spec: initialize-nova.md",
     "StartAt": "ValidateInput",
     "States": {
         "ValidateInput": {
@@ -42,7 +42,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -82,7 +84,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
@@ -117,7 +121,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -138,7 +144,7 @@
         },
         "ExistsInDB": {
             "Type": "Choice",
-            "Comment": "Short-circuit: if the name already resolves to a known nova_id, skip archive resolution and lock acquisition — launch ingest_new_nova immediately.",
+            "Comment": "Short-circuit: if the name already resolves to a known nova_id, skip archive resolution and lock acquisition \u2014 launch ingest_new_nova immediately.",
             "Choices": [
                 {
                     "Variable": "$.name_check.exists",
@@ -150,7 +156,7 @@
         },
         "PublishIngestNewNova_Exists": {
             "Type": "Task",
-            "Comment": "Name already known — launch ingest_new_nova with the existing nova_id. Outcome: EXISTS_AND_LAUNCHED.",
+            "Comment": "Name already known \u2014 launch ingest_new_nova with the existing nova_id. Outcome: EXISTS_AND_LAUNCHED.",
             "Resource": "${PublishIngestNewNovaFunctionArn}",
             "Parameters": {
                 "task_name": "PublishIngestNewNova",
@@ -165,7 +171,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
@@ -202,7 +210,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -228,7 +238,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -264,7 +276,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -297,7 +311,7 @@
         },
         "FinalizeJobRunSuccess_NotFound": {
             "Type": "Task",
-            "Comment": "Candidate is not a nova. Terminal success — no downstream workflow launched. Outcome: NOT_FOUND.",
+            "Comment": "Candidate is not a nova. Terminal success \u2014 no downstream workflow launched. Outcome: NOT_FOUND.",
             "Resource": "${FinalizeJobRunSuccessFunctionArn}",
             "Parameters": {
                 "task_name": "FinalizeJobRunSuccess",
@@ -313,7 +327,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -340,7 +356,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -382,7 +400,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -403,7 +423,7 @@
         },
         "PublishIngestNewNova_Created": {
             "Type": "Task",
-            "Comment": "New nova created — launch ingest_new_nova with the freshly assigned nova_id. Outcome: CREATED_AND_LAUNCHED.",
+            "Comment": "New nova created \u2014 launch ingest_new_nova with the freshly assigned nova_id. Outcome: CREATED_AND_LAUNCHED.",
             "Resource": "${PublishIngestNewNovaFunctionArn}",
             "Parameters": {
                 "task_name": "PublishIngestNewNova",
@@ -418,7 +438,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
@@ -455,7 +477,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -483,7 +507,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
@@ -519,7 +545,9 @@
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "RetryableError"
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
                     ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
