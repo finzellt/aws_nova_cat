@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from artifact_generator.band_offset.gap_analysis import (
+from generators.offsets.gap_analysis import (
+    FittedSpline,
     build_gap_table,
     compute_pairwise_gap,
     peak_stack_depth,
 )
-from artifact_generator.band_offset.types import FloatArray
+from generators.offsets.types import FloatArray
 
 # ---------------------------------------------------------------------------
 # Stub splines
@@ -340,7 +341,7 @@ class TestPeakStackDepth:
 
         They're within 0.5 mag for t > 75.  Peak depth should be 2.
         """
-        splines = {
+        splines: dict[str, FittedSpline] = {
             "A": _ConstantSpline(10.0, 0.0, 100.0),
             "B": _LinearSpline(-0.02, 12.0, 0.0, 100.0),
         }

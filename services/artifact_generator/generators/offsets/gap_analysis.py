@@ -24,7 +24,7 @@ References
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 import numpy as np
 from scipy.optimize import brentq, minimize_scalar  # type: ignore[import-untyped]
@@ -295,7 +295,7 @@ def compute_pairwise_gap(
 
 
 def build_gap_table(
-    splines: dict[str, FittedSpline],
+    splines: Mapping[str, FittedSpline],
     *,
     epsilon: float = DEFAULT_SEPARATION_THRESHOLD,
     grid_size: int = _DEFAULT_GRID_SIZE,
@@ -359,7 +359,7 @@ def build_gap_table(
 
 
 def peak_stack_depth(
-    splines: dict[str, FittedSpline],
+    splines: Mapping[str, FittedSpline],
     epsilon: float = DEFAULT_SEPARATION_THRESHOLD,
     *,
     grid_size: int = _DEFAULT_GRID_SIZE,

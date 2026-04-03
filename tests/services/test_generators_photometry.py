@@ -141,6 +141,7 @@ def _seed_phot_row(
     time_mjd: float = 51544.0,
     band_id: str = "Generic_V",
     regime: str = "optical",
+    band_name: str | None = None,
     magnitude: float | None = 12.0,
     mag_err: float | None = 0.02,
     flux_density: float | None = None,
@@ -180,6 +181,8 @@ def _seed_phot_row(
         item["orig_catalog"] = orig_catalog
     if bibcode is not None:
         item["bibcode"] = bibcode
+    if band_name is not None:
+        item["band_name"] = band_name
     table.put_item(Item=item)
 
 
@@ -308,6 +311,7 @@ class TestBandResolution:
             _NOVA_ID,
             "r1",
             band_id="Generic_V",
+            band_name="V",
             magnitude=12.0,
         )
         ctx = _base_context()

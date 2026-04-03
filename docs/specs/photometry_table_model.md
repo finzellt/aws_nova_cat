@@ -95,7 +95,8 @@ This section describes the photometric band. The design must accommodate wavelen
 | Column | Type | UCD | Nullable | Description |
 |---|---|---|---|---|
 | `svo_filter_id` | TEXT | `instr.filter.id` | YES | SVO Filter Profile Service identifier, e.g. `SDSS/SDSS.g`, `Swift/UVOT.UVW1`, `2MASS/2MASS.Ks`. NULL for radio, X-ray, and gamma-ray where no SVO entry exists. |
-| `band_id` | TEXT | `instr.bandpass` | NO | NovaCat canonical band ID from the band registry (ADR-017), e.g. `Johnson_V`, `2MASS_Ks`, `Swift_UVW1`. The authoritative identifier for band identity. |
+| `band_id` | TEXT | `instr.bandpass` | NO | NovaCat canonical band ID from the band registry (ADR-017), e.g. `HCT_HFOSC_Bessell_V`, `2MASS_Ks`, `Generic_V`. Internal identifier for band identity; not intended for public display. |
+| `band_name` | TEXT | `instr.filter` | NO | Canonical short display label for the photometric band, sourced from the band registry entry's `band_name` field (ADR-017). The default identifier in all public-facing outputs. E.g., `V`, `B`, `UVW1`, `5 GHz`, `0.3-10 keV`. See ADR-019 amendment (2026-04-03). |
 | `regime` | TEXT | `meta.code` | NO | Wavelength regime of the band. Controlled vocabulary: `optical`, `uv`, `nir`, `mir`, `radio`, `xray`, `gamma`. |
 | `spectral_coord_type` | TEXT | `meta.code` | NO | Type of spectral coordinate. Allowed values: `wavelength`, `frequency`, `energy`. Determines the unit of `spectral_coord_value`. |
 | `spectral_coord_value` | REAL | `em.wl` / `em.freq` / `em.energy` | YES | Central wavelength (Å), frequency (GHz), or energy (keV) of the bandpass. Registry-derived from the resolved band entry's `lambda_eff` when not supplied by the source file. NULL only for sparse registry entries with no `lambda_eff`. |
