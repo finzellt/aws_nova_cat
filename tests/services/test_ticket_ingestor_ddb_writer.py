@@ -173,6 +173,7 @@ def _make_resolved_row(
         time_orig_sys=TimeOrigSys.jd_utc,
         # Section 3 — Spectral / Bandpass
         band_id="Generic_V",
+        band_name="V",
         regime="optical",
         svo_filter_id=None,
         spectral_coord_type=SpectralCoordType.wavelength,

@@ -63,6 +63,7 @@ class _MockEntry:
 
     band_id: str
     regime: str
+    band_name: str | None = None
     svo_filter_id: str | None = None
     lambda_eff: float | None = None
     spectral_coord_unit: SpectralCoordUnit | None = SpectralCoordUnit.angstrom
@@ -77,6 +78,7 @@ class _MockEntry:
 #   "XYZ"            → no alias, no Generic_XYZ entry (unresolvable)
 _V_ENTRY = _MockEntry(
     band_id="Generic_V",
+    band_name="V",
     regime="optical",
     svo_filter_id="HCT/HFOSC.Bessell_V",
     lambda_eff=5696.92,
@@ -436,6 +438,7 @@ class TestReadPhotometryCsv:
         assert first.magnitude == pytest.approx(7.46)
         assert first.mag_err == pytest.approx(0.009)
         assert first.band_id == "Generic_V"
+        assert first.band_name == "V"
         assert first.regime == "optical"
         assert first.nova_id == _NOVA_ID
         assert first.primary_name == _PRIMARY_NAME
@@ -651,5 +654,6 @@ class TestReadPhotometryCsv:
         assert len(result.rows) == 1
         row = result.rows[0].row
         assert row.band_id == "Generic_Gg"
+        assert row.band_name == "Generic_Gg"  # fallback: band_name was None
         assert row.band_resolution_type == BandResolutionType.generic_fallback
         assert row.band_resolution_confidence == BandResolutionConfidence.low

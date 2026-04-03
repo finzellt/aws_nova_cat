@@ -71,6 +71,9 @@ class RegistryEntryLike(Protocol):
     def band_id(self) -> str: ...
 
     @property
+    def band_name(self) -> str | None: ...
+
+    @property
     def regime(self) -> str: ...
 
     @property
@@ -332,6 +335,7 @@ def _process_row(
             time_orig_sys=time_orig_sys,
             # Section 3 — Spectral / Bandpass
             band_id=band_res.band_id,
+            band_name=entry.band_name if entry.band_name else band_res.band_id,
             regime=entry.regime,
             svo_filter_id=entry.svo_filter_id,
             spectral_coord_type=SpectralCoordType.wavelength,

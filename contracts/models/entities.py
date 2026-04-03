@@ -587,6 +587,17 @@ class PhotometryRow(BaseModel):
         max_length=256,
         description="NovaCat canonical band ID resolved from the band registry (ADR-017).",
     )
+    band_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=256,
+        description=(
+            "Canonical short display label for the band (e.g., 'V', 'B', 'UVW1'). "
+            "Populated from the band registry entry's band_name field at ingestion "
+            "time. Default identifier for all public-facing outputs. "
+            "See ADR-019 amendment (2026-04-03)."
+        ),
+    )
     regime: str = Field(
         ...,
         description=(
