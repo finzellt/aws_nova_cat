@@ -13,3 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent / "infra"))
 
 # Service handlers
 sys.path.insert(0, str(REPO_ROOT / "services"))
+
+# Artifact generator — generators package lives under artifact_generator/,
+# not directly under services/, so it needs its own path entry.
+sys.path.insert(0, str(REPO_ROOT / "services" / "artifact_generator"))
