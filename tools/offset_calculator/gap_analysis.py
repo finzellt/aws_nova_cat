@@ -6,26 +6,27 @@ Entry point for the ECS Fargate container launched by the
 RunTask container override).
 
 Execution steps (§4.4):
-  1. Load the ``RegenBatchPlan`` from DynamoDB.
-  2. For each nova in the plan:
-     a. Load the Nova item from DDB.
-     b. Collect observation epochs and resolve outburst MJD.
+  1. Load the band registry (once per Fargate execution).
+  2. Load the ``RegenBatchPlan`` from DynamoDB.
+  3. For each nova in the plan:
+     a. Load the Nova DDB item (GetItem).
+     b. Pre-query observation epochs from spectra DataProducts and
+        PhotometryRow items for outburst MJD resolution (§7.6).
      c. Generate all artifacts specified in its manifest in dependency
-        order (``GENERATION_ORDER``).
-  3. Track per-nova success/failure — a single nova's failure does
+        order (``GENERATION_ORDER``), uploading each to S3.
+  4. Track per-nova success/failure — a single nova's failure does
      not abort the batch.
-  4. After all novae, generate ``catalog.json`` (stub for Epic 4).
-  5. Write ``nova_results`` back to the batch plan in DynamoDB.
-  6. Exit with code 0 (success) or 1 (all novae failed).
+  5. After all novae, generate ``catalog.json`` (stub for Epic 4).
+  6. Write ``nova_results`` back to the batch plan in DynamoDB.
+  7. Exit with code 0 (success) or 1 (all novae failed).
 
 Environment variables:
-    PLAN_ID                         — batch plan UUID (required)
-    NOVA_CAT_TABLE_NAME             — main DynamoDB table name (required)
-    NOVA_CAT_PHOTOMETRY_TABLE_NAME  — dedicated photometry table (required)
-    NOVA_CAT_PRIVATE_BUCKET         — private S3 bucket (required)
-    NOVA_CAT_PUBLIC_SITE_BUCKET     — public site S3 bucket (required)
-    BAND_REGISTRY_PATH              — path to band_registry.json (default: ./band_registry.json)
-    LOG_LEVEL                       — logging level (default INFO)
+    PLAN_ID                        — batch plan UUID (required)
+    NOVA_CAT_TABLE_NAME            — DynamoDB main table name (required)
+    NOVA_CAT_PHOTOMETRY_TABLE_NAME — DynamoDB photometry table name (required)
+    NOVA_CAT_PRIVATE_BUCKET        — S3 private data bucket name (required)
+    NOVA_CAT_PUBLIC_SITE_BUCKET    — S3 public site bucket name (required)
+    LOG_LEVEL                      — logging level (default INFO)
 """
 
 from __future__ import annotations
@@ -36,7 +37,6 @@ import os
 import sys
 import time
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 import boto3
@@ -72,68 +72,44 @@ _logger = logging.getLogger("artifact_generator")
 # ---------------------------------------------------------------------------
 
 _TABLE_NAME = os.environ["NOVA_CAT_TABLE_NAME"]
+_PHOTOMETRY_TABLE_NAME = os.environ["NOVA_CAT_PHOTOMETRY_TABLE_NAME"]
+_PRIVATE_BUCKET = os.environ["NOVA_CAT_PRIVATE_BUCKET"]
+_PUBLIC_BUCKET = os.environ["NOVA_CAT_PUBLIC_SITE_BUCKET"]
 _PLAN_ID = os.environ["PLAN_ID"]
 _REGEN_PLAN_PK = "REGEN_PLAN"
-
-_PHOTOMETRY_TABLE_NAME = os.environ.get("NOVA_CAT_PHOTOMETRY_TABLE_NAME", "")
-_PRIVATE_BUCKET = os.environ.get("NOVA_CAT_PRIVATE_BUCKET", "")
-_PUBLIC_BUCKET = os.environ.get("NOVA_CAT_PUBLIC_SITE_BUCKET", "")
-_REGISTRY_PATH = os.environ.get("BAND_REGISTRY_PATH", "./band_registry.json")
 
 # ---------------------------------------------------------------------------
 # AWS clients
 # ---------------------------------------------------------------------------
 
 _dynamodb = boto3.resource("dynamodb")
+_s3_client = boto3.client("s3")
 _table = _dynamodb.Table(_TABLE_NAME)
-_s3 = boto3.client("s3")
+_photometry_table = _dynamodb.Table(_PHOTOMETRY_TABLE_NAME)
 
-# Photometry table — may be empty string in tests that don't exercise
-# the photometry generator.  The reference is safe to create; it only
-# fails when an actual DDB call is made against a non-existent table.
-_photometry_table = _dynamodb.Table(_PHOTOMETRY_TABLE_NAME) if _PHOTOMETRY_TABLE_NAME else None
 
 # ---------------------------------------------------------------------------
-# Band registry — loaded once per Fargate execution (§8.2).
-#
-# Populated by _load_band_registry() in main().  Tests can assign
-# directly: ``mod._band_registry = {...}``.
+# Band registry (loaded once per Fargate execution, not per-nova)
 # ---------------------------------------------------------------------------
 
-_band_registry: dict[str, Any] = {}
 
+def _load_band_registry() -> Any:
+    """Load the photometry band registry from bundled JSON.
 
-def _load_band_registry() -> dict[str, Any]:
-    """Load the band registry JSON and return a band_id → entry dict.
-
-    The registry is loaded from *_REGISTRY_PATH* (default
-    ``./band_registry.json``, bundled in the container image by the
-    Dockerfile).  Each entry is a plain dict with at minimum
-    ``band_name`` and ``lambda_eff`` fields.
-
-    Returns an empty dict (with a warning) if the file is not found —
-    the photometry generator handles missing registry entries gracefully
-    by falling back to the raw ``band_id`` as the display label.
+    The ``band_registry`` package is copied from
+    ``services/photometry_ingestor/band_registry/`` into the Docker
+    image at build time.  Returns the ``(entry_index, alias_index)``
+    tuple consumed by
+    :func:`generators.photometry.generate_photometry_json`.
     """
-    path = Path(_REGISTRY_PATH)
-    if not path.exists():
-        _logger.warning(
-            "Band registry not found at %s — using empty registry",
-            _REGISTRY_PATH,
-        )
-        return {}
+    # Deferred import — band_registry is available only inside the
+    # Fargate container image, not in the unit-test Python path.
+    from band_registry.registry import (  # type: ignore[import-not-found]
+        _REGISTRY_PATH,
+        _load_registry,
+    )
 
-    raw: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-    bands: list[dict[str, Any]] = raw.get("bands", [])
-
-    registry: dict[str, Any] = {}
-    for entry in bands:
-        band_id = entry.get("band_id", "")
-        if band_id:
-            registry[band_id] = entry
-
-    _logger.info("Band registry loaded: %d entries", len(registry))
-    return registry
+    return _load_registry(_REGISTRY_PATH)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -141,40 +117,35 @@ def _load_band_registry() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _load_nova_item(nova_id: str) -> dict[str, Any] | None:
-    """Load the Nova DDB item for *nova_id*.
+def _load_nova_item(nova_id: str) -> dict[str, Any]:
+    """Load the Nova DDB item via GetItem.
 
-    Returns ``None`` if the item does not exist or the nova is not
-    ACTIVE.
+    Returns the raw item dict.  Raises ``ValueError`` if the item
+    does not exist — this is a fatal error for the nova (not the batch).
     """
-    response = _table.get_item(Key={"PK": nova_id, "SK": "NOVA"})
+    response: dict[str, Any] = _table.get_item(
+        Key={"PK": nova_id, "SK": "NOVA"},
+    )
     item: dict[str, Any] | None = response.get("Item")
-
     if item is None:
-        _logger.warning("Nova item not found", extra={"nova_id": nova_id})
-        return None
-
-    status = item.get("status", "")
-    if status != "ACTIVE":
-        _logger.warning(
-            "Nova is not ACTIVE — skipping",
-            extra={"nova_id": nova_id, "status": status},
-        )
-        return None
-
+        msg = f"Nova item not found: PK={nova_id}, SK=NOVA"
+        raise ValueError(msg)
     return dict(item)
 
 
-def _collect_observation_epochs(nova_id: str) -> list[float]:
-    """Collect MJD epochs from both spectra and photometry for outburst resolution.
+def _query_observation_epochs(nova_id: str) -> list[float]:
+    """Pre-query observation epoch MJD values for outburst resolution.
 
-    Queries VALID spectra DataProducts (``observation_date_mjd``) and
-    PhotometryRows (``time_mjd``).  Used by ``resolve_outburst_mjd()``
-    for the earliest-observation fallback.
+    Queries both the main table (spectra DataProducts) and the
+    dedicated photometry table to collect all observation timestamps.
+    Used by :func:`generators.shared.resolve_outburst_mjd` (§7.6).
+
+    Uses ``ProjectionExpression`` to minimize read capacity — only the
+    epoch field is returned from each item.
     """
     epochs: list[float] = []
 
-    # Spectra epochs from the main table.
+    # --- Spectra DataProduct observation dates (main table) ---
     spectra_kwargs: dict[str, Any] = {
         "KeyConditionExpression": (
             Key("PK").eq(nova_id) & Key("SK").begins_with("PRODUCT#SPECTRA#")
@@ -183,95 +154,145 @@ def _collect_observation_epochs(nova_id: str) -> list[float]:
         "ProjectionExpression": "observation_date_mjd",
     }
     while True:
-        resp = _table.query(**spectra_kwargs)
-        for item in resp.get("Items", []):
-            mjd = item.get("observation_date_mjd")
+        response: dict[str, Any] = _table.query(**spectra_kwargs)
+        for item in response.get("Items", []):
+            mjd: Any = item.get("observation_date_mjd")
             if mjd is not None:
-                epochs.append(float(Decimal(str(mjd))))
-        if resp.get("LastEvaluatedKey") is None:
+                epochs.append(float(mjd))
+        last_key: dict[str, Any] | None = response.get("LastEvaluatedKey")
+        if last_key is None:
             break
-        spectra_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+        spectra_kwargs["ExclusiveStartKey"] = last_key
 
-    # Photometry epochs from the dedicated table.
-    if _photometry_table is not None:
-        phot_kwargs: dict[str, Any] = {
-            "KeyConditionExpression": (Key("PK").eq(nova_id) & Key("SK").begins_with("PHOT#")),
-            "ProjectionExpression": "time_mjd",
-        }
-        while True:
-            resp = _photometry_table.query(**phot_kwargs)
-            for item in resp.get("Items", []):
-                mjd = item.get("time_mjd")
-                if mjd is not None:
-                    epochs.append(float(Decimal(str(mjd))))
-            if resp.get("LastEvaluatedKey") is None:
-                break
-            phot_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+    # --- PhotometryRow timestamps (dedicated photometry table) ---
+    phot_kwargs: dict[str, Any] = {
+        "KeyConditionExpression": (Key("PK").eq(nova_id) & Key("SK").begins_with("PHOT#")),
+        "ProjectionExpression": "time_mjd",
+    }
+    while True:
+        phot_response: dict[str, Any] = _photometry_table.query(**phot_kwargs)
+        for item in phot_response.get("Items", []):
+            mjd = item.get("time_mjd")
+            if mjd is not None:
+                epochs.append(float(mjd))
+        phot_last_key: dict[str, Any] | None = phot_response.get("LastEvaluatedKey")
+        if phot_last_key is None:
+            break
+        phot_kwargs["ExclusiveStartKey"] = phot_last_key
 
     return epochs
 
 
 # ---------------------------------------------------------------------------
-# Artifact dispatch (replaces Epic 2 stubs)
+# Artifact dispatch and S3 upload
 # ---------------------------------------------------------------------------
 
 
-def _generate_artifact(
+def _json_default(obj: object) -> int | float:
+    """JSON serializer fallback for DynamoDB ``Decimal`` values."""
+    if isinstance(obj, Decimal):
+        if obj == int(obj):
+            return int(obj)
+        return float(obj)
+    msg = f"Object of type {type(obj).__name__} is not JSON serializable"
+    raise TypeError(msg)
+
+
+def _upload_json_artifact(
+    nova_id: str,
+    filename: str,
+    data: dict[str, Any],
+) -> None:
+    """Serialize and upload a JSON artifact to the public S3 bucket."""
+    key = f"nova/{nova_id}/{filename}"
+    _s3_client.put_object(
+        Bucket=_PUBLIC_BUCKET,
+        Key=key,
+        Body=json.dumps(data, default=_json_default, ensure_ascii=False),
+        ContentType="application/json",
+    )
+    _logger.info(
+        "Uploaded artifact",
+        extra={"nova_id": nova_id, "artifact": filename, "s3_key": key},
+    )
+
+
+def _upload_svg_artifact(
+    nova_id: str,
+    filename: str,
+    svg: str,
+) -> None:
+    """Upload an SVG artifact to the public S3 bucket."""
+    key = f"nova/{nova_id}/{filename}"
+    _s3_client.put_object(
+        Bucket=_PUBLIC_BUCKET,
+        Key=key,
+        Body=svg.encode("utf-8"),
+        ContentType="image/svg+xml",
+    )
+    _logger.info(
+        "Uploaded artifact",
+        extra={"nova_id": nova_id, "artifact": filename, "s3_key": key},
+    )
+
+
+def _dispatch_generator(
     nova_id: str,
     artifact: ArtifactType,
     nova_context: dict[str, Any],
+    *,
+    band_registry: Any,
 ) -> None:
-    """Dispatch to the appropriate generator for *artifact*.
+    """Route to the appropriate generator and upload the result.
 
-    Each generator reads from *nova_context* and/or AWS resources,
-    produces an artifact dict (or SVG string), and updates
-    *nova_context* with its outputs (counts, data for downstream
-    generators).
-
-    The generated artifact dicts are not yet written to S3 here —
-    that is the responsibility of the publication logic in Epic 4.
+    Each generator updates *nova_context* as a side effect (observation
+    counts, intermediate data for downstream generators).  JSON and SVG
+    artifacts are uploaded to the public S3 bucket.  The bundle generator
+    handles its own S3 upload internally.
     """
     if artifact == ArtifactType.references_json:
-        generate_references_json(nova_id, _table, _dynamodb, nova_context)
+        result = generate_references_json(
+            nova_id,
+            _dynamodb,
+            _TABLE_NAME,
+            nova_context,
+        )
+        _upload_json_artifact(nova_id, "references.json", result)
 
     elif artifact == ArtifactType.spectra_json:
-        generate_spectra_json(
+        result = generate_spectra_json(
             nova_id,
             _table,
-            _s3,
+            _s3_client,
             _PRIVATE_BUCKET,
             nova_context,
         )
+        _upload_json_artifact(nova_id, "spectra.json", result)
 
     elif artifact == ArtifactType.photometry_json:
-        if _photometry_table is None:
-            _logger.error(
-                "Photometry table not configured — skipping photometry generator",
-                extra={"nova_id": nova_id},
-            )
-            nova_context["photometry_count"] = 0
-            nova_context["photometry_raw_items"] = []
-            nova_context["photometry_observations"] = []
-            nova_context["photometry_bands"] = []
-            return
-        generate_photometry_json(
+        result = generate_photometry_json(
             nova_id,
             _photometry_table,
-            _band_registry,
+            band_registry,
             nova_context,
         )
+        _upload_json_artifact(nova_id, "photometry.json", result)
 
     elif artifact == ArtifactType.sparkline_svg:
-        generate_sparkline_svg(nova_id, nova_context)
+        svg = generate_sparkline_svg(nova_id, nova_context)
+        if svg is not None:
+            _upload_svg_artifact(nova_id, "sparkline.svg", svg)
 
     elif artifact == ArtifactType.nova_json:
-        generate_nova_json(nova_id, nova_context)
+        result = generate_nova_json(nova_id, nova_context)
+        _upload_json_artifact(nova_id, "nova.json", result)
 
     elif artifact == ArtifactType.bundle_zip:
+        # Bundle generator writes the ZIP to S3 internally.
         generate_bundle_zip(
             nova_id,
             _table,
-            _s3,
+            _s3_client,
             _PRIVATE_BUCKET,
             _PUBLIC_BUCKET,
             nova_context,
@@ -279,7 +300,7 @@ def _generate_artifact(
 
 
 def _generate_catalog_stub() -> None:
-    """No-op catalog.json generator stub.
+    """No-op catalog.json generator stub (Epic 2).
 
     In Epic 4, this generates catalog.json from the accumulated
     in-memory sweep results merged with a DDB Scan of all ACTIVE novae
@@ -320,8 +341,15 @@ def _load_batch_plan() -> dict[str, Any]:
 def _process_nova(
     nova_id: str,
     manifest: dict[str, Any],
+    *,
+    band_registry: Any,
 ) -> NovaResult:
     """Process a single nova: run generators in dependency order.
+
+    Before generators run, loads the Nova item from DDB, pre-queries
+    observation epochs from both tables, and resolves the outburst MJD
+    (§7.6).  These values are placed in ``nova_context`` for all
+    downstream generators.
 
     Returns a ``NovaResult`` with success/failure and observation counts.
     Any exception from a generator marks the entire nova as failed — its
@@ -332,24 +360,37 @@ def _process_nova(
 
     start = time.monotonic()
     try:
-        # --- Per-nova setup (§4.4 step 2a–2b) ---
-        nova_item = _load_nova_item(nova_id)
-        if nova_item is None:
-            raise ValueError(f"Nova {nova_id} not found or not ACTIVE")
+        # --- Per-nova setup (§7.6, Chunk 8) ---
 
+        # (a) Load the Nova item from DDB via GetItem.
+        nova_item = _load_nova_item(nova_id)
         nova_context["nova_item"] = nova_item
 
-        # Resolve outburst MJD (§7.6).
-        observation_epochs = _collect_observation_epochs(nova_id)
-        outburst_mjd, is_estimated = resolve_outburst_mjd(
+        # (b) Pre-query observation epochs from both tables for
+        #     resolve_outburst_mjd().
+        observation_epochs = _query_observation_epochs(nova_id)
+
+        # (c) Populate nova_context with outburst MJD.
+        outburst_mjd, outburst_mjd_is_estimated = resolve_outburst_mjd(
             nova_item.get("discovery_date"),
             nova_item.get("nova_type"),
             observation_epochs,
         )
         nova_context["outburst_mjd"] = outburst_mjd
-        nova_context["outburst_mjd_is_estimated"] = is_estimated
+        nova_context["outburst_mjd_is_estimated"] = outburst_mjd_is_estimated
 
-        # --- Generate artifacts in dependency order ---
+        _logger.info(
+            "Nova setup complete",
+            extra={
+                "nova_id": nova_id,
+                "outburst_mjd": outburst_mjd,
+                "outburst_mjd_is_estimated": outburst_mjd_is_estimated,
+                "observation_epochs_count": len(observation_epochs),
+                "phase": "setup",
+            },
+        )
+
+        # --- Run generators in dependency order ---
         for artifact_type in GENERATION_ORDER:
             if artifact_type.value in artifacts_to_generate:
                 _logger.info(
@@ -360,8 +401,12 @@ def _process_nova(
                         "phase": "generate",
                     },
                 )
-                _generate_artifact(nova_id, artifact_type, nova_context)
-
+                _dispatch_generator(
+                    nova_id,
+                    artifact_type,
+                    nova_context,
+                    band_registry=band_registry,
+                )
     except Exception as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
         _logger.error(
@@ -423,15 +468,14 @@ def _write_results_to_plan(
 
 def main() -> None:
     """Fargate task entry point."""
-    global _band_registry  # noqa: PLW0603
-
     _logger.info(
         "Artifact generator started",
         extra={"plan_id": _PLAN_ID, "workflow_name": "artifact_generator"},
     )
 
-    # Load band registry once per Fargate execution (§8.2).
-    _band_registry = _load_band_registry()
+    # Step 0 — Load band registry (once per Fargate execution, not per-nova)
+    band_registry = _load_band_registry()
+    _logger.info("Band registry loaded", extra={"phase": "init"})
 
     # Step 1 — Load the batch plan
     plan = _load_batch_plan()
@@ -457,14 +501,18 @@ def main() -> None:
                 "progress": f"{succeeded + failed + 1}/{nova_count}",
             },
         )
-        result = _process_nova(nova_id, manifest)
+        result = _process_nova(
+            nova_id,
+            manifest,
+            band_registry=band_registry,
+        )
         nova_results.append(result)
         if result.success:
             succeeded += 1
         else:
             failed += 1
 
-    # Step 4 — Generate catalog.json (stub — Epic 4)
+    # Step 4 — Generate catalog.json (stub)
     _logger.info("Generating catalog.json (stub)", extra={"phase": "catalog"})
     _generate_catalog_stub()
 

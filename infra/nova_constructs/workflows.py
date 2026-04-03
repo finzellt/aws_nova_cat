@@ -68,6 +68,7 @@ class NovaCatWorkflows(Construct):
         *,
         compute: NovaCatCompute,
         table: dynamodb.Table,
+        photometry_table: dynamodb.Table,  # ← ADD THIS
         private_bucket: s3.Bucket,
         public_site_bucket: s3.Bucket,
         quarantine_topic: sns.Topic,
@@ -350,6 +351,7 @@ class NovaCatWorkflows(Construct):
             ),
             environment={
                 "NOVA_CAT_TABLE_NAME": table.table_name,
+                "NOVA_CAT_PHOTOMETRY_TABLE_NAME": photometry_table.table_name,
                 "NOVA_CAT_PRIVATE_BUCKET": private_bucket.bucket_name,
                 "NOVA_CAT_PUBLIC_SITE_BUCKET": public_site_bucket.bucket_name,
                 "LOG_LEVEL": "INFO",
@@ -361,6 +363,7 @@ class NovaCatWorkflows(Construct):
         table.grant_read_write_data(task_def.task_role)
         private_bucket.grant_read(task_def.task_role)
         public_site_bucket.grant_read_write(task_def.task_role)
+        photometry_table.grant_read_data(task_def.task_role)
 
         # Resolve subnet IDs for the ASL substitution.
         # Use public subnets with auto-assign public IP for ECR image pull

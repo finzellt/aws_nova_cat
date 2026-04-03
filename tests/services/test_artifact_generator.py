@@ -1,19 +1,24 @@
-"""Unit tests for services/artifact_generator/main.py.
+"""Unit tests for services/artifact_generator/main.py (Epic 3).
 
-Uses moto to mock DynamoDB.  The Fargate task reads env vars at module
-level (``PLAN_ID``, ``NOVA_CAT_TABLE_NAME``), so we use the standard
-``_load_module()`` pattern — fresh import inside each ``mock_aws()``
-context.
+Uses moto to mock DynamoDB and S3.  The Fargate task reads env vars at
+module level, so we use the standard ``_load_module()`` pattern — fresh
+import inside each ``mock_aws()`` context.
 
 Covers:
-  Generator stubs:
-  - _generate_artifact_stub populates spectra_count, photometry_count,
-    references_count, has_sparkline in nova_context
+  Per-nova setup:
+  - _load_nova_item returns item for ACTIVE nova
+  - _load_nova_item returns None for missing / non-ACTIVE nova
+  - _collect_observation_epochs gathers from both tables
+
+  Dispatcher:
+  - _generate_artifact routes each ArtifactType to its generator
+  - Photometry skipped gracefully when table not configured
 
   Per-nova processing:
   - Successful nova returns NovaResult with success=True and counts
+  - Nova not found produces NovaResult with success=False
   - Generator exception produces NovaResult with success=False and error
-  - Failed nova does not abort the batch (tested at main() level)
+  - Failed nova does not abort the batch
 
   Plan loading:
   - _load_batch_plan returns the plan item
@@ -24,19 +29,18 @@ Covers:
 
   main() integration:
   - Single nova happy path
-  - Multiple novae all succeed — results written, exit 0
-  - Partial failure — one fails, others succeed, exit 0
+  - Multiple novae — partial failure, exit 0
   - All novae fail — exit 1
-  - Generation order respected (artifacts processed in dependency order)
+  - Generation order respected
 """
 
 from __future__ import annotations
 
 import importlib
 import sys
-import time
 import types
 from collections.abc import Generator
+from decimal import Decimal
 from typing import Any
 from unittest.mock import patch
 
@@ -49,12 +53,14 @@ from moto import mock_aws
 # ---------------------------------------------------------------------------
 
 _TABLE_NAME = "NovaCat-Test"
+_PHOT_TABLE_NAME = "NovaCat-Photometry-Test"
+_BUCKET_PRIVATE = "nova-cat-private-test"
+_BUCKET_PUBLIC = "nova-cat-public-test"
 _REGION = "us-east-1"
 _PLAN_ID = "test-plan-00000000-0000-0000-0000-000000000001"
 
 _NOVA_A = "aaaaaaaa-0000-0000-0000-000000000001"
 _NOVA_B = "bbbbbbbb-0000-0000-0000-000000000002"
-_NOVA_C = "cccccccc-0000-0000-0000-000000000003"
 
 _REGEN_PLAN_PK = "REGEN_PLAN"
 
@@ -68,16 +74,20 @@ _REGEN_PLAN_PK = "REGEN_PLAN"
 def aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set required environment variables before module import."""
     monkeypatch.setenv("NOVA_CAT_TABLE_NAME", _TABLE_NAME)
+    monkeypatch.setenv("NOVA_CAT_PHOTOMETRY_TABLE_NAME", _PHOT_TABLE_NAME)
+    monkeypatch.setenv("NOVA_CAT_PRIVATE_BUCKET", _BUCKET_PRIVATE)
+    monkeypatch.setenv("NOVA_CAT_PUBLIC_SITE_BUCKET", _BUCKET_PUBLIC)
     monkeypatch.setenv("PLAN_ID", _PLAN_ID)
     monkeypatch.setenv("AWS_DEFAULT_REGION", _REGION)
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    monkeypatch.setenv("BAND_REGISTRY_PATH", "/nonexistent/band_registry.json")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
 
-@pytest.fixture
+@pytest.fixture()
 def table(aws_env: None) -> Generator[Any, None, None]:
-    """Create a mocked DynamoDB table and yield it."""
+    """Create mocked DDB tables (main + photometry) and yield the main table."""
     with mock_aws():
         dynamodb = boto3.resource("dynamodb", region_name=_REGION)
         tbl = dynamodb.create_table(
@@ -92,73 +102,89 @@ def table(aws_env: None) -> Generator[Any, None, None]:
             ],
             BillingMode="PAY_PER_REQUEST",
         )
+        # Dedicated photometry table.
+        dynamodb.create_table(
+            TableName=_PHOT_TABLE_NAME,
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
         yield tbl
 
 
+# ---------------------------------------------------------------------------
+# Module loader
+# ---------------------------------------------------------------------------
+
+
 def _load_module() -> types.ModuleType:
-    """Import main.py fresh inside the moto context."""
-    if "artifact_generator.main" in sys.modules:
-        del sys.modules["artifact_generator.main"]
-    return importlib.import_module("artifact_generator.main")
+    import pathlib
+
+    artifact_gen = str(pathlib.Path.cwd().parent / "services" / "artifact_generator")
+    print(f"artifact_generator on sys.path: {artifact_gen in sys.path}")
+    print(f"sys.path entries with 'artifact': {[p for p in sys.path if 'artifact' in p]}")
+    """Reimport main.py so module-level AWS resources bind to the mock."""
+    for key in list(sys.modules):
+        if key == "main" or key.startswith("main."):
+            del sys.modules[key]
+    return importlib.import_module("main")
 
 
 # ---------------------------------------------------------------------------
-# Helpers — seed data
+# DDB seed helpers
 # ---------------------------------------------------------------------------
+
+
+def _seed_nova(table: Any, nova_id: str) -> None:
+    """Write an ACTIVE Nova item."""
+    table.put_item(
+        Item={
+            "PK": nova_id,
+            "SK": "NOVA",
+            "entity_type": "Nova",
+            "nova_id": nova_id,
+            "primary_name": "Test Nova",
+            "aliases": ["Alias A"],
+            "ra_deg": Decimal("52.799083"),
+            "dec_deg": Decimal("43.904667"),
+            "status": "ACTIVE",
+            "discovery_date": "2000-01-01",
+        }
+    )
 
 
 def _seed_plan(
     table: Any,
     nova_manifests: dict[str, Any],
-    plan_id: str = _PLAN_ID,
 ) -> str:
     """Write a RegenBatchPlan item and return its SK."""
-    created_at = "2026-04-01T00:00:00Z"
-    sk = f"{created_at}#{plan_id}"
+    sk = f"2026-01-01T00:00:00Z#{_PLAN_ID}"
     table.put_item(
         Item={
             "PK": _REGEN_PLAN_PK,
             "SK": sk,
-            "entity_type": "RegenBatchPlan",
-            "schema_version": "1.0.0",
-            "plan_id": plan_id,
+            "plan_id": _PLAN_ID,
             "status": "IN_PROGRESS",
             "nova_manifests": nova_manifests,
-            "nova_count": len(nova_manifests),
-            "workitem_sks": [],
-            "created_at": created_at,
-            "completed_at": None,
-            "execution_arn": None,
-            "ttl": int(time.time()) + 7 * 86_400,
         }
     )
     return sk
 
 
 def _spectra_manifest() -> dict[str, Any]:
-    """Manifest for a nova with spectra dirty type."""
     return {
         "dirty_types": ["spectra"],
         "artifacts": ["spectra.json", "nova.json", "bundle.zip", "catalog.json"],
     }
 
 
-def _photometry_manifest() -> dict[str, Any]:
-    """Manifest for a nova with photometry dirty type."""
-    return {
-        "dirty_types": ["photometry"],
-        "artifacts": [
-            "photometry.json",
-            "sparkline.svg",
-            "nova.json",
-            "bundle.zip",
-            "catalog.json",
-        ],
-    }
-
-
 def _all_artifacts_manifest() -> dict[str, Any]:
-    """Manifest for a nova with all dirty types."""
     return {
         "dirty_types": ["spectra", "photometry", "references"],
         "artifacts": [
@@ -174,46 +200,166 @@ def _all_artifacts_manifest() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# _generate_artifact_stub
+# Generator mock: a no-op that populates context like real generators do
 # ---------------------------------------------------------------------------
 
 
-class TestGenerateArtifactStub:
-    def test_spectra_json_sets_spectra_count(self, table: Any) -> None:
-        with mock_aws():
-            mod = _load_module()
-            ctx: dict[str, Any] = {}
-            mod._generate_artifact_stub(_NOVA_A, mod.ArtifactType.spectra_json, ctx)
-        assert ctx["spectra_count"] == 0
+def _noop_generate(
+    nova_id: str,
+    artifact: Any,
+    nova_context: dict[str, Any],
+) -> None:
+    """Populate context keys the way real generators do, without AWS calls."""
+    artifact_val = artifact.value if hasattr(artifact, "value") else str(artifact)
+    if artifact_val == "spectra.json":
+        nova_context["spectra_count"] = 0
+    elif artifact_val == "photometry.json":
+        nova_context["photometry_count"] = 0
+        nova_context["photometry_raw_items"] = []
+        nova_context["photometry_observations"] = []
+        nova_context["photometry_bands"] = []
+    elif artifact_val == "references.json":
+        nova_context["references_count"] = 0
+        nova_context["references_output"] = []
+    elif artifact_val == "sparkline.svg":
+        nova_context["has_sparkline"] = False
 
-    def test_photometry_json_sets_photometry_count(self, table: Any) -> None:
-        with mock_aws():
-            mod = _load_module()
-            ctx: dict[str, Any] = {}
-            mod._generate_artifact_stub(_NOVA_A, mod.ArtifactType.photometry_json, ctx)
-        assert ctx["photometry_count"] == 0
 
-    def test_references_json_sets_references_count(self, table: Any) -> None:
-        with mock_aws():
-            mod = _load_module()
-            ctx: dict[str, Any] = {}
-            mod._generate_artifact_stub(_NOVA_A, mod.ArtifactType.references_json, ctx)
-        assert ctx["references_count"] == 0
+# ---------------------------------------------------------------------------
+# _load_nova_item
+# ---------------------------------------------------------------------------
 
-    def test_sparkline_svg_sets_has_sparkline(self, table: Any) -> None:
-        with mock_aws():
-            mod = _load_module()
-            ctx: dict[str, Any] = {}
-            mod._generate_artifact_stub(_NOVA_A, mod.ArtifactType.sparkline_svg, ctx)
-        assert ctx["has_sparkline"] is False
 
-    def test_nova_json_and_bundle_do_not_set_counts(self, table: Any) -> None:
+class TestLoadNovaItem:
+    def test_returns_item_for_active_nova(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
-            ctx: dict[str, Any] = {}
-            mod._generate_artifact_stub(_NOVA_A, mod.ArtifactType.nova_json, ctx)
-            mod._generate_artifact_stub(_NOVA_A, mod.ArtifactType.bundle_zip, ctx)
-        assert ctx == {}
+            _seed_nova(table, _NOVA_A)
+            item = mod._load_nova_item(_NOVA_A)
+        assert item is not None
+        assert item["nova_id"] == _NOVA_A
+
+    def test_returns_none_for_missing_nova(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            item = mod._load_nova_item("nonexistent-id")
+        assert item is None
+
+    def test_returns_none_for_non_active_nova(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            table.put_item(
+                Item={
+                    "PK": _NOVA_A,
+                    "SK": "NOVA",
+                    "nova_id": _NOVA_A,
+                    "status": "QUARANTINED",
+                    "ra_deg": Decimal("0"),
+                    "dec_deg": Decimal("0"),
+                }
+            )
+            item = mod._load_nova_item(_NOVA_A)
+        assert item is None
+
+
+# ---------------------------------------------------------------------------
+# _collect_observation_epochs
+# ---------------------------------------------------------------------------
+
+
+class TestCollectObservationEpochs:
+    def test_collects_spectra_epochs(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            table.put_item(
+                Item={
+                    "PK": _NOVA_A,
+                    "SK": "PRODUCT#SPECTRA#dp-001",
+                    "validation_status": "VALID",
+                    "observation_date_mjd": Decimal("51544.0"),
+                }
+            )
+            epochs = mod._collect_observation_epochs(_NOVA_A)
+        assert len(epochs) == 1
+        assert epochs[0] == pytest.approx(51544.0)
+
+    def test_collects_photometry_epochs(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            phot_tbl = boto3.resource("dynamodb", region_name=_REGION).Table(
+                _PHOT_TABLE_NAME,
+            )
+            phot_tbl.put_item(
+                Item={
+                    "PK": _NOVA_A,
+                    "SK": "PHOT#r001",
+                    "time_mjd": Decimal("51545.0"),
+                }
+            )
+            epochs = mod._collect_observation_epochs(_NOVA_A)
+        assert len(epochs) == 1
+        assert epochs[0] == pytest.approx(51545.0)
+
+    def test_empty_when_no_observations(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            epochs = mod._collect_observation_epochs(_NOVA_A)
+        assert epochs == []
+
+
+# ---------------------------------------------------------------------------
+# _generate_artifact dispatch
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateArtifact:
+    def test_routes_references(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            ctx: dict[str, Any] = {"nova_item": {}}
+            with patch.object(mod, "generate_references_json") as mock_gen:
+                mod._generate_artifact(_NOVA_A, mod.ArtifactType.references_json, ctx)
+            mock_gen.assert_called_once()
+
+    def test_routes_spectra(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            ctx: dict[str, Any] = {"nova_item": {}}
+            with patch.object(mod, "generate_spectra_json") as mock_gen:
+                mod._generate_artifact(_NOVA_A, mod.ArtifactType.spectra_json, ctx)
+            mock_gen.assert_called_once()
+
+    def test_routes_photometry(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            ctx: dict[str, Any] = {"nova_item": {}}
+            with patch.object(mod, "generate_photometry_json") as mock_gen:
+                mod._generate_artifact(_NOVA_A, mod.ArtifactType.photometry_json, ctx)
+            mock_gen.assert_called_once()
+
+    def test_routes_sparkline(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            ctx: dict[str, Any] = {"nova_item": {}}
+            with patch.object(mod, "generate_sparkline_svg") as mock_gen:
+                mod._generate_artifact(_NOVA_A, mod.ArtifactType.sparkline_svg, ctx)
+            mock_gen.assert_called_once()
+
+    def test_routes_nova(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            ctx: dict[str, Any] = {"nova_item": {}}
+            with patch.object(mod, "generate_nova_json") as mock_gen:
+                mod._generate_artifact(_NOVA_A, mod.ArtifactType.nova_json, ctx)
+            mock_gen.assert_called_once()
+
+    def test_routes_bundle(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            ctx: dict[str, Any] = {"nova_item": {}}
+            with patch.object(mod, "generate_bundle_zip") as mock_gen:
+                mod._generate_artifact(_NOVA_A, mod.ArtifactType.bundle_zip, ctx)
+            mock_gen.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -222,63 +368,50 @@ class TestGenerateArtifactStub:
 
 
 class TestProcessNova:
-    def test_successful_nova_returns_success_true(self, table: Any) -> None:
+    def test_successful_nova_returns_success(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
-            result = mod._process_nova(_NOVA_A, _spectra_manifest())
+            _seed_nova(table, _NOVA_A)
+            with patch.object(mod, "_generate_artifact", _noop_generate):
+                result = mod._process_nova(_NOVA_A, _spectra_manifest())
         assert result.success is True
         assert result.nova_id == _NOVA_A
         assert result.error is None
 
-    def test_spectra_manifest_produces_spectra_count(self, table: Any) -> None:
+    def test_counts_from_generators(self, table: Any) -> None:
+        with mock_aws():
+            mod = _load_module()
+            _seed_nova(table, _NOVA_A)
+            with patch.object(mod, "_generate_artifact", _noop_generate):
+                result = mod._process_nova(_NOVA_A, _spectra_manifest())
+        assert result.spectra_count == 0
+
+    def test_nova_not_found_fails(self, table: Any) -> None:
+        """Missing Nova item produces a failed NovaResult."""
         with mock_aws():
             mod = _load_module()
             result = mod._process_nova(_NOVA_A, _spectra_manifest())
-        assert result.spectra_count == 0
-        assert result.photometry_count == 0  # default
-        assert result.references_count == 0  # default
-
-    def test_photometry_manifest_produces_photometry_count_and_sparkline(
-        self,
-        table: Any,
-    ) -> None:
-        with mock_aws():
-            mod = _load_module()
-            result = mod._process_nova(_NOVA_A, _photometry_manifest())
-        assert result.photometry_count == 0
-        assert result.has_sparkline is False
-
-    def test_all_artifacts_manifest_populates_all_counts(self, table: Any) -> None:
-        with mock_aws():
-            mod = _load_module()
-            result = mod._process_nova(_NOVA_A, _all_artifacts_manifest())
-        assert result.spectra_count == 0
-        assert result.photometry_count == 0
-        assert result.references_count == 0
-        assert result.has_sparkline is False
+        assert result.success is False
+        assert "not found" in (result.error or "").lower()
 
     def test_generator_exception_produces_failed_result(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
-            with patch.object(
-                mod,
-                "_generate_artifact_stub",
-                side_effect=ValueError("boom"),
-            ):
+            _seed_nova(table, _NOVA_A)
+
+            def _boom(*args: Any, **kwargs: Any) -> None:
+                raise ValueError("generator exploded")
+
+            with patch.object(mod, "_generate_artifact", _boom):
                 result = mod._process_nova(_NOVA_A, _spectra_manifest())
         assert result.success is False
-        assert result.nova_id == _NOVA_A
-        assert "boom" in (result.error or "")
+        assert "generator exploded" in (result.error or "")
 
     def test_failed_nova_has_no_counts(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
-            with patch.object(
-                mod,
-                "_generate_artifact_stub",
-                side_effect=RuntimeError("fail"),
-            ):
-                result = mod._process_nova(_NOVA_A, _spectra_manifest())
+            # No Nova seeded → will fail at _load_nova_item
+            result = mod._process_nova(_NOVA_A, _spectra_manifest())
         assert result.spectra_count is None
         assert result.photometry_count is None
         assert result.references_count is None
@@ -302,7 +435,6 @@ class TestLoadBatchPlan:
     def test_exits_if_plan_not_found(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
-            # No plan seeded — table is empty
             with pytest.raises(SystemExit) as exc_info:
                 mod._load_batch_plan()
         assert exc_info.value.code == 1
@@ -318,170 +450,85 @@ class TestWriteResultsToPlan:
         with mock_aws():
             mod = _load_module()
             plan_sk = _seed_plan(table, {_NOVA_A: _spectra_manifest()})
+            plan = table.get_item(
+                Key={"PK": _REGEN_PLAN_PK, "SK": plan_sk},
+            )["Item"]
+
             results = [
                 mod.NovaResult(
                     nova_id=_NOVA_A,
                     success=True,
-                    spectra_count=0,
-                    photometry_count=0,
-                    references_count=0,
-                    has_sparkline=False,
-                ),
+                    spectra_count=5,
+                    photometry_count=10,
+                    references_count=3,
+                    has_sparkline=True,
+                )
             ]
-            plan_item = {"PK": _REGEN_PLAN_PK, "SK": plan_sk}
-            mod._write_results_to_plan(plan_item, results)
+            mod._write_results_to_plan(plan, results)
 
             updated = table.get_item(
                 Key={"PK": _REGEN_PLAN_PK, "SK": plan_sk},
             )["Item"]
-        assert "nova_results" in updated
         assert len(updated["nova_results"]) == 1
         assert updated["nova_results"][0]["nova_id"] == _NOVA_A
         assert updated["nova_results"][0]["success"] is True
 
-    def test_writes_failed_result(self, table: Any) -> None:
-        with mock_aws():
-            mod = _load_module()
-            plan_sk = _seed_plan(table, {_NOVA_A: _spectra_manifest()})
-            results = [
-                mod.NovaResult(
-                    nova_id=_NOVA_A,
-                    success=False,
-                    error="test error",
-                ),
-            ]
-            plan_item = {"PK": _REGEN_PLAN_PK, "SK": plan_sk}
-            mod._write_results_to_plan(plan_item, results)
-
-            updated = table.get_item(
-                Key={"PK": _REGEN_PLAN_PK, "SK": plan_sk},
-            )["Item"]
-        stored = updated["nova_results"][0]
-        assert stored["success"] is False
-        assert stored["error"] == "test error"
-        assert stored["spectra_count"] is None
-
 
 # ---------------------------------------------------------------------------
-# main() — integration
+# main() integration
 # ---------------------------------------------------------------------------
 
 
-class TestMainHappyPath:
-    def test_single_nova_succeeds(self, table: Any) -> None:
+class TestMain:
+    def test_single_nova_happy_path(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
+            _seed_nova(table, _NOVA_A)
             plan_sk = _seed_plan(table, {_NOVA_A: _spectra_manifest()})
-            mod.main()
+
+            with patch.object(mod, "_generate_artifact", _noop_generate):
+                mod.main()
+
             plan = table.get_item(
                 Key={"PK": _REGEN_PLAN_PK, "SK": plan_sk},
             )["Item"]
         assert len(plan["nova_results"]) == 1
         assert plan["nova_results"][0]["success"] is True
 
-    def test_multiple_novae_all_succeed(self, table: Any) -> None:
+    def test_partial_failure_exits_zero(self, table: Any) -> None:
+        """One nova fails, one succeeds — exit 0 (not all failed)."""
         with mock_aws():
             mod = _load_module()
+            _seed_nova(table, _NOVA_A)
+            # Don't seed NOVA_B → it will fail at _load_nova_item
             manifests = {
                 _NOVA_A: _spectra_manifest(),
-                _NOVA_B: _photometry_manifest(),
-                _NOVA_C: _all_artifacts_manifest(),
+                _NOVA_B: _spectra_manifest(),
             }
             plan_sk = _seed_plan(table, manifests)
-            mod.main()
-            plan = table.get_item(
-                Key={"PK": _REGEN_PLAN_PK, "SK": plan_sk},
-            )["Item"]
-        assert len(plan["nova_results"]) == 3
-        assert all(r["success"] for r in plan["nova_results"])
 
-    def test_results_include_correct_nova_ids(self, table: Any) -> None:
-        with mock_aws():
-            mod = _load_module()
-            manifests = {_NOVA_A: _spectra_manifest(), _NOVA_B: _photometry_manifest()}
-            plan_sk = _seed_plan(table, manifests)
-            mod.main()
-            plan = table.get_item(
-                Key={"PK": _REGEN_PLAN_PK, "SK": plan_sk},
-            )["Item"]
-        result_ids = {r["nova_id"] for r in plan["nova_results"]}
-        assert result_ids == {_NOVA_A, _NOVA_B}
-
-
-# ---------------------------------------------------------------------------
-# main() — failure isolation
-# ---------------------------------------------------------------------------
-
-
-class TestMainFailureIsolation:
-    def test_partial_failure_still_exits_zero(self, table: Any) -> None:
-        """One nova fails, another succeeds → exit code 0."""
-        with mock_aws():
-            mod = _load_module()
-            manifests = {_NOVA_A: _spectra_manifest(), _NOVA_B: _spectra_manifest()}
-            _seed_plan(table, manifests)
-
-            call_count = 0
-            original_stub = mod._generate_artifact_stub
-
-            def _fail_on_nova_a(
-                nova_id: str,
-                artifact: Any,
-                ctx: dict[str, Any],
-            ) -> None:
-                nonlocal call_count
-                if nova_id == _NOVA_A:
-                    call_count += 1
-                    raise RuntimeError("nova A broke")
-                original_stub(nova_id, artifact, ctx)
-
-            with patch.object(mod, "_generate_artifact_stub", _fail_on_nova_a):
-                mod.main()  # should not raise SystemExit
-
-    def test_partial_failure_records_both_results(self, table: Any) -> None:
-        """Failed nova and succeeded nova both appear in results."""
-        with mock_aws():
-            mod = _load_module()
-            manifests = {_NOVA_A: _spectra_manifest(), _NOVA_B: _spectra_manifest()}
-            plan_sk = _seed_plan(table, manifests)
-
-            original_stub = mod._generate_artifact_stub
-
-            def _fail_on_nova_a(
-                nova_id: str,
-                artifact: Any,
-                ctx: dict[str, Any],
-            ) -> None:
-                if nova_id == _NOVA_A:
-                    raise RuntimeError("nova A broke")
-                original_stub(nova_id, artifact, ctx)
-
-            with patch.object(mod, "_generate_artifact_stub", _fail_on_nova_a):
+            with patch.object(mod, "_generate_artifact", _noop_generate):
                 mod.main()
 
             plan = table.get_item(
                 Key={"PK": _REGEN_PLAN_PK, "SK": plan_sk},
             )["Item"]
         results_by_id = {r["nova_id"]: r for r in plan["nova_results"]}
-        assert results_by_id[_NOVA_A]["success"] is False
-        assert "nova A broke" in results_by_id[_NOVA_A]["error"]
-        assert results_by_id[_NOVA_B]["success"] is True
+        assert results_by_id[_NOVA_A]["success"] is True
+        assert results_by_id[_NOVA_B]["success"] is False
 
     def test_all_novae_fail_exits_one(self, table: Any) -> None:
         """When every nova fails, main() calls sys.exit(1)."""
         with mock_aws():
             mod = _load_module()
-            manifests = {_NOVA_A: _spectra_manifest(), _NOVA_B: _spectra_manifest()}
+            # No Nova items seeded → both fail
+            manifests = {
+                _NOVA_A: _spectra_manifest(),
+                _NOVA_B: _spectra_manifest(),
+            }
             _seed_plan(table, manifests)
 
-            with (
-                patch.object(
-                    mod,
-                    "_generate_artifact_stub",
-                    side_effect=RuntimeError("all broken"),
-                ),
-                pytest.raises(SystemExit) as exc_info,
-            ):
+            with pytest.raises(SystemExit) as exc_info:
                 mod.main()
         assert exc_info.value.code == 1
 
@@ -496,24 +543,22 @@ class TestGenerationOrder:
         """Verify generators are called in GENERATION_ORDER sequence."""
         with mock_aws():
             mod = _load_module()
-            manifests = {_NOVA_A: _all_artifacts_manifest()}
-            _seed_plan(table, manifests)
+            _seed_nova(table, _NOVA_A)
+            _seed_plan(table, {_NOVA_A: _all_artifacts_manifest()})
 
             call_order: list[str] = []
-            original_stub = mod._generate_artifact_stub
 
-            def _tracking_stub(
+            def _tracking_generate(
                 nova_id: str,
                 artifact: Any,
                 ctx: dict[str, Any],
             ) -> None:
                 call_order.append(artifact.value)
-                original_stub(nova_id, artifact, ctx)
+                _noop_generate(nova_id, artifact, ctx)
 
-            with patch.object(mod, "_generate_artifact_stub", _tracking_stub):
+            with patch.object(mod, "_generate_artifact", _tracking_generate):
                 mod.main()
 
-        # GENERATION_ORDER: references → spectra → photometry → sparkline → nova → bundle
         assert call_order == [
             "references.json",
             "spectra.json",

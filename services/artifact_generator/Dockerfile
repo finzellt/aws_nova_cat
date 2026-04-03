@@ -32,4 +32,8 @@ COPY contracts/ /app/contracts/
 COPY artifact_generator/main.py .
 COPY artifact_generator/generators/ ./generators/
 
+# Band registry — loaded once per Fargate execution (§8.2).
+# Sourced from the photometry_ingestor package where it is maintained.
+COPY photometry_ingestor/band_registry/band_registry.json ./band_registry.json
+
 CMD ["python", "main.py"]
