@@ -121,8 +121,11 @@ export default function NovaPage({ identifier }: NovaPageProps) {
           const catRes = await fetch(catalogUrl);
           if (!catRes.ok) throw new Error(`HTTP ${catRes.status}`);
           const catalog: CatalogData = await catRes.json() as CatalogData;
+          // CatalogTable links use hyphens for spaces (e.g. "V1324-Sco"),
+          // so normalize hyphens back to spaces for matching.
+          const normalizedName = displayName.replace(/-/g, ' ');
           const entry = catalog.novae.find(
-            (n) => n.primary_name === displayName,
+            (n) => n.primary_name === normalizedName || n.primary_name === displayName,
           );
           if (!entry) {
             if (!cancelled) {
