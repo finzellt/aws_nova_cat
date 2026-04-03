@@ -257,7 +257,8 @@ def _generate_artifact(
         generate_photometry_json(
             nova_id,
             _photometry_table,
-            _band_registry,
+            _table,  # ← new: main NovaCat table for offset cache
+            _band_registry,  # or _band_registry
             nova_context,
         )
 
