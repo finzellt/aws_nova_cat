@@ -32,7 +32,6 @@ import aws_cdk as cdk
 import aws_cdk.aws_cloudwatch as cloudwatch
 import aws_cdk.aws_cloudwatch_actions as cloudwatch_actions
 import aws_cdk.aws_dynamodb as dynamodb
-import aws_cdk.aws_ec2 as ec2
 import aws_cdk.aws_ecr_assets as ecr_assets
 import aws_cdk.aws_ecs as ecs
 import aws_cdk.aws_events as events
@@ -371,14 +370,11 @@ class NovaCatWorkflows(Construct):
         # Resolve subnet IDs for the ASL substitution.
         # Use public subnets with auto-assign public IP for ECR image pull
         # (avoids NAT Gateway cost at MVP — §15.8).
-        # Subnet IDs may be supplied explicitly via CDK context, otherwise
-        # look up the default VPC's public subnets (cached in cdk.context.json).
-        subnet_ids_raw: str = self.node.try_get_context("subnet_ids") or ""
-        if subnet_ids_raw:
-            subnet_ids = subnet_ids_raw.split(",")
-        else:
-            vpc = ec2.Vpc.from_lookup(self, "DefaultVpc", is_default=True)
-            subnet_ids = [s.subnet_id for s in vpc.public_subnets]
+        # Subnet IDs are supplied via CDK context ("subnet_ids" in cdk.json).
+        # In CI (no AWS credentials) synth succeeds with the defaults;
+        # deploy requires real IDs but CI never deploys.
+        subnet_ids_raw: str = self.node.try_get_context("subnet_ids") or "placeholder"
+        subnet_ids = subnet_ids_raw.split(",")
 
         # ------------------------------------------------------------------
         # regenerate_artifacts — Standard Workflow (§4.5)

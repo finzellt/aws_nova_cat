@@ -61,6 +61,7 @@
     "@aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource": true,
     "@aws-cdk/aws-cloudwatch-actions:changeLambdaPermissionLogicalIdForLambdaAction": true,
     "@aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource": true,
-    "@aws-cdk/aws-stepfunctions-tasks:useNewS3UriForAudioUriParameter": true
+    "@aws-cdk/aws-stepfunctions-tasks:useNewS3UriForAudioUriParameter": true,
+    "subnet_ids": "subnet-02170b845cabb16ef,subnet-013767a82e5768164,subnet-0aaae1d46a3d67cda,subnet-0468112c384d0f15d,subnet-026f26f6a7251c88a,subnet-0b694c2f72fbad293"
   }
 }
