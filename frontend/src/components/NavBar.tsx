@@ -19,7 +19,7 @@ export default function NavBar() {
     >
       <div className="w-full max-w-[1280px] mx-auto px-6 flex items-center justify-between">
         <Link
-          href="/catalog"
+          href="/"
           className="text-base font-semibold text-text-primary tracking-tight"
         >
           Open Nova Catalog

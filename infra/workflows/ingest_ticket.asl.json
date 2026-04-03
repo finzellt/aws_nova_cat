@@ -1,14 +1,12 @@
 {
-    "Comment": "ingest_ticket — Ticket-driven ingestion of photometry and spectra. See docs/workflows/ingest-ticket.md",
+    "Comment": "ingest_ticket \u2014 Ticket-driven ingestion of photometry and spectra. See docs/workflows/ingest-ticket.md",
     "StartAt": "ValidateInput",
     "States": {
-
         "ValidateInput": {
             "Type": "Pass",
             "Comment": "Structural validation only. All semantic validation is deferred to ParseTicket (Pydantic). Exists as an explicit hook for future ASL-level checks.",
             "Next": "EnsureCorrelationId"
         },
-
         "EnsureCorrelationId": {
             "Type": "Choice",
             "Comment": "Generate a correlation_id if the caller did not supply one. Per execution-governance.md, all workflows must propagate a correlation_id.",
@@ -21,7 +19,6 @@
             ],
             "Default": "GenerateCorrelationId"
         },
-
         "GenerateCorrelationId": {
             "Type": "Pass",
             "Comment": "Inject null placeholder so $.correlation_id is always defined when BeginJobRun Parameters are evaluated.",
@@ -29,7 +26,6 @@
             "ResultPath": "$.correlation_id",
             "Next": "BeginJobRun"
         },
-
         "BeginJobRun": {
             "Type": "Task",
             "Comment": "Emit JobRun STARTED record. Returns job_run_id and confirmed correlation_id (generated if missing).",
@@ -44,7 +40,11 @@
             "TimeoutSeconds": 10,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
                     "BackoffRate": 4,
@@ -53,20 +53,20 @@
             ],
             "Catch": [
                 {
-                    "ErrorEquals": ["States.ALL"],
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
                     "Next": "BeginJobRunFailed",
                     "ResultPath": "$.error"
                 }
             ],
             "Next": "AcquireIdempotencyLock"
         },
-
         "BeginJobRunFailed": {
             "Type": "Fail",
             "Error": "BeginJobRunFailed",
             "Cause": "Fatal error before JobRun record was established. No finalization possible."
         },
-
         "AcquireIdempotencyLock": {
             "Type": "Task",
             "Comment": "Acquire idempotency lock keyed on IngestTicket:{ticket_filename}:{schema_version}. Re-execution of the same ticket within the lock window is suppressed here.",
@@ -82,7 +82,11 @@
             "TimeoutSeconds": 10,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
                     "BackoffRate": 4,
@@ -91,17 +95,18 @@
             ],
             "Catch": [
                 {
-                    "ErrorEquals": ["States.ALL"],
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
                     "Next": "TerminalFailHandler",
                     "ResultPath": "$.error"
                 }
             ],
             "Next": "ParseTicket"
         },
-
         "ParseTicket": {
             "Type": "Task",
-            "Comment": "Read .txt ticket file from ticket_path, parse key-value pairs, discriminate type (photometry: DATA FILENAME / spectra: METADATA FILENAME), validate with Pydantic. Parse failures are deterministic authoring errors — no retry.",
+            "Comment": "Read .txt ticket file from ticket_path, parse key-value pairs, discriminate type (photometry: DATA FILENAME / spectra: METADATA FILENAME), validate with Pydantic. Parse failures are deterministic authoring errors \u2014 no retry.",
             "Resource": "${TicketParserFunctionArn}",
             "Parameters": {
                 "task_name": "ParseTicket",
@@ -115,14 +120,15 @@
             "TimeoutSeconds": 30,
             "Catch": [
                 {
-                    "ErrorEquals": ["States.ALL"],
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
                     "Next": "TerminalFailHandler",
                     "ResultPath": "$.error"
                 }
             ],
             "Next": "ResolveNova"
         },
-
         "ResolveNova": {
             "Type": "Task",
             "Comment": "Look up object_name in NameMapping. If absent, invoke initialize_nova (StartExecution + poll until terminal) to create the nova_id. Raises UNRESOLVABLE_OBJECT_NAME (initialize_nova NOT_FOUND) or IDENTITY_AMBIGUITY (initialize_nova QUARANTINED). Exception class name is the NovaQuarantineReasonCode value, so $.quarantine.Error is the reason code string directly.",
@@ -138,7 +144,11 @@
             "TimeoutSeconds": 120,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
                     "BackoffRate": 4,
@@ -155,14 +165,15 @@
                     "ResultPath": "$.quarantine"
                 },
                 {
-                    "ErrorEquals": ["States.ALL"],
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
                     "Next": "TerminalFailHandler",
                     "ResultPath": "$.error"
                 }
             ],
             "Next": "TicketTypeBranch"
         },
-
         "TicketTypeBranch": {
             "Type": "Choice",
             "Comment": "Route to IngestPhotometry (ticket_type == photometry) or IngestSpectra (all others, currently only spectra). Default covers future ticket types without an explicit guard.",
@@ -175,7 +186,6 @@
             ],
             "Default": "IngestSpectra"
         },
-
         "IngestPhotometry": {
             "Type": "Task",
             "Comment": "Read headerless CSV at data_dir/data_filename using ticket column indices. Resolve filter strings against band registry (ADR-017). Write PhotometryRow items via conditional PutItem (ADR-020). Update PRODUCT#PHOTOMETRY_TABLE envelope item.",
@@ -196,7 +206,11 @@
             "TimeoutSeconds": 300,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
                     "BackoffRate": 4,
@@ -205,17 +219,18 @@
             ],
             "Catch": [
                 {
-                    "ErrorEquals": ["States.ALL"],
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
                     "Next": "TerminalFailHandler",
                     "ResultPath": "$.error"
                 }
             ],
             "Next": "FinalizeJobRunSuccess_Photometry"
         },
-
         "IngestSpectra": {
             "Type": "Task",
-            "Comment": "Read metadata CSV (two-hop: ticket → metadata CSV → per-spectrum data CSVs). Convert each spectrum CSV to FITS with reconstructed headers (OBJECT, DATE-OBS, TELESCOP, INSTRUME, OBSERVER, CRVAL1, CDELT1, NAXIS1, BUNIT, BIBCODE). Upload to public S3 bucket. Insert DynamoDB DataProduct + FileObject reference items.",
+            "Comment": "Read metadata CSV (two-hop: ticket \u2192 metadata CSV \u2192 per-spectrum data CSVs). Convert each spectrum CSV to FITS with reconstructed headers (OBJECT, DATE-OBS, TELESCOP, INSTRUME, OBSERVER, CRVAL1, CDELT1, NAXIS1, BUNIT, BIBCODE). Upload to public S3 bucket. Insert DynamoDB DataProduct + FileObject reference items.",
             "Resource": "${TicketIngestorFunctionArn}",
             "Parameters": {
                 "task_name": "IngestSpectra",
@@ -230,7 +245,11 @@
             "TimeoutSeconds": 600,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 2,
                     "BackoffRate": 4,
@@ -239,14 +258,15 @@
             ],
             "Catch": [
                 {
-                    "ErrorEquals": ["States.ALL"],
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
                     "Next": "TerminalFailHandler",
                     "ResultPath": "$.error"
                 }
             ],
             "Next": "FinalizeJobRunSuccess_Spectra"
         },
-
         "FinalizeJobRunSuccess_Photometry": {
             "Type": "Task",
             "Comment": "Emit JobRun SUCCEEDED with outcome INGESTED_PHOTOMETRY.",
@@ -264,7 +284,11 @@
             "TimeoutSeconds": 10,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
                     "BackoffRate": 4,
@@ -273,7 +297,6 @@
             ],
             "End": true
         },
-
         "FinalizeJobRunSuccess_Spectra": {
             "Type": "Task",
             "Comment": "Emit JobRun SUCCEEDED with outcome INGESTED_SPECTRA.",
@@ -291,7 +314,11 @@
             "TimeoutSeconds": 10,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
                     "BackoffRate": 4,
@@ -300,10 +327,9 @@
             ],
             "End": true
         },
-
         "QuarantineHandler": {
             "Type": "Task",
-            "Comment": "Persist quarantine diagnostic fields onto the JobRun. $.quarantine.Error is the NovaQuarantineReasonCode string (UNRESOLVABLE_OBJECT_NAME or IDENTITY_AMBIGUITY) — the exception class name raised by nova_resolver_ticket. SNS failure is swallowed inside the handler.",
+            "Comment": "Persist quarantine diagnostic fields onto the JobRun. $.quarantine.Error is the NovaQuarantineReasonCode string (UNRESOLVABLE_OBJECT_NAME or IDENTITY_AMBIGUITY) \u2014 the exception class name raised by nova_resolver_ticket. SNS failure is swallowed inside the handler.",
             "Resource": "${QuarantineHandlerFunctionArn}",
             "Parameters": {
                 "task_name": "QuarantineHandler",
@@ -317,7 +343,11 @@
             "TimeoutSeconds": 10,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
                     "BackoffRate": 4,
@@ -326,14 +356,15 @@
             ],
             "Catch": [
                 {
-                    "ErrorEquals": ["States.ALL"],
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
                     "Next": "FinalizeJobRunQuarantined",
                     "ResultPath": "$.error"
                 }
             ],
             "Next": "FinalizeJobRunQuarantined"
         },
-
         "FinalizeJobRunQuarantined": {
             "Type": "Task",
             "Comment": "Emit JobRun QUARANTINED status. Passes quarantine_result (fingerprint + reason code) from QuarantineHandler output.",
@@ -350,7 +381,11 @@
             "TimeoutSeconds": 10,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
                     "BackoffRate": 4,
@@ -359,7 +394,6 @@
             ],
             "End": true
         },
-
         "TerminalFailHandler": {
             "Type": "Task",
             "Comment": "Classify the error and persist error_classification + error_fingerprint onto the JobRun before the final FAILED status is written.",
@@ -376,7 +410,11 @@
             "TimeoutSeconds": 10,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
                     "BackoffRate": 4,
@@ -385,14 +423,15 @@
             ],
             "Catch": [
                 {
-                    "ErrorEquals": ["States.ALL"],
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
                     "Next": "FinalizeJobRunFailed",
                     "ResultPath": "$.error"
                 }
             ],
             "Next": "FinalizeJobRunFailed"
         },
-
         "FinalizeJobRunFailed": {
             "Type": "Task",
             "Comment": "Emit JobRun FAILED status. Best-effort: if this state itself fails, the execution terminates without a clean FAILED record.",
@@ -407,7 +446,11 @@
             "TimeoutSeconds": 10,
             "Retry": [
                 {
-                    "ErrorEquals": ["RetryableError"],
+                    "ErrorEquals": [
+                        "RetryableError",
+                        "Lambda.TooManyRequestsException",
+                        "Lambda.ServiceException"
+                    ],
                     "IntervalSeconds": 2,
                     "MaxAttempts": 3,
                     "BackoffRate": 4,
@@ -416,6 +459,5 @@
             ],
             "End": true
         }
-
     }
 }

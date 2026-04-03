@@ -56,8 +56,10 @@ class _LocalPipBundler:
 
     Strategy:
       1. Copy service source files to output_dir
-      2. Run pip install -r requirements.txt into output_dir
-      3. Return True on success, False to fall back to Docker
+      2. Copy contracts/ package from repo root (shared Pydantic models)
+      3. Run pip install -r requirements.txt into output_dir
+         (targeting manylinux2014_x86_64 / cp311 to match the Lambda runtime)
+      4. Return True on success, False to fall back to Docker
     """
 
     def __init__(self, service_path: str) -> None:
@@ -74,11 +76,38 @@ class _LocalPipBundler:
                 else:
                     shutil.copy2(src, dst)
 
+            # Copy contracts/ package (shared Pydantic models — repo root
+            # sibling of services/).  Required by artifact_coordinator and
+            # artifact_finalizer which import from contracts.models at runtime.
+            contracts_dir = os.path.normpath(os.path.join(self._service_path, "../../contracts"))
+            if os.path.exists(contracts_dir):
+                shutil.copytree(
+                    contracts_dir,
+                    os.path.join(output_dir, "contracts"),
+                    dirs_exist_ok=True,
+                )
+
             # Install dependencies if requirements.txt exists
             req_file = os.path.join(self._service_path, "requirements.txt")
             if os.path.exists(req_file):
                 subprocess.run(
-                    ["pip", "install", "-r", req_file, "-t", output_dir, "--quiet"],
+                    [
+                        "pip",
+                        "install",
+                        "-r",
+                        req_file,
+                        "-t",
+                        output_dir,
+                        "--quiet",
+                        "--platform",
+                        "manylinux2014_x86_64",
+                        "--only-binary",
+                        ":all:",
+                        "--implementation",
+                        "cp",
+                        "--python-version",
+                        "311",
+                    ],
                     check=True,
                 )
             return True

@@ -30,6 +30,7 @@ COPY contracts/ /app/contracts/
 
 # Copy the task entrypoint and generator modules
 COPY artifact_generator/main.py .
+COPY artifact_generator/release_publisher.py .
 COPY artifact_generator/generators/ ./generators/
 
 # Band registry — loaded once per Fargate execution (§8.2).

@@ -2,6 +2,9 @@
 # deploy.sh — Nova Cat deploy script
 #
 # Builds the nova_common_layer, then deploys the CDK stack.
+# After a successful deploy that includes the NovaCat stack, captures
+# CloudFormation outputs and injects them as environment variables into
+# ~/.zshrc so that all new terminals have access to resource names.
 #
 # Usage:
 #   ./deploy.sh               # dev deploy
@@ -31,7 +34,7 @@ echo ""
 # expects. Build instructions live in nova_common_layer_requirements.txt
 # alongside the layer directory, not inside it.
 # ---------------------------------------------------------------------------
-echo "==> [1/3] Building nova_common_layer..."
+echo "==> [1/4] Building nova_common_layer..."
 
 # Install shared dependencies into python/
 pip install \
@@ -46,7 +49,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # Step 2 — Resolve AWS account ID
 # ---------------------------------------------------------------------------
-echo "==> [2/3] Resolving AWS account ID..."
+echo "==> [2/4] Resolving AWS account ID..."
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 echo "    Account: $ACCOUNT_ID"
 echo ""
@@ -59,7 +62,7 @@ echo ""
 #   ./deploy.sh NovaCat
 #   ./deploy.sh NovaCatSmoke
 # ---------------------------------------------------------------------------
-echo "==> [3/3] Deploying CDK stacks..."
+echo "==> [3/4] Deploying CDK stacks..."
 cd "$REPO_ROOT/infra"
 # Separate stack names from CDK flags.
 # Stack names are positional args that don't start with -.
@@ -81,6 +84,123 @@ cdk deploy \
   --require-approval never \
   "${FLAGS[@]+"${FLAGS[@]}"}" \
   "${STACKS[@]}"
+
+echo ""
+
+# ---------------------------------------------------------------------------
+# Step 4 — Capture NovaCat stack outputs as shell environment variables
+#
+# Only runs when the NovaCat (production) stack was among the deployed
+# stacks. Queries CloudFormation, extracts resource names, and writes a
+# fenced block into ~/.zshrc. The block is replaced on each deploy so
+# values stay current without manual intervention.
+#
+# Variables exported:
+#   NOVACAT_TABLE_NAME            — main DynamoDB table
+#   NOVACAT_PHOTOMETRY_TABLE_NAME — dedicated photometry DynamoDB table
+#   NOVACAT_PRIVATE_BUCKET        — private data S3 bucket
+#   NOVACAT_PUBLIC_SITE_BUCKET    — public site S3 bucket (releases)
+#   NOVACAT_QUARANTINE_TOPIC_ARN  — SNS quarantine/ops notifications topic
+#   NOVACAT_CF_DOMAIN             — CloudFront distribution domain
+#   NOVACAT_CF_DISTRIBUTION_ID    — CloudFront distribution ID
+#   NOVACAT_INIT_ARN              — initialize_nova state machine ARN
+#   NOVACAT_INGEST_TICKET_ARN     — ingest_ticket state machine ARN
+# ---------------------------------------------------------------------------
+
+# Check if NovaCat was among the deployed stacks.
+_NOVACAT_DEPLOYED=false
+for s in "${STACKS[@]}"; do
+  [[ "$s" == "NovaCat" ]] && _NOVACAT_DEPLOYED=true
+done
+
+if $_NOVACAT_DEPLOYED; then
+  echo "==> [4/4] Capturing NovaCat stack outputs..."
+
+  _ENV_BLOCK=$(aws cloudformation describe-stacks \
+    --stack-name NovaCat \
+    --query 'Stacks[0].Outputs' \
+    --output json 2>/dev/null | python3 -c "
+import json, sys
+
+outputs = json.load(sys.stdin)
+
+# Build a key → value lookup from OutputKey substrings.
+# OutputKeys include a CDK hash suffix (e.g. StorageTableNameB6E3E5D6)
+# so we match on the human-readable prefix.
+lookup = {}
+for o in outputs:
+    k = o['OutputKey']
+    v = o['OutputValue']
+    lookup[k] = v
+
+def find(substring):
+    \"\"\"Find the first output whose key contains the substring.\"\"\"
+    for k, v in lookup.items():
+        if substring in k:
+            return v
+    return None
+
+pairs = [
+    ('NOVACAT_TABLE_NAME',            find('StorageTableName')),
+    ('NOVACAT_PHOTOMETRY_TABLE_NAME', find('StoragePhotometryTableName')),
+    ('NOVACAT_PRIVATE_BUCKET',        find('StoragePrivateBucketName')),
+    ('NOVACAT_PUBLIC_SITE_BUCKET',    find('StoragePublicSiteBucketName')),
+    ('NOVACAT_QUARANTINE_TOPIC_ARN',  find('StorageQuarantineTopicArn')),
+    ('NOVACAT_CF_DOMAIN',             find('DeliveryDistributionDomain')),
+    ('NOVACAT_CF_DISTRIBUTION_ID',    find('DeliveryDistributionId')),
+    ('NOVACAT_INIT_ARN',              find('InitializeNovaStateMachine')),
+    ('NOVACAT_INGEST_TICKET_ARN',     find('IngestTicketStateMachine')),
+]
+
+for name, value in pairs:
+    if value:
+        print(f'export {name}=\"{value}\"')
+    else:
+        print(f'# {name} — not found in stack outputs')
+")
+
+  if [[ -n "$_ENV_BLOCK" ]]; then
+    _ZSHRC="${HOME}/.zshrc"
+    _MARKER_BEGIN="# >>> NovaCat env >>>"
+    _MARKER_END="# <<< NovaCat env <<<"
+
+    # Remove existing fenced block (if any), then append the new one.
+    if [[ -f "$_ZSHRC" ]]; then
+      # Use a temp file to avoid sed -i portability issues (macOS vs GNU).
+      _TMP=$(mktemp)
+      awk -v begin="$_MARKER_BEGIN" -v end="$_MARKER_END" '
+        $0 == begin { skip=1; next }
+        $0 == end   { skip=0; next }
+        !skip
+      ' "$_ZSHRC" > "$_TMP"
+      mv "$_TMP" "$_ZSHRC"
+    fi
+
+    # Append the new block.
+    {
+      echo ""
+      echo "$_MARKER_BEGIN"
+      echo "# Auto-generated by deploy.sh — do not edit manually."
+      echo "# Updated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "$_ENV_BLOCK"
+      echo "$_MARKER_END"
+    } >> "$_ZSHRC"
+
+    # Also export into the current shell so you don't need to open a new
+    # terminal to use the variables immediately after deploy.
+    eval "$_ENV_BLOCK"
+
+    echo "    Wrote environment variables to $_ZSHRC"
+    echo "    Variables are available in this shell and all new terminals."
+    echo ""
+    echo "    Current values:"
+    echo "$_ENV_BLOCK" | sed 's/^/    /'
+  else
+    echo "    ⚠ Could not read NovaCat stack outputs — skipping env injection."
+  fi
+else
+  echo "==> [4/4] Skipping env capture (NovaCat stack was not deployed)."
+fi
 
 echo ""
 echo "==> Deploy complete."
