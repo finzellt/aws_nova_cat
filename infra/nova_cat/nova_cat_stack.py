@@ -1,9 +1,8 @@
 """
 Nova Cat CDK Stack
 
-Single-stack deployment for MVP. Composes storage and compute constructs.
-Stack is designed to be split into separate stacks (storage / compute / workflows)
-in a future epic when Step Functions state machines are added.
+Single-stack deployment for MVP. Composes storage, compute, workflows, and
+delivery constructs.
 
 Removal policy is environment-aware:
   - DESTROY for dev (safe to tear down and redeploy)
@@ -22,6 +21,7 @@ import aws_cdk as cdk
 import aws_cdk.aws_secretsmanager as secretsmanager
 from constructs import Construct
 from nova_constructs.compute import NovaCatCompute
+from nova_constructs.delivery import NovaCatDelivery
 from nova_constructs.storage import NovaCatStorage
 from nova_constructs.workflows import NovaCatWorkflows
 
@@ -92,6 +92,20 @@ class NovaCatStack(cdk.Stack):
             public_site_bucket=self.storage.public_site_bucket,
             quarantine_topic=self.storage.quarantine_topic,
             env_prefix=env_prefix,
+            cf_prefix=cf_prefix,
+        )
+
+        # ------------------------------------------------------------------
+        # Delivery layer (DESIGN-003 §13)
+        #
+        # CloudFront distribution serving the public site bucket via OAC.
+        # Exports the distribution domain for Vercel env configuration
+        # (NEXT_PUBLIC_DATA_URL, §14.2).
+        # ------------------------------------------------------------------
+        self.delivery = NovaCatDelivery(
+            self,
+            "Delivery",
+            public_site_bucket=self.storage.public_site_bucket,
             cf_prefix=cf_prefix,
         )
 

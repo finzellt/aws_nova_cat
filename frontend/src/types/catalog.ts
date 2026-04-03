@@ -1,10 +1,16 @@
 /**
  * Types for the catalog.json static artifact.
  *
- * Schema version: 1.0 (ADR-014)
+ * Schema version: 1.1 (ADR-014, DESIGN-003 §11.9)
  * These types mirror the artifact schema exactly. Field renames are breaking
  * changes — any update here must be coordinated with the backend generation
  * pipeline.
+ *
+ * v1.1 changes:
+ *   - discovery_year (number) replaced by discovery_date (string | null).
+ *     Format: YYYY-MM-DD. Day is "00" when only month precision is available;
+ *     month and day are "00" when only year precision is available.
+ *     Null when no dated references exist for the nova.
  */
 
 /** One entry in the `novae` array of catalog.json. */
@@ -27,8 +33,15 @@ export interface NovaSummary {
   /** Declination in ±DD:MM:SS.s format. */
   dec: string;
 
-  /** Four-digit discovery year. */
-  discovery_year: number;
+  /**
+   * Discovery date in YYYY-MM-DD format, or null when no dated references exist.
+   *
+   * Day is "00" when only month precision is available (e.g. "1901-02-00").
+   * Month and day are "00" when only year precision is available (e.g. "1901-00-00").
+   *
+   * Schema v1.1 (§11.9): replaces the former discovery_year (number) field.
+   */
+  discovery_date: string | null;
 
   /** Count of validated spectra. Default sort key (descending). */
   spectra_count: number;

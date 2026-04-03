@@ -4,6 +4,7 @@
  * NovaPage — the primary client component for /nova/[identifier].
  *
  * Responsibilities:
+ *   - Resolve the active data release via the data client (§14.5).
  *   - Fetch all three per-nova artifacts in parallel.
  *   - References are fetched independently so the metadata region can render
  *     before the references table is populated (ADR-014 design intent).
@@ -24,6 +25,7 @@ import type {
   ReferencesArtifact,
   SpectraArtifact,
 } from '@/types/nova';
+import { resolveRelease, getArtifactUrl } from '@/lib/dataClient';
 import ObjectSummary from './ObjectSummary';
 import ObservationsTable from './ObservationsTable';
 import ReferencesTable from './ReferencesTable';
@@ -57,7 +59,16 @@ export default function NovaPage({ identifier }: NovaPageProps) {
   // value. Re-encode it for use in fetch URLs so paths with spaces work.
   const displayName = decodeURIComponent(identifier);
   const encodedId = encodeURIComponent(identifier);
-  const basePath = `/data/nova/${encodedId}`;
+
+  // Release-aware base path for per-nova artifacts, set after resolveRelease()
+  // completes. Passed to VisualizationRegion for its independent photometry
+  // fetch. Empty string until release resolution; this is safe because
+  // VisualizationRegion only fetches photometry when hasPhotometry is true,
+  // which requires nova.json to have loaded first.
+  const [basePath, setBasePath] = useState('');
+
+  // Release ID, stored separately for bundle URL construction (§14.8).
+  const [releaseId, setReleaseId] = useState('');
 
   const [novaState, setNovaState] = useState<FetchState<NovaMetadata>>({
     status: 'loading',
@@ -69,57 +80,106 @@ export default function NovaPage({ identifier }: NovaPageProps) {
     status: 'loading',
   });
 
-  // Fetch all three artifacts. nova.json and spectra.json start immediately;
+  // Resolve the active release, then fetch all three artifacts in parallel.
+  // nova.json and spectra.json start immediately after release resolution;
   // references.json also starts immediately but renders into its own section
   // so a delayed response only affects the references table, not the page.
   useEffect(() => {
-    async function fetchNova() {
+    let cancelled = false;
+
+    // Reset to loading on identifier change (client-side navigation).
+    setNovaState({ status: 'loading' });
+    setSpectraState({ status: 'loading' });
+    setRefsState({ status: 'loading' });
+
+    async function loadAll() {
+      // ── Step 1: resolve the active release (§14.3) ─────────────────
+      // In dev mode this returns "local" instantly (no network call).
+      // In production this fetches current.json from CloudFront.
+      let resolved: string;
       try {
-        const res = await fetch(`${basePath}/nova.json`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data: NovaMetadata = await res.json() as NovaMetadata;
-        setNovaState({ status: 'success', data });
-      } catch (err) {
-        setNovaState({
-          status: 'error',
-          message: err instanceof Error ? err.message : 'Unknown error',
-        });
+        resolved = await resolveRelease();
+      } catch {
+        if (!cancelled) {
+          setNovaState({
+            status: 'error',
+            message: 'Data temporarily unavailable',
+          });
+        }
+        return;
       }
+
+      // Construct the base path for this nova's artifacts.
+      // Dev:  /data/nova/<id>
+      // Prod: https://<cf-domain>/releases/<release>/nova/<id>
+      const novaBasePath = getArtifactUrl(resolved, `nova/${encodedId}`);
+
+      if (!cancelled) {
+        setReleaseId(resolved);
+        setBasePath(novaBasePath);
+      }
+
+      // ── Step 2: fetch all three artifacts in parallel ──────────────
+      async function fetchNova() {
+        try {
+          const res = await fetch(`${novaBasePath}/nova.json`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data: NovaMetadata = await res.json() as NovaMetadata;
+          if (!cancelled) setNovaState({ status: 'success', data });
+        } catch (err) {
+          if (!cancelled) {
+            setNovaState({
+              status: 'error',
+              message: err instanceof Error ? err.message : 'Unknown error',
+            });
+          }
+        }
+      }
+
+      async function fetchSpectra() {
+        try {
+          const res = await fetch(`${novaBasePath}/spectra.json`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data: SpectraArtifact = await res.json() as SpectraArtifact;
+          if (!cancelled) setSpectraState({ status: 'success', data });
+        } catch (err) {
+          if (!cancelled) {
+            setSpectraState({
+              status: 'error',
+              message: err instanceof Error ? err.message : 'Unknown error',
+            });
+          }
+        }
+      }
+
+      async function fetchReferences() {
+        try {
+          const res = await fetch(`${novaBasePath}/references.json`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data: ReferencesArtifact = await res.json() as ReferencesArtifact;
+          if (!cancelled) setRefsState({ status: 'success', data });
+        } catch (err) {
+          if (!cancelled) {
+            setRefsState({
+              status: 'error',
+              message: err instanceof Error ? err.message : 'Unknown error',
+            });
+          }
+        }
+      }
+
+      void fetchNova();
+      void fetchSpectra();
+      void fetchReferences();
     }
 
-    async function fetchSpectra() {
-      try {
-        const res = await fetch(`${basePath}/spectra.json`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data: SpectraArtifact = await res.json() as SpectraArtifact;
-        setSpectraState({ status: 'success', data });
-      } catch (err) {
-        setSpectraState({
-          status: 'error',
-          message: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    }
+    void loadAll();
 
-    async function fetchReferences() {
-      try {
-        const res = await fetch(`${basePath}/references.json`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data: ReferencesArtifact = await res.json() as ReferencesArtifact;
-        setRefsState({ status: 'success', data });
-      } catch (err) {
-        setRefsState({
-          status: 'error',
-          message: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    }
-
-    void fetchNova();
-    void fetchSpectra();
-    void fetchReferences();
-    // basePath is derived from identifier; if identifier changes, re-fetch.
-  }, [basePath]);
+    // Cleanup: prevent setState on unmounted component if the user
+    // navigates away before fetches complete.
+    return () => { cancelled = true; };
+    // encodedId is derived from identifier; if identifier changes, re-fetch.
+  }, [encodedId]);
 
   // ── Nova-not-found error state ─────────────────────────────────────────────
   // Only show this for nova.json failures. Spectra/refs errors are handled
@@ -151,10 +211,13 @@ export default function NovaPage({ identifier }: NovaPageProps) {
 
   const nova = novaState.status === 'success' ? novaState.data : null;
 
-  // Placeholder bundle href. In production this will be the pre-generated
-  // bundle path. Per instructions, use a placeholder for now.
-  const bundleHref = nova
-    ? `/data/nova/${encodedId}/${nova.primary_name.replace(/\s+/g, '-')}_bundle.zip`
+  // Bundle download URL (§14.8). Uses getArtifactUrl so the href points to
+  // the correct release prefix in production, or /data/ in dev mode.
+  const bundleHref = nova && releaseId
+    ? getArtifactUrl(
+        releaseId,
+        `nova/${encodedId}/${nova.primary_name.replace(/\s+/g, '-')}_bundle.zip`,
+      )
     : '#';
 
   return (
