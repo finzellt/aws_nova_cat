@@ -58,6 +58,7 @@ from moto import mock_aws
 # ---------------------------------------------------------------------------
 
 _TABLE_NAME = "NovaCat-Photometry-Test"
+_MAIN_TABLE_NAME = "NovaCat-Main-Test"
 _REGION = "us-east-1"
 _NOVA_ID = "aaaaaaaa-0000-0000-0000-000000000001"
 
@@ -84,11 +85,11 @@ def _aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture()
-def phot_table(_aws_env: None) -> Any:
-    """Create a mocked dedicated photometry DDB table."""
+def _mock_tables(_aws_env: None) -> Any:
+    """Create mocked DDB tables inside a shared mock_aws context."""
     with mock_aws():
         dynamodb = boto3.resource("dynamodb", region_name=_REGION)
-        table = dynamodb.create_table(
+        phot = dynamodb.create_table(
             TableName=_TABLE_NAME,
             KeySchema=[
                 {"AttributeName": "PK", "KeyType": "HASH"},
@@ -100,7 +101,31 @@ def phot_table(_aws_env: None) -> Any:
             ],
             BillingMode="PAY_PER_REQUEST",
         )
-        yield table
+        main = dynamodb.create_table(
+            TableName=_MAIN_TABLE_NAME,
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        yield phot, main
+
+
+@pytest.fixture()
+def phot_table(_mock_tables: Any) -> Any:
+    """Photometry DDB table from shared mock context."""
+    return _mock_tables[0]
+
+
+@pytest.fixture()
+def main_table(_mock_tables: Any) -> Any:
+    """Main NovaCat DDB table from shared mock context."""
+    return _mock_tables[1]
 
 
 # ---------------------------------------------------------------------------
@@ -175,11 +200,12 @@ def _base_context(
 
 
 class TestEmptyData:
-    def test_no_rows_returns_empty_artifact(self, phot_table: Any) -> None:
+    def test_no_rows_returns_empty_artifact(self, phot_table: Any, main_table: Any) -> None:
         ctx = _base_context()
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -188,9 +214,9 @@ class TestEmptyData:
         assert artifact["regimes"] == []
         assert ctx["photometry_count"] == 0
 
-    def test_raw_items_stashed_even_when_empty(self, phot_table: Any) -> None:
+    def test_raw_items_stashed_even_when_empty(self, phot_table: Any, main_table: Any) -> None:
         ctx = _base_context()
-        generate_photometry_json(_NOVA_ID, phot_table, _REGISTRY, ctx)
+        generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
         assert ctx["photometry_raw_items"] == []
 
 
@@ -200,7 +226,7 @@ class TestEmptyData:
 
 
 class TestRegimeMapping:
-    def test_uv_mapped_to_optical(self, phot_table: Any) -> None:
+    def test_uv_mapped_to_optical(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -213,12 +239,13 @@ class TestRegimeMapping:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
         assert artifact["observations"][0]["regime"] == "optical"
 
-    def test_unrecognised_regime_excluded(self, phot_table: Any) -> None:
+    def test_unrecognised_regime_excluded(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -230,13 +257,16 @@ class TestRegimeMapping:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
         assert artifact["observations"] == []
         assert ctx["photometry_count"] == 0
 
-    def test_multiple_regimes_produce_separate_regime_records(self, phot_table: Any) -> None:
+    def test_multiple_regimes_produce_separate_regime_records(
+        self, phot_table: Any, main_table: Any
+    ) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -257,6 +287,7 @@ class TestRegimeMapping:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -271,7 +302,7 @@ class TestRegimeMapping:
 
 
 class TestBandResolution:
-    def test_registry_hit_uses_band_name(self, phot_table: Any) -> None:
+    def test_registry_hit_uses_band_name(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -283,12 +314,13 @@ class TestBandResolution:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
         assert artifact["observations"][0]["band"] == "V"
 
-    def test_registry_miss_uses_raw_band_id(self, phot_table: Any) -> None:
+    def test_registry_miss_uses_raw_band_id(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -300,12 +332,13 @@ class TestBandResolution:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
         assert artifact["observations"][0]["band"] == "UNKNOWN_FILTER_X"
 
-    def test_wavelength_eff_nm_from_registry(self, phot_table: Any) -> None:
+    def test_wavelength_eff_nm_from_registry(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -317,6 +350,7 @@ class TestBandResolution:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -331,7 +365,7 @@ class TestBandResolution:
 
 
 class TestUpperLimitSuppression:
-    def test_non_constraining_limit_dropped(self, phot_table: Any) -> None:
+    def test_non_constraining_limit_dropped(self, phot_table: Any, main_table: Any) -> None:
         """Upper limit brighter than brightest detection is dropped."""
         _seed_phot_row(
             phot_table,
@@ -351,13 +385,14 @@ class TestUpperLimitSuppression:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
         assert len(artifact["observations"]) == 1
         assert artifact["observations"][0]["is_upper_limit"] is False
 
-    def test_constraining_limit_kept(self, phot_table: Any) -> None:
+    def test_constraining_limit_kept(self, phot_table: Any, main_table: Any) -> None:
         """Upper limit fainter than brightest detection is kept."""
         _seed_phot_row(
             phot_table,
@@ -377,12 +412,13 @@ class TestUpperLimitSuppression:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
         assert len(artifact["observations"]) == 2
 
-    def test_no_detections_keeps_all_limits(self, phot_table: Any) -> None:
+    def test_no_detections_keeps_all_limits(self, phot_table: Any, main_table: Any) -> None:
         """Band with only upper limits → all kept."""
         _seed_phot_row(
             phot_table,
@@ -402,6 +438,7 @@ class TestUpperLimitSuppression:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -414,7 +451,7 @@ class TestUpperLimitSuppression:
 
 
 class TestSubsampling:
-    def test_under_cap_retains_all(self, phot_table: Any) -> None:
+    def test_under_cap_retains_all(self, phot_table: Any, main_table: Any) -> None:
         """Fewer than 500 rows → no subsampling."""
         for i in range(10):
             _seed_phot_row(
@@ -428,12 +465,13 @@ class TestSubsampling:
         generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
         assert ctx["photometry_count"] == 10
 
-    def test_over_cap_subsampled(self, phot_table: Any) -> None:
+    def test_over_cap_subsampled(self, phot_table: Any, main_table: Any) -> None:
         """More than 500 rows → subsampled to cap."""
         for i in range(600):
             _seed_phot_row(
@@ -447,6 +485,7 @@ class TestSubsampling:
         generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -459,7 +498,7 @@ class TestSubsampling:
 
 
 class TestValueRouting:
-    def test_optical_routes_to_magnitude(self, phot_table: Any) -> None:
+    def test_optical_routes_to_magnitude(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -472,6 +511,7 @@ class TestValueRouting:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -482,7 +522,7 @@ class TestValueRouting:
         assert obs["count_rate"] is None
         assert obs["photon_flux"] is None
 
-    def test_radio_routes_to_flux_density(self, phot_table: Any) -> None:
+    def test_radio_routes_to_flux_density(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -497,6 +537,7 @@ class TestValueRouting:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -504,7 +545,7 @@ class TestValueRouting:
         assert obs["flux_density"] == pytest.approx(1.5)
         assert obs["magnitude"] is None
 
-    def test_xray_routes_to_count_rate(self, phot_table: Any) -> None:
+    def test_xray_routes_to_count_rate(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -518,6 +559,7 @@ class TestValueRouting:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -525,7 +567,7 @@ class TestValueRouting:
         assert obs["count_rate"] == pytest.approx(0.5)
         assert obs["magnitude"] is None
 
-    def test_gamma_routes_to_photon_flux(self, phot_table: Any) -> None:
+    def test_gamma_routes_to_photon_flux(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -539,6 +581,7 @@ class TestValueRouting:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -552,7 +595,7 @@ class TestValueRouting:
 
 
 class TestDPO:
-    def test_days_since_outburst_computed(self, phot_table: Any) -> None:
+    def test_days_since_outburst_computed(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -564,12 +607,13 @@ class TestDPO:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
         assert artifact["observations"][0]["days_since_outburst"] == pytest.approx(4.0)
 
-    def test_null_outburst_gives_null_dpo(self, phot_table: Any) -> None:
+    def test_null_outburst_gives_null_dpo(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(
             phot_table,
             _NOVA_ID,
@@ -581,6 +625,7 @@ class TestDPO:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -593,7 +638,7 @@ class TestDPO:
 
 
 class TestSortOrder:
-    def test_regime_order_then_epoch(self, phot_table: Any) -> None:
+    def test_regime_order_then_epoch(self, phot_table: Any, main_table: Any) -> None:
         """Observations sorted: optical < xray < radio, then epoch asc."""
         _seed_phot_row(
             phot_table,
@@ -625,6 +670,7 @@ class TestSortOrder:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -644,32 +690,35 @@ class TestSortOrder:
 
 
 class TestSchemaAndContext:
-    def test_schema_version(self, phot_table: Any) -> None:
+    def test_schema_version(self, phot_table: Any, main_table: Any) -> None:
         ctx = _base_context()
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
         assert artifact["schema_version"] == "1.1"
 
-    def test_outburst_fields(self, phot_table: Any) -> None:
+    def test_outburst_fields(self, phot_table: Any, main_table: Any) -> None:
         ctx = _base_context(outburst_mjd=51540.0, is_estimated=True)
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
         assert artifact["outburst_mjd"] == pytest.approx(51540.0)
         assert artifact["outburst_mjd_is_estimated"] is True
 
-    def test_generated_at_format(self, phot_table: Any) -> None:
+    def test_generated_at_format(self, phot_table: Any, main_table: Any) -> None:
         ctx = _base_context()
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )
@@ -678,27 +727,27 @@ class TestSchemaAndContext:
             artifact["generated_at"],
         )
 
-    def test_photometry_count_in_context(self, phot_table: Any) -> None:
+    def test_photometry_count_in_context(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(phot_table, _NOVA_ID, "r1", magnitude=12.0)
         _seed_phot_row(phot_table, _NOVA_ID, "r2", magnitude=13.0)
         ctx = _base_context()
-        generate_photometry_json(_NOVA_ID, phot_table, _REGISTRY, ctx)
+        generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
         assert ctx["photometry_count"] == 2
 
-    def test_raw_items_stashed_for_bundle(self, phot_table: Any) -> None:
+    def test_raw_items_stashed_for_bundle(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(phot_table, _NOVA_ID, "r1", magnitude=12.0)
         ctx = _base_context()
-        generate_photometry_json(_NOVA_ID, phot_table, _REGISTRY, ctx)
+        generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
         assert len(ctx["photometry_raw_items"]) == 1
 
-    def test_observations_and_bands_in_context(self, phot_table: Any) -> None:
+    def test_observations_and_bands_in_context(self, phot_table: Any, main_table: Any) -> None:
         _seed_phot_row(phot_table, _NOVA_ID, "r1", magnitude=12.0)
         ctx = _base_context()
-        generate_photometry_json(_NOVA_ID, phot_table, _REGISTRY, ctx)
+        generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
         assert len(ctx["photometry_observations"]) == 1
         assert len(ctx["photometry_bands"]) == 1
 
-    def test_band_vertical_offset_zero_placeholder(self, phot_table: Any) -> None:
+    def test_band_vertical_offset_zero_placeholder(self, phot_table: Any, main_table: Any) -> None:
         """Placeholder offsets are all 0.0."""
         _seed_phot_row(phot_table, _NOVA_ID, "r1", band_id="Generic_V", magnitude=12.0)
         _seed_phot_row(phot_table, _NOVA_ID, "r2", band_id="Generic_B", magnitude=13.0)
@@ -706,6 +755,7 @@ class TestSchemaAndContext:
         artifact = generate_photometry_json(
             _NOVA_ID,
             phot_table,
+            main_table,
             _REGISTRY,
             ctx,
         )

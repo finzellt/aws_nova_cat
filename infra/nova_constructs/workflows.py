@@ -325,7 +325,6 @@ class NovaCatWorkflows(Construct):
         cluster = ecs.CfnCluster(
             self,
             "ArtifactCluster",
-            cluster_name=f"{env_prefix}-artifact-cluster",
         )
 
         # Fargate task definition: 2 vCPU / 8 GB (§4.4 MVP sizing).

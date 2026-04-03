@@ -12,6 +12,7 @@ Input sources (§8.2):
     Dedicated photometry table — PhotometryRow items (``PHOT#<row_id>``).
     Band registry — display labels and effective wavelengths.
     Per-nova context — ``outburst_mjd`` and ``outburst_mjd_is_estimated``.
+    Main NovaCat table — offset cache read/write (§8.7).
 
 Output:
     ADR-014 ``photometry.json`` schema (``schema_version "1.1"``).
@@ -31,8 +32,16 @@ from collections import defaultdict
 from decimal import Decimal
 from typing import Any
 
+import numpy as np
 from boto3.dynamodb.conditions import Key  # type: ignore[import-untyped]
 
+from generators.offsets import (
+    BandObservations,
+    compute_band_offsets,
+    is_cache_valid,
+    read_offset_cache,
+    write_offset_cache,
+)
 from generators.shared import generated_at_timestamp
 
 _logger = logging.getLogger("artifact_generator")
@@ -104,6 +113,7 @@ _REGIME_DEFINITIONS: dict[str, dict[str, Any]] = {
 def generate_photometry_json(
     nova_id: str,
     photometry_table: Any,
+    main_table: Any,
     band_registry: dict[str, Any],
     nova_context: dict[str, Any],
 ) -> dict[str, Any]:
@@ -116,6 +126,9 @@ def generate_photometry_json(
     photometry_table
         boto3 DynamoDB Table resource for the **dedicated** photometry
         table (not the main NovaCat table).
+    main_table
+        boto3 DynamoDB Table resource for the main NovaCat table.
+        Used for offset cache read/write (§8.7).
     band_registry
         Mapping from ``band_id`` to registry entry dict.  Each entry
         should have ``band_name`` (str | None) and ``lambda_eff``
@@ -178,8 +191,13 @@ def generate_photometry_json(
         # 3b — Density-preserving log subsampling.
         after_subsampling = _subsample_regime(after_suppression)
 
-        # 3c — Compute band offsets (placeholder — all zero for now).
-        band_offsets = _compute_band_offsets(after_subsampling, regime_id)
+        # 3c — Compute band offsets (ADR-032 / §8.7).
+        band_offsets = _compute_band_offsets(
+            after_subsampling,
+            regime_id,
+            nova_id,
+            main_table,
+        )
 
         # 3d — Build observation records and collect band metadata.
         for row in after_subsampling:
@@ -560,27 +578,170 @@ def _log_subsample_band(
 
 
 # ---------------------------------------------------------------------------
-# Band offset computation (placeholder — §8.7)
+# Band offset computation (ADR-032 / §8.7)
 # ---------------------------------------------------------------------------
+
+
+def _regime_value(row: dict[str, Any], regime_id: str) -> float | None:
+    """Extract the regime-appropriate measurement value from a row.
+
+    Optical uses magnitude; all other regimes use flux_density.
+    """
+    if regime_id == "optical":
+        return _to_float_or_none(row.get("magnitude"))
+    return _to_float_or_none(row.get("flux_density"))
+
+
+def _build_band_observations(
+    rows: list[dict[str, Any]],
+    regime_id: str,
+) -> list[BandObservations]:
+    """Build ``BandObservations`` input structs from subsampled rows.
+
+    Groups rows by display label and constructs sorted (mjd, value)
+    arrays for each band.  Rows with missing time or measurement
+    values are silently skipped.
+    """
+    by_band: dict[str, list[tuple[float, float]]] = defaultdict(list)
+
+    for row in rows:
+        t = _to_float_or_none(row.get("time_mjd"))
+        v = _regime_value(row, regime_id)
+        if t is None or v is None:
+            continue
+        by_band[row["_display_label"]].append((t, v))
+
+    result: list[BandObservations] = []
+    for label, points in by_band.items():
+        if not points:
+            continue
+        # Sort by time ascending.
+        points.sort(key=lambda p: p[0])
+        mjd_arr = np.array([p[0] for p in points], dtype=np.float64)
+        mag_arr = np.array([p[1] for p in points], dtype=np.float64)
+        result.append(BandObservations(band_id=label, mjd=mjd_arr, mag=mag_arr))
+
+    return result
 
 
 def _compute_band_offsets(
     rows: list[dict[str, Any]],
     regime_id: str,
+    nova_id: str,
+    main_table: Any,
 ) -> dict[str, float]:
     """Compute per-band vertical offsets for a regime.
 
-    **Placeholder implementation.**  Returns all-zero offsets.  The real
-    algorithm (ADR-032: spline fitting → gap analysis → ordering search
-    → half-integer rounding) will be integrated when the offset module
-    and its caching mechanism are ready.  The interface is stable:
-    input is the subsampled observation list, output is
-    ``{band_display_label: offset_magnitude}``.
+    Implements the full ADR-032 pipeline: spline fitting → gap analysis
+    → ordering search → half-integer rounding, with DynamoDB offset
+    caching per DESIGN-003 §8.7.
+
+    Parameters
+    ----------
+    rows
+        Subsampled observation rows for one regime.  Each row carries
+        ``_display_label``, ``time_mjd``, and regime-appropriate
+        measurement fields.
+    regime_id
+        Output regime identifier (e.g., ``"optical"``).
+    nova_id
+        Nova UUID — partition key for the offset cache.
+    main_table
+        boto3 DynamoDB Table resource for the main NovaCat table
+        (offset cache storage).
+
+    Returns
+    -------
+    dict[str, float]
+        Mapping from display label to offset magnitude.
     """
+    # Collect all display labels present in the subsampled data.
     labels: set[str] = set()
     for row in rows:
         labels.add(row["_display_label"])
-    return {label: 0.0 for label in labels}
+
+    zero_offsets: dict[str, float] = {label: 0.0 for label in labels}
+
+    if not labels:
+        return zero_offsets
+
+    # --- Count observations per band (for cache validation) ---
+    band_counts: dict[str, int] = defaultdict(int)
+    for row in rows:
+        band_counts[row["_display_label"]] += 1
+
+    # --- Check offset cache (§8.7) ---
+    cached = read_offset_cache(main_table, nova_id, regime_id)
+    if cached is not None and is_cache_valid(cached, dict(band_counts)):
+        _logger.info(
+            "Using cached band offsets",
+            extra={
+                "nova_id": nova_id,
+                "regime": regime_id,
+                "cached_at": cached.computed_at,
+            },
+        )
+        # Return cached offsets, filling in zero for any band not in cache.
+        return {label: cached.band_offsets.get(label, 0.0) for label in labels}
+
+    # --- Build BandObservations for the offset pipeline ---
+    band_obs = _build_band_observations(rows, regime_id)
+
+    if len(band_obs) <= 1:
+        # Single band or no fittable data — trivially zero offsets.
+        _logger.debug(
+            "≤1 band with data; skipping offset computation",
+            extra={"nova_id": nova_id, "regime": regime_id},
+        )
+        return zero_offsets
+
+    # --- Run the offset pipeline (ADR-032) ---
+    try:
+        results = compute_band_offsets(band_obs)
+    except Exception:
+        _logger.warning(
+            "Offset computation failed; falling back to zero offsets",
+            extra={"nova_id": nova_id, "regime": regime_id},
+            exc_info=True,
+        )
+        return zero_offsets
+
+    # --- Map results back to display labels ---
+    # BandOffsetResult.band_id is the display label (we used it as band_id
+    # when constructing BandObservations).
+    offsets: dict[str, float] = {label: 0.0 for label in labels}
+    for r in results:
+        if r.band_id in offsets:
+            offsets[r.band_id] = r.offset_mag
+
+    # --- Write to cache ---
+    try:
+        write_offset_cache(
+            main_table,
+            nova_id,
+            regime_id,
+            results,
+            dict(band_counts),
+        )
+    except Exception:
+        # Cache write failure is non-fatal — log and continue.
+        _logger.warning(
+            "Failed to write offset cache; continuing without caching",
+            extra={"nova_id": nova_id, "regime": regime_id},
+            exc_info=True,
+        )
+
+    _logger.info(
+        "Computed band offsets",
+        extra={
+            "nova_id": nova_id,
+            "regime": regime_id,
+            "bands": len(band_obs),
+            "non_zero": sum(1 for v in offsets.values() if v > 0.0),
+        },
+    )
+
+    return offsets
 
 
 # ---------------------------------------------------------------------------
