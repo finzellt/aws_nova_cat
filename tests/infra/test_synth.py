@@ -189,7 +189,7 @@ class TestS3:
                                         "Id": "ExpireOldReleases",
                                         "Prefix": "releases/",
                                         "Status": "Enabled",
-                                        "ExpirationInDays": 730,
+                                        "ExpirationInDays": 7,
                                     }
                                 ),
                             ]

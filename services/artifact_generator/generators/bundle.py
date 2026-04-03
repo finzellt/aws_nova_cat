@@ -42,6 +42,8 @@ def generate_bundle_zip(
     private_bucket: str,
     public_bucket: str,
     nova_context: dict[str, Any],
+    *,
+    s3_key_prefix: str = "",
 ) -> dict[str, Any]:
     """Generate the bundle.zip artifact for a nova.
 
@@ -160,9 +162,17 @@ def generate_bundle_zip(
             zf.writestr(bib_filename, bib)
             bundle_files.append(bib_filename)
 
-        # Upload ZIP to S3
-        s3_key = f"bundles/{nova_id}/full.zip"
-        s3_client.upload_file(tmp_path, public_bucket, s3_key)
+        # Upload ZIP to S3 under the release prefix (§12.4, §12.5).
+        s3_key = f"{s3_key_prefix}nova/{nova_id}/{bundle_filename}"
+        s3_client.upload_file(
+            tmp_path,
+            public_bucket,
+            s3_key,
+            ExtraArgs={
+                "ContentType": "application/zip",
+                "ContentDisposition": f'attachment; filename="{bundle_filename}"',
+            },
+        )
 
         _logger.info(
             "Bundle uploaded to S3",

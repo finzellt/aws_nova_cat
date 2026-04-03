@@ -205,8 +205,10 @@ class NovaCatStorage(Construct):
                 s3.LifecycleRule(
                     id="ExpireOldReleases",
                     prefix="releases/",
-                    # Keep releases for 2 years; adjust as publication cadence matures
-                    expiration=cdk.Duration.days(730),
+                    # 7-day retention: enough for rollback while bounding storage
+                    # costs. Immutable release model provides its own rollback
+                    # mechanism (§12.7).
+                    expiration=cdk.Duration.days(7),
                 ),
             ],
         )

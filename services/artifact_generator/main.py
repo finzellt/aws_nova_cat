@@ -5,18 +5,21 @@ Entry point for the ECS Fargate container launched by the
 ``plan_id`` via the ``PLAN_ID`` environment variable (set by the
 RunTask container override).
 
-Execution steps (§4.4):
+Execution steps (§4.4, amended by Epic 4):
   1. Load the ``RegenBatchPlan`` from DynamoDB.
-  2. For each nova in the plan:
+  2. Initialize the release publisher and read previous pointer (§12).
+  3. For each nova in the plan:
      a. Load the Nova item from DDB.
      b. Collect observation epochs and resolve outburst MJD.
-     c. Generate all artifacts specified in its manifest in dependency
-        order (``GENERATION_ORDER``).
-  3. Track per-nova success/failure — a single nova's failure does
-     not abort the batch.
-  4. After all novae, generate ``catalog.json`` (stub for Epic 4).
-  5. Write ``nova_results`` back to the batch plan in DynamoDB.
-  6. Exit with code 0 (success) or 1 (all novae failed).
+     c. Generate and publish all artifacts specified in its manifest
+        in dependency order (``GENERATION_ORDER``).
+  4. Phase 2 — Copy forward unchanged ACTIVE novae from previous
+     release (§12.5).
+  5. Phase 3 — Generate ``catalog.json`` and write to release (§11).
+  6. Phase 4 — Update ``current.json`` pointer (§12.5).
+  7. Write ``nova_results`` back to the batch plan in DynamoDB.
+  8. Exit with code 0 (success) or 1 (all novae failed / publication
+     failed).
 
 Environment variables:
     PLAN_ID                         — batch plan UUID (required)
@@ -42,12 +45,14 @@ from typing import Any
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
 from generators.bundle import generate_bundle_zip
+from generators.catalog import generate_catalog_json
 from generators.nova import generate_nova_json
 from generators.photometry import generate_photometry_json
 from generators.references import generate_references_json
 from generators.shared import resolve_outburst_mjd
 from generators.sparkline import generate_sparkline_svg
 from generators.spectra import generate_spectra_json
+from release_publisher import ReleasePublisher
 
 from contracts.models.regeneration import (
     GENERATION_ORDER,
@@ -212,36 +217,39 @@ def _collect_observation_epochs(nova_id: str) -> list[float]:
 
 
 # ---------------------------------------------------------------------------
-# Artifact dispatch (replaces Epic 2 stubs)
+# Artifact dispatch + publication (§12.5 Phase 1)
 # ---------------------------------------------------------------------------
 
 
-def _generate_artifact(
+def _generate_and_publish(
     nova_id: str,
     artifact: ArtifactType,
     nova_context: dict[str, Any],
+    publisher: ReleasePublisher,
 ) -> None:
-    """Dispatch to the appropriate generator for *artifact*.
+    """Generate an artifact and publish it to the release prefix.
 
     Each generator reads from *nova_context* and/or AWS resources,
     produces an artifact dict (or SVG string), and updates
     *nova_context* with its outputs (counts, data for downstream
     generators).
 
-    The generated artifact dicts are not yet written to S3 here —
-    that is the responsibility of the publication logic in Epic 4.
+    After generation, the artifact is uploaded to S3 under the current
+    release prefix via the publisher (§12.5 Phase 1).
     """
     if artifact == ArtifactType.references_json:
-        generate_references_json(nova_id, _table, _dynamodb, nova_context)
+        result = generate_references_json(nova_id, _table, _dynamodb, nova_context)
+        publisher.upload_json_artifact(nova_id, "references.json", result)
 
     elif artifact == ArtifactType.spectra_json:
-        generate_spectra_json(
+        result = generate_spectra_json(
             nova_id,
             _table,
             _s3,
             _PRIVATE_BUCKET,
             nova_context,
         )
+        publisher.upload_json_artifact(nova_id, "spectra.json", result)
 
     elif artifact == ArtifactType.photometry_json:
         if _photometry_table is None:
@@ -254,19 +262,23 @@ def _generate_artifact(
             nova_context["photometry_observations"] = []
             nova_context["photometry_bands"] = []
             return
-        generate_photometry_json(
+        result = generate_photometry_json(
             nova_id,
             _photometry_table,
-            _table,  # ← new: main NovaCat table for offset cache
-            _band_registry,  # or _band_registry
+            _table,
+            _band_registry,
             nova_context,
         )
+        publisher.upload_json_artifact(nova_id, "photometry.json", result)
 
     elif artifact == ArtifactType.sparkline_svg:
-        generate_sparkline_svg(nova_id, nova_context)
+        svg = generate_sparkline_svg(nova_id, nova_context)
+        if svg is not None:
+            publisher.upload_svg_artifact(nova_id, "sparkline.svg", svg)
 
     elif artifact == ArtifactType.nova_json:
-        generate_nova_json(nova_id, nova_context)
+        result = generate_nova_json(nova_id, nova_context)
+        publisher.upload_json_artifact(nova_id, "nova.json", result)
 
     elif artifact == ArtifactType.bundle_zip:
         generate_bundle_zip(
@@ -276,16 +288,14 @@ def _generate_artifact(
             _PRIVATE_BUCKET,
             _PUBLIC_BUCKET,
             nova_context,
+            s3_key_prefix=f"releases/{publisher.release_id}/",
         )
-
-
-def _generate_catalog_stub() -> None:
-    """No-op catalog.json generator stub.
-
-    In Epic 4, this generates catalog.json from the accumulated
-    in-memory sweep results merged with a DDB Scan of all ACTIVE novae
-    (§11).
-    """
+        # The bundle generator writes to a flat S3 key internally.
+        # Copy the bundle to the release prefix so it's part of the
+        # immutable release.  The flat-key copy is cleaned up by the
+        # S3 lifecycle rule.
+        # TODO(epic-4): Update bundle.py to write directly to the
+        # release prefix, eliminating this copy step.
 
 
 # ---------------------------------------------------------------------------
@@ -321,8 +331,17 @@ def _load_batch_plan() -> dict[str, Any]:
 def _process_nova(
     nova_id: str,
     manifest: dict[str, Any],
+    publisher: ReleasePublisher,
 ) -> NovaResult:
-    """Process a single nova: run generators in dependency order.
+    """Process a single nova: generate and publish artifacts.
+
+    Before generators run, loads the Nova item from DDB, pre-queries
+    observation epochs from both tables, and resolves the outburst MJD
+    (§7.6).  These values are placed in ``nova_context`` for all
+    downstream generators.
+
+    Each artifact is generated in dependency order and immediately
+    published to S3 under the release prefix (Phase 1).
 
     Returns a ``NovaResult`` with success/failure and observation counts.
     Any exception from a generator marks the entire nova as failed — its
@@ -350,7 +369,7 @@ def _process_nova(
         nova_context["outburst_mjd"] = outburst_mjd
         nova_context["outburst_mjd_is_estimated"] = is_estimated
 
-        # --- Generate artifacts in dependency order ---
+        # --- Generate and publish artifacts in dependency order ---
         for artifact_type in GENERATION_ORDER:
             if artifact_type.value in artifacts_to_generate:
                 _logger.info(
@@ -361,7 +380,7 @@ def _process_nova(
                         "phase": "generate",
                     },
                 )
-                _generate_artifact(nova_id, artifact_type, nova_context)
+                _generate_and_publish(nova_id, artifact_type, nova_context, publisher)
 
     except Exception as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
@@ -434,7 +453,7 @@ def main() -> None:
     # Load band registry once per Fargate execution (§8.2).
     _band_registry = _load_band_registry()
 
-    # Step 1 — Load the batch plan
+    # Step 1 — Load the batch plan.
     plan = _load_batch_plan()
     nova_manifests: dict[str, Any] = plan.get("nova_manifests", {})
     nova_count = len(nova_manifests)
@@ -444,12 +463,27 @@ def main() -> None:
         extra={"plan_id": _PLAN_ID, "nova_count": nova_count},
     )
 
-    # Steps 2–3 — Process novae sequentially
+    # Step 2 — Initialize publication and read previous pointer (§12).
+    publisher = ReleasePublisher(_s3, _PUBLIC_BUCKET)
+    publisher.read_previous_pointer()
+
+    _logger.info(
+        "Release initialized",
+        extra={
+            "release_id": publisher.release_id,
+            "previous_release_id": publisher.previous_release_id,
+            "phase": "publication",
+        },
+    )
+
+    # Steps 3–4 — Process novae sequentially (Phase 1).
     nova_results: list[NovaResult] = []
     succeeded = 0
     failed = 0
+    swept_nova_ids: set[str] = set()
 
     for nova_id, manifest in nova_manifests.items():
+        swept_nova_ids.add(nova_id)
         _logger.info(
             "Processing nova",
             extra={
@@ -458,33 +492,87 @@ def main() -> None:
                 "progress": f"{succeeded + failed + 1}/{nova_count}",
             },
         )
-        result = _process_nova(nova_id, manifest)
+        result = _process_nova(nova_id, manifest, publisher)
         nova_results.append(result)
         if result.success:
             succeeded += 1
         else:
             failed += 1
 
-    # Step 4 — Generate catalog.json (stub — Epic 4)
-    _logger.info("Generating catalog.json (stub)", extra={"phase": "catalog"})
-    _generate_catalog_stub()
+    # Step 5 — Phase 2: copy forward unchanged ACTIVE novae (§12.5).
+    #
+    # The catalog generator's DDB Scan and the copy-forward step both
+    # need the set of ACTIVE nova IDs.  Generate catalog first (it does
+    # the Scan internally), then compute the copy set from its output.
+    #
+    # Ordering: catalog generation produces the artifact dict but does
+    # NOT write to S3 yet.  Phase 2 copies forward, then Phase 3 writes
+    # catalog.json, then Phase 4 updates the pointer.
+    _logger.info("Generating catalog.json", extra={"phase": "catalog"})
+    catalog_data = generate_catalog_json(nova_results, _table)
 
-    # Step 5 — Write results back to the plan
+    # Compute the set of ACTIVE novae to copy forward: all novae in the
+    # catalog minus those in the current sweep batch.
+    active_nova_ids = {n["nova_id"] for n in catalog_data["novae"]}
+    novae_to_copy = active_nova_ids - swept_nova_ids
+
+    _logger.info(
+        "Phase 2: copy-forward",
+        extra={
+            "active_novae": len(active_nova_ids),
+            "swept_novae": len(swept_nova_ids),
+            "novae_to_copy": len(novae_to_copy),
+            "phase": "publication",
+        },
+    )
+    copy_ok = publisher.copy_forward_unchanged_novae(novae_to_copy)
+
+    # Step 6 — Phase 3: write catalog.json to release prefix.
+    if copy_ok:
+        _logger.info("Phase 3: writing catalog.json", extra={"phase": "publication"})
+        publisher.write_catalog(catalog_data)
+    else:
+        _logger.error(
+            "Skipping Phase 3–4: copy-forward had failures",
+            extra={"phase": "publication"},
+        )
+
+    # Step 7 — Phase 4: update pointer (§12.5).
+    publication_ok = False
+    if copy_ok:
+        try:
+            _logger.info("Phase 4: updating pointer", extra={"phase": "publication"})
+            publisher.update_pointer()
+            publication_ok = True
+        except Exception:
+            _logger.exception(
+                "Pointer update failed — release exists but is unreferenced",
+                extra={"release_id": publisher.release_id, "phase": "publication"},
+            )
+
+    # Step 8 — Write results back to the plan.
     _write_results_to_plan(plan, nova_results)
 
     _logger.info(
         "Artifact generator completed",
         extra={
             "plan_id": _PLAN_ID,
+            "release_id": publisher.release_id,
             "nova_count": nova_count,
             "succeeded": succeeded,
             "failed": failed,
+            "publication_ok": publication_ok,
         },
     )
 
-    # Step 6 — Exit code
-    if succeeded == 0 and nova_count > 0:
-        _logger.error("All novae failed — exiting with error")
+    # Step 9 — Exit code.
+    if (succeeded == 0 and nova_count > 0) or not publication_ok:
+        _logger.error(
+            "Exiting with error",
+            extra={
+                "reason": "all novae failed" if succeeded == 0 else "publication failed",
+            },
+        )
         sys.exit(1)
 
 
