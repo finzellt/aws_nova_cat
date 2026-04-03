@@ -339,6 +339,12 @@ def _classify_rows(
             nova_id,
         )
 
+        # Prefer stored band_name when present (ADR-019 amendment).
+        # Falls back to registry-derived label for pre-migration rows.
+        stored_band_name = item.get("band_name")
+        if stored_band_name:
+            display_label = str(stored_band_name)
+
         # Annotate.
         row = dict(item)
         row["_output_regime"] = output_regime
@@ -367,6 +373,10 @@ def _resolve_band(
 
     Returns ``(display_label, wavelength_eff_nm)``.  Falls back to the
     raw ``band_id`` string when the registry has no entry.
+
+    Post ADR-019 amendment (2026-04-03), the display label returned here
+    serves as a **fallback** for pre-migration rows that lack a stored
+    ``band_name``.  Callers should prefer ``item['band_name']`` when present.
     """
     entry = band_registry.get(band_id)
     if entry is None:

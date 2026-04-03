@@ -428,10 +428,12 @@ def _aggregate_photometry_sources(
         regime = row.get("regime")
         if regime:
             entry["regimes"].add(regime)
-        band_id = row.get("band_id", "")
-        if band_id:
-            # Short display label: last segment of the two-track band_id
+        band_name = row.get("band_name") or ""
+        if not band_name:
+            # Fallback for pre-migration rows without stored band_name.
+            band_id = row.get("band_id", "")
             band_name = band_id.rsplit("_", 1)[-1] if "_" in band_id else band_id
+        if band_name:
             entry["bands"].add(band_name)
 
     result: list[dict[str, Any]] = []
