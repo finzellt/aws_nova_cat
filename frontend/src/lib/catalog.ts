@@ -1,22 +1,30 @@
 /**
  * Server-side catalog data helpers.
  *
- * This module reads catalog.json directly from the filesystem at build time.
- * It is intended for use in Next.js Server Components only — do not import
- * into client components (any file marked 'use client').
+ * This module provides catalog.json data to Server Components. It is the
+ * only module that should import from 'fs' — do not import this file into
+ * client components (any file marked 'use client').
  *
- * The catalog artifact lives at public/data/catalog.json and is served as a
- * static file by Next.js. Reading via fs at build time means SSG pages contain
- * the catalog data inline with no client-side fetch on first load.
+ * Two modes (DESIGN-003 §14.6):
+ *
+ *   Development (NEXT_PUBLIC_DATA_URL unset):
+ *     Reads catalog.json from the filesystem at public/data/catalog.json.
+ *     No network call, no AWS credentials needed. `npm run dev` just works.
+ *
+ *   Production (NEXT_PUBLIC_DATA_URL set):
+ *     Fetches the active release's catalog.json from CloudFront via the
+ *     data client. Pages become dynamically rendered (SSR, not SSG) because
+ *     the fetch uses cache: 'no-store' on the pointer resolution.
  */
 
 import { readFile } from 'fs/promises';
 import path from 'path';
 import type { CatalogData } from '@/types/catalog';
+import { fetchArtifact } from '@/lib/dataClient';
 
-/** Fallback returned when catalog.json is absent (e.g. during initial setup). */
+/** Fallback returned when catalog data is unavailable. */
 const EMPTY_CATALOG: CatalogData = {
-  schema_version: '1.0',
+  schema_version: '1.1',
   generated_at: '',
   stats: {
     nova_count: 0,
@@ -27,16 +35,36 @@ const EMPTY_CATALOG: CatalogData = {
 };
 
 /**
- * Reads and parses catalog.json from public/data/.
- * Returns an empty catalog if the file does not exist or cannot be parsed.
+ * Load catalog.json for use in Server Components.
+ *
+ * Returns an empty catalog on any failure (missing file in dev, network
+ * error in production). Callers render a graceful empty state in that case
+ * — the homepage shows "Catalog data is not yet available", and the catalog
+ * page shows a zero-row table.
  */
 export async function getCatalogData(): Promise<CatalogData> {
+  const dataUrl = process.env.NEXT_PUBLIC_DATA_URL;
+
+  if (!dataUrl) {
+    // Dev mode: read directly from the filesystem (§14.6).
+    // Relative fetch URLs don't work in server components (no browser
+    // context to resolve against), so we keep the fs read for local dev.
+    try {
+      const filePath = path.join(process.cwd(), 'public', 'data', 'catalog.json');
+      const raw = await readFile(filePath, 'utf-8');
+      return JSON.parse(raw) as CatalogData;
+    } catch {
+      return EMPTY_CATALOG;
+    }
+  }
+
+  // Production: fetch from CloudFront via the data client.
+  // fetchArtifact resolves the active release, constructs a full
+  // CloudFront URL (absolute — works in server components), fetches,
+  // and parses the JSON response.
   try {
-    const filePath = path.join(process.cwd(), 'public', 'data', 'catalog.json');
-    const raw = await readFile(filePath, 'utf-8');
-    return JSON.parse(raw) as CatalogData;
+    return await fetchArtifact<CatalogData>('catalog.json');
   } catch {
-    // File absent during development or first-run — return a safe default.
     return EMPTY_CATALOG;
   }
 }

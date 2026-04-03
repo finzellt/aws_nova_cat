@@ -55,7 +55,7 @@ const PAGE_SIZE = 25;
  */
 const RIGHT_ALIGNED_COLUMNS = new Set([
   'ra_dec',
-  'discovery_year',
+  'discovery_date',
   'spectra_count',
   'photometry_count',
   'references_count',
@@ -234,16 +234,31 @@ export function CatalogTable({
         },
       },
 
-      // ── Discovery Year ─────────────────────────────────────────────────
+      // ── Discovery date (displayed as year) ─────────────────────────────
+      // Schema v1.1: discovery_date is "YYYY-MM-DD" | null. The column
+      // header stays "Year" because only the year portion is displayed.
+      // Sorting uses the full date string (lexicographic on ISO dates is
+      // chronologically correct). Null values sort to the end.
       {
-        accessorKey: 'discovery_year',
+        accessorKey: 'discovery_date',
         header: 'Year',
         enableSorting: true,
-        cell: ({ getValue }) => (
-          <span className="font-mono tabular-nums text-[var(--color-text-primary)]">
-            {getValue<number>()}
-          </span>
-        ),
+        sortUndefined: 'last',
+        cell: ({ getValue }) => {
+          const date = getValue<string | null>();
+          if (!date) {
+            return (
+              <span className="text-[var(--color-text-disabled)]">—</span>
+            );
+          }
+          // Extract the four-digit year from "YYYY-MM-DD" format.
+          const year = date.substring(0, 4);
+          return (
+            <span className="font-mono tabular-nums text-[var(--color-text-primary)]">
+              {year}
+            </span>
+          );
+        },
       },
 
       // ── Spectra count (default sort key) ───────────────────────────────
