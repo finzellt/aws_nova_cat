@@ -33,6 +33,7 @@ from typing import Any
 import boto3
 import pytest
 from moto import mock_aws
+from release_publisher import ReleasePublisher
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -152,6 +153,22 @@ def _create_s3_buckets() -> Any:
 
 
 # ---------------------------------------------------------------------------
+# Publisher helper
+# ---------------------------------------------------------------------------
+
+
+def _create_publisher(s3: Any) -> ReleasePublisher:
+    """Create a ReleasePublisher for the moto S3 context.
+
+    Calls ``read_previous_pointer()`` (bootstrap path — no current.json
+    exists) so the publisher is ready for Phase 1 uploads.
+    """
+    publisher = ReleasePublisher(s3, _BUCKET_PUBLIC)
+    publisher.read_previous_pointer()
+    return publisher
+
+
+# ---------------------------------------------------------------------------
 # DDB seed helpers
 # ---------------------------------------------------------------------------
 
@@ -222,148 +239,119 @@ def _seed_spectra_data_product(table: Any) -> None:
     table.put_item(
         Item={
             "PK": _NOVA_ID,
-            "SK": f"PRODUCT#SPECTRA#ticket_ingestion#{_DP_ID_A}",
+            "SK": f"PRODUCT#SPECTRA#{_DP_ID_A}",
             "entity_type": "DataProduct",
-            "product_type": "SPECTRA",
-            "nova_id": _NOVA_ID,
             "data_product_id": _DP_ID_A,
-            "provider": "ticket_ingestion",
+            "nova_id": _NOVA_ID,
+            "provider": "TestProvider",
             "validation_status": "VALID",
-            "acquisition_status": "ACQUIRED",
-            "eligibility": "NONE",
-            "observation_date_mjd": Decimal("56080.5"),
-            "instrument": "GMOS-S",
-            "telescope": "Gemini South",
+            "observation_date_mjd": Decimal("56083.5"),
+            "instrument": "Goodman",
+            "telescope": "SOAR",
             "flux_unit": "erg/s/cm2/A",
-            "raw_s3_bucket": _BUCKET_PRIVATE,
-            "raw_s3_key": f"raw/spectra/{_NOVA_ID}/{_DP_ID_A}.fits",
         }
     )
 
 
-def _seed_photometry_rows(phot_table: Any) -> None:
-    """Seed PhotometryRow items across multiple optical bands.
+def _seed_photometry_rows(table: Any) -> None:
+    """Seed photometry rows across three optical bands + radio."""
+    rows: list[dict[str, Any]] = []
+    base_mjd = Decimal("56080.0")
 
-    Seeds three optical bands (V, B, R) with enough points for the
-    offset pipeline to exercise spline fitting.  Also seeds one radio
-    row for multi-regime coverage.
-    """
-    # V band — 6 points spanning 200 days.
-    v_data = [
-        (56080.0, 10.0),
-        (56090.0, 9.8),
-        (56120.0, 10.5),
-        (56160.0, 11.2),
-        (56220.0, 12.1),
-        (56280.0, 13.0),
-    ]
-    for i, (mjd, mag) in enumerate(v_data):
-        phot_table.put_item(
-            Item={
-                "PK": _NOVA_ID,
-                "SK": f"PHOT#V{i:03d}",
-                "nova_id": _NOVA_ID,
-                "row_id": f"V{i:03d}",
-                "regime": "optical",
-                "band_id": "Generic_V",
-                "time_mjd": Decimal(str(mjd)),
-                "magnitude": Decimal(str(mag)),
-                "mag_err": Decimal("0.05"),
-                "is_upper_limit": False,
-                "telescope": "SMARTS 1.3m",
-                "bibcode": _BIBCODE_A,
-            }
+    # Optical detections (V, B, R).
+    for i in range(6):
+        rows.append(
+            _phot_row(
+                f"v{i}",
+                base_mjd + i,
+                "Generic_V",
+                "optical",
+                Decimal(f"{12.0 + i * 0.1}"),
+            )
+        )
+    for i in range(5):
+        rows.append(
+            _phot_row(
+                f"b{i}",
+                base_mjd + i,
+                "Generic_B",
+                "optical",
+                Decimal(f"{13.0 + i * 0.1}"),
+            )
+        )
+    for i in range(4):
+        rows.append(
+            _phot_row(
+                f"r{i}",
+                base_mjd + i,
+                "Generic_R",
+                "optical",
+                Decimal(f"{11.5 + i * 0.1}"),
+            )
         )
 
-    # B band — 5 points, magnitudes close to V to potentially
-    # trigger offset computation.
-    b_data = [
-        (56081.0, 10.2),
-        (56091.0, 10.1),
-        (56121.0, 10.8),
-        (56161.0, 11.5),
-        (56221.0, 12.4),
-    ]
-    for i, (mjd, mag) in enumerate(b_data):
-        phot_table.put_item(
-            Item={
-                "PK": _NOVA_ID,
-                "SK": f"PHOT#B{i:03d}",
-                "nova_id": _NOVA_ID,
-                "row_id": f"B{i:03d}",
-                "regime": "optical",
-                "band_id": "Generic_B",
-                "time_mjd": Decimal(str(mjd)),
-                "magnitude": Decimal(str(mag)),
-                "mag_err": Decimal("0.08"),
-                "is_upper_limit": False,
-                "telescope": "SMARTS 1.3m",
-                "bibcode": _BIBCODE_A,
-            }
+    # Radio (no magnitude — flux_density only).
+    for i in range(2):
+        rows.append(
+            _phot_row(
+                f"radio{i}",
+                base_mjd + i,
+                "VLA_5GHz",
+                "radio",
+                magnitude=None,
+                flux_density=Decimal("0.5"),
+            )
         )
 
-    # R band — 4 points, separated from V/B by ~1 mag.
-    r_data = [
-        (56082.0, 8.9),
-        (56092.0, 8.7),
-        (56122.0, 9.4),
-        (56162.0, 10.1),
-    ]
-    for i, (mjd, mag) in enumerate(r_data):
-        phot_table.put_item(
-            Item={
-                "PK": _NOVA_ID,
-                "SK": f"PHOT#R{i:03d}",
-                "nova_id": _NOVA_ID,
-                "row_id": f"R{i:03d}",
-                "regime": "optical",
-                "band_id": "Generic_R",
-                "time_mjd": Decimal(str(mjd)),
-                "magnitude": Decimal(str(mag)),
-                "mag_err": Decimal("0.04"),
-                "is_upper_limit": False,
-                "telescope": "SMARTS 1.3m",
-                "bibcode": _BIBCODE_B,
-            }
-        )
-
-    # Radio — 2 points to test multi-regime coverage.
-    for i, (mjd, flux) in enumerate([(56100.0, 1.5), (56200.0, 0.8)]):
-        phot_table.put_item(
-            Item={
-                "PK": _NOVA_ID,
-                "SK": f"PHOT#RADIO{i:03d}",
-                "nova_id": _NOVA_ID,
-                "row_id": f"RADIO{i:03d}",
-                "regime": "radio",
-                "band_id": "VLA_5GHz",
-                "time_mjd": Decimal(str(mjd)),
-                "flux_density": Decimal(str(flux)),
-                "flux_density_err": Decimal("0.1"),
-                "is_upper_limit": False,
-                "telescope": "VLA",
-                "bibcode": _BIBCODE_B,
-            }
-        )
+    for row in rows:
+        table.put_item(Item=row)
 
 
-# ---------------------------------------------------------------------------
-# S3 seed helpers
-# ---------------------------------------------------------------------------
+def _phot_row(
+    row_suffix: str,
+    time_mjd: Decimal,
+    band_id: str,
+    regime: str,
+    magnitude: Decimal | None,
+    flux_density: Decimal | None = None,
+) -> dict[str, Any]:
+    """Build a minimal PhotometryRow item."""
+    item: dict[str, Any] = {
+        "PK": _NOVA_ID,
+        "SK": f"PHOT#{regime}#{band_id}#{time_mjd}",
+        "entity_type": "PhotometryRow",
+        "row_id": f"row-{row_suffix}",
+        "nova_id": _NOVA_ID,
+        "time_mjd": time_mjd,
+        "band_id": band_id,
+        "regime": regime,
+        "is_upper_limit": False,
+        "orig_catalog": "test-catalog",
+        "bibcode": _BIBCODE_A,
+        "band_res_type": "registry_match",
+        "band_res_conf": "high",
+    }
+    if magnitude is not None:
+        item["magnitude"] = magnitude
+        item["mag_err"] = Decimal("0.05")
+    if flux_density is not None:
+        item["flux_density"] = flux_density
+        item["flux_density_unit"] = "mJy"
+    return item
 
 
 def _seed_web_ready_csv(s3: Any) -> None:
-    """Seed a web-ready CSV in the private bucket for the spectra generator."""
-    csv_body = "wavelength_nm,flux\n400.0,1.0e-15\n500.0,2.5e-15\n600.0,1.8e-15\n700.0,0.9e-15\n"
+    """Upload a minimal web-ready CSV for the test spectrum."""
+    csv_content = "wavelength_nm,flux\n400.0,1.0\n500.0,2.0\n600.0,1.5\n"
     s3.put_object(
         Bucket=_BUCKET_PRIVATE,
         Key=f"derived/spectra/{_NOVA_ID}/{_DP_ID_A}/web_ready.csv",
-        Body=csv_body.encode("utf-8"),
+        Body=csv_content.encode(),
     )
 
 
 def _seed_raw_fits(s3: Any) -> None:
-    """Seed a minimal FITS file in the private bucket for the bundle generator."""
+    """Upload a minimal FITS file for the test spectrum."""
     from astropy.io import fits as pyfits  # type: ignore[import-untyped]
 
     hdu = pyfits.PrimaryHDU()
@@ -432,10 +420,14 @@ class TestArtifactGeneratorIntegration:
             mod = _load_module()
             mod._band_registry = _BAND_REGISTRY  # type: ignore[attr-defined]
 
+            # --- Publisher for Phase 1 uploads ---
+            publisher = _create_publisher(s3)
+
             # --- Run full generator chain ---
             result = mod._process_nova(
                 _NOVA_ID,
                 _all_artifacts_manifest(),
+                publisher,
             )
 
             # --- NovaResult assertions ---
@@ -474,9 +466,11 @@ class TestArtifactGeneratorIntegration:
 
             mod = _load_module()
             mod._band_registry = _BAND_REGISTRY  # type: ignore[attr-defined]
+            publisher = _create_publisher(s3)
             result = mod._process_nova(
                 _NOVA_ID,
                 _all_artifacts_manifest(),
+                publisher,
             )
             assert result.success is True
 
@@ -513,9 +507,11 @@ class TestArtifactGeneratorIntegration:
 
             mod = _load_module()
             mod._band_registry = _BAND_REGISTRY  # type: ignore[attr-defined]
+            publisher = _create_publisher(s3)
             result = mod._process_nova(
                 _NOVA_ID,
                 _all_artifacts_manifest(),
+                publisher,
             )
 
             assert result.success is True
@@ -545,10 +541,13 @@ class TestArtifactGeneratorIntegration:
 
             mod._band_registry = _BAND_REGISTRY  # type: ignore[attr-defined]
 
+            publisher = _create_publisher(s3)
+
             # First run — computes and caches offsets.
             result_1 = mod._process_nova(
                 _NOVA_ID,
                 _all_artifacts_manifest(),
+                publisher,
             )
             assert result_1.success is True
 
@@ -562,6 +561,7 @@ class TestArtifactGeneratorIntegration:
             result_2 = mod._process_nova(
                 _NOVA_ID,
                 _all_artifacts_manifest(),
+                publisher,
             )
             assert result_2.success is True
             assert result_2.photometry_count == result_1.photometry_count

@@ -1,4 +1,4 @@
-"""Unit tests for services/artifact_generator/main.py (Epic 3).
+"""Unit tests for services/artifact_generator/main.py (Epics 3–4).
 
 Uses moto to mock DynamoDB and S3.  The Fargate task reads env vars at
 module level, so we use the standard ``_load_module()`` pattern — fresh
@@ -11,7 +11,7 @@ Covers:
   - _collect_observation_epochs gathers from both tables
 
   Dispatcher:
-  - _generate_artifact routes each ArtifactType to its generator
+  - _generate_and_publish routes each ArtifactType to its generator
   - Photometry skipped gracefully when table not configured
 
   Per-nova processing:
@@ -28,7 +28,7 @@ Covers:
   - _write_results_to_plan writes nova_results to the plan DDB item
 
   main() integration:
-  - Single nova happy path
+  - Single nova happy path (with publication)
   - Multiple novae — partial failure, exit 0
   - All novae fail — exit 1
   - Generation order respected
@@ -42,7 +42,7 @@ import types
 from collections.abc import Generator
 from decimal import Decimal
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import boto3
 import pytest
@@ -87,7 +87,7 @@ def aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture()
 def table(aws_env: None) -> Generator[Any, None, None]:
-    """Create mocked DDB tables (main + photometry) and yield the main table."""
+    """Create mocked DDB tables (main + photometry) and S3 buckets, yield main table."""
     with mock_aws():
         dynamodb = boto3.resource("dynamodb", region_name=_REGION)
         tbl = dynamodb.create_table(
@@ -115,6 +115,10 @@ def table(aws_env: None) -> Generator[Any, None, None]:
             ],
             BillingMode="PAY_PER_REQUEST",
         )
+        # S3 buckets — required for ReleasePublisher in main().
+        s3 = boto3.client("s3", region_name=_REGION)
+        s3.create_bucket(Bucket=_BUCKET_PUBLIC)
+        s3.create_bucket(Bucket=_BUCKET_PRIVATE)
         yield tbl
 
 
@@ -208,6 +212,7 @@ def _noop_generate(
     nova_id: str,
     artifact: Any,
     nova_context: dict[str, Any],
+    publisher: Any = None,
 ) -> None:
     """Populate context keys the way real generators do, without AWS calls."""
     artifact_val = artifact.value if hasattr(artifact, "value") else str(artifact)
@@ -308,57 +313,67 @@ class TestCollectObservationEpochs:
 
 
 # ---------------------------------------------------------------------------
-# _generate_artifact dispatch
+# _generate_and_publish dispatch
 # ---------------------------------------------------------------------------
 
 
-class TestGenerateArtifact:
+class TestGenerateAndPublish:
     def test_routes_references(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
             ctx: dict[str, Any] = {"nova_item": {}}
+            publisher = MagicMock()
             with patch.object(mod, "generate_references_json") as mock_gen:
-                mod._generate_artifact(_NOVA_A, mod.ArtifactType.references_json, ctx)
+                mod._generate_and_publish(_NOVA_A, mod.ArtifactType.references_json, ctx, publisher)
             mock_gen.assert_called_once()
 
     def test_routes_spectra(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
             ctx: dict[str, Any] = {"nova_item": {}}
+            publisher = MagicMock()
             with patch.object(mod, "generate_spectra_json") as mock_gen:
-                mod._generate_artifact(_NOVA_A, mod.ArtifactType.spectra_json, ctx)
+                mod._generate_and_publish(_NOVA_A, mod.ArtifactType.spectra_json, ctx, publisher)
             mock_gen.assert_called_once()
 
     def test_routes_photometry(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
             ctx: dict[str, Any] = {"nova_item": {}}
+            publisher = MagicMock()
             with patch.object(mod, "generate_photometry_json") as mock_gen:
-                mod._generate_artifact(_NOVA_A, mod.ArtifactType.photometry_json, ctx)
+                mod._generate_and_publish(_NOVA_A, mod.ArtifactType.photometry_json, ctx, publisher)
             mock_gen.assert_called_once()
 
     def test_routes_sparkline(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
             ctx: dict[str, Any] = {"nova_item": {}}
+            publisher = MagicMock()
             with patch.object(mod, "generate_sparkline_svg") as mock_gen:
-                mod._generate_artifact(_NOVA_A, mod.ArtifactType.sparkline_svg, ctx)
+                mod._generate_and_publish(_NOVA_A, mod.ArtifactType.sparkline_svg, ctx, publisher)
             mock_gen.assert_called_once()
 
     def test_routes_nova(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
             ctx: dict[str, Any] = {"nova_item": {}}
+            publisher = MagicMock()
             with patch.object(mod, "generate_nova_json") as mock_gen:
-                mod._generate_artifact(_NOVA_A, mod.ArtifactType.nova_json, ctx)
+                mod._generate_and_publish(_NOVA_A, mod.ArtifactType.nova_json, ctx, publisher)
             mock_gen.assert_called_once()
 
     def test_routes_bundle(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
             ctx: dict[str, Any] = {"nova_item": {}}
+            publisher = MagicMock()
             with patch.object(mod, "generate_bundle_zip") as mock_gen:
-                mod._generate_artifact(_NOVA_A, mod.ArtifactType.bundle_zip, ctx)
+                mock_gen.return_value = {
+                    "s3_key": "nova/test/test_bundle_20260403.zip",
+                    "bundle_filename": "test_bundle_20260403.zip",
+                }
+                mod._generate_and_publish(_NOVA_A, mod.ArtifactType.bundle_zip, ctx, publisher)
             mock_gen.assert_called_once()
 
 
@@ -372,8 +387,9 @@ class TestProcessNova:
         with mock_aws():
             mod = _load_module()
             _seed_nova(table, _NOVA_A)
-            with patch.object(mod, "_generate_artifact", _noop_generate):
-                result = mod._process_nova(_NOVA_A, _spectra_manifest())
+            publisher = MagicMock()
+            with patch.object(mod, "_generate_and_publish", _noop_generate):
+                result = mod._process_nova(_NOVA_A, _spectra_manifest(), publisher)
         assert result.success is True
         assert result.nova_id == _NOVA_A
         assert result.error is None
@@ -382,15 +398,17 @@ class TestProcessNova:
         with mock_aws():
             mod = _load_module()
             _seed_nova(table, _NOVA_A)
-            with patch.object(mod, "_generate_artifact", _noop_generate):
-                result = mod._process_nova(_NOVA_A, _spectra_manifest())
+            publisher = MagicMock()
+            with patch.object(mod, "_generate_and_publish", _noop_generate):
+                result = mod._process_nova(_NOVA_A, _spectra_manifest(), publisher)
         assert result.spectra_count == 0
 
     def test_nova_not_found_fails(self, table: Any) -> None:
         """Missing Nova item produces a failed NovaResult."""
         with mock_aws():
             mod = _load_module()
-            result = mod._process_nova(_NOVA_A, _spectra_manifest())
+            publisher = MagicMock()
+            result = mod._process_nova(_NOVA_A, _spectra_manifest(), publisher)
         assert result.success is False
         assert "not found" in (result.error or "").lower()
 
@@ -398,20 +416,22 @@ class TestProcessNova:
         with mock_aws():
             mod = _load_module()
             _seed_nova(table, _NOVA_A)
+            publisher = MagicMock()
 
             def _boom(*args: Any, **kwargs: Any) -> None:
                 raise ValueError("generator exploded")
 
-            with patch.object(mod, "_generate_artifact", _boom):
-                result = mod._process_nova(_NOVA_A, _spectra_manifest())
+            with patch.object(mod, "_generate_and_publish", _boom):
+                result = mod._process_nova(_NOVA_A, _spectra_manifest(), publisher)
         assert result.success is False
         assert "generator exploded" in (result.error or "")
 
     def test_failed_nova_has_no_counts(self, table: Any) -> None:
         with mock_aws():
             mod = _load_module()
+            publisher = MagicMock()
             # No Nova seeded → will fail at _load_nova_item
-            result = mod._process_nova(_NOVA_A, _spectra_manifest())
+            result = mod._process_nova(_NOVA_A, _spectra_manifest(), publisher)
         assert result.spectra_count is None
         assert result.photometry_count is None
         assert result.references_count is None
@@ -486,7 +506,7 @@ class TestMain:
             _seed_nova(table, _NOVA_A)
             plan_sk = _seed_plan(table, {_NOVA_A: _spectra_manifest()})
 
-            with patch.object(mod, "_generate_artifact", _noop_generate):
+            with patch.object(mod, "_generate_and_publish", _noop_generate):
                 mod.main()
 
             plan = table.get_item(
@@ -507,7 +527,7 @@ class TestMain:
             }
             plan_sk = _seed_plan(table, manifests)
 
-            with patch.object(mod, "_generate_artifact", _noop_generate):
+            with patch.object(mod, "_generate_and_publish", _noop_generate):
                 mod.main()
 
             plan = table.get_item(
@@ -552,11 +572,12 @@ class TestGenerationOrder:
                 nova_id: str,
                 artifact: Any,
                 ctx: dict[str, Any],
+                publisher: Any = None,
             ) -> None:
                 call_order.append(artifact.value)
-                _noop_generate(nova_id, artifact, ctx)
+                _noop_generate(nova_id, artifact, ctx, publisher)
 
-            with patch.object(mod, "_generate_artifact", _tracking_generate):
+            with patch.object(mod, "_generate_and_publish", _tracking_generate):
                 mod.main()
 
         assert call_order == [
