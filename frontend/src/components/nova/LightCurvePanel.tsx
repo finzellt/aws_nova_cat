@@ -533,8 +533,9 @@ function LightCurvePlot({
           const provider = obs.instrument !== 'unknown'
             ? `${obs.instrument} / ${obs.provider}`
             : obs.provider;
+          const errorStr = error ? ` ± ${error.toFixed(3)}` : '';
           hoverTexts.push(
-            `${timeLabel}<br>${regime.y_axis_label}: ${value.toFixed(2)}`
+            `${timeLabel}<br>${regime.y_axis_label}: ${value.toFixed(2)}${errorStr}`
             + (vOffset !== 0 ? ` (offset ${vOffset > 0 ? '+' : ''}${vOffset.toFixed(1)})` : '')
             + `<br>Band: ${bandId}`
             + `<br>${provider}`
@@ -586,7 +587,7 @@ function LightCurvePlot({
             ? `${obs.instrument} / ${obs.provider}`
             : obs.provider;
           hoverTexts.push(
-            `${timeLabel}<br>${regime.y_axis_label}: ${value.toFixed(2)} (Upper limit)`
+            `${timeLabel}<br>${regime.y_axis_label}: ≤ ${value.toFixed(2)}`
             + (vOffset !== 0 ? ` (offset ${vOffset > 0 ? '+' : ''}${vOffset.toFixed(1)})` : '')
             + `<br>Band: ${bandId}`
             + `<br>${provider}`

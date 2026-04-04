@@ -33,7 +33,7 @@ from decimal import Decimal
 from typing import Any
 
 import numpy as np
-from boto3.dynamodb.conditions import Key  # type: ignore[import-untyped]
+from boto3.dynamodb.conditions import Key
 
 from generators.offsets import (
     BandObservations,
@@ -52,6 +52,7 @@ _logger = logging.getLogger("artifact_generator")
 
 _SCHEMA_VERSION = "1.1"  # §8.12: outburst_mjd_is_estimated addition
 _MAX_POINTS_PER_REGIME = 500  # ADR-013 subsampling cap
+_LARGE_ERROR_THRESHOLD = 1.0  # mag_err above this → treat as upper limit
 
 # Recognised DDB regimes and their mapping to ADR-014 output regimes.
 _REGIME_MAP: dict[str, str] = {
@@ -184,6 +185,9 @@ def generate_photometry_json(
 
     for regime_id in sorted(by_regime, key=lambda r: _REGIME_SORT_ORDER.get(r, 99)):
         regime_rows = by_regime[regime_id]
+
+        # 3a-pre — Auto-flag large-error optical points as upper limits (P2).
+        regime_rows = _auto_flag_large_errors(regime_rows, regime_id, nova_id)
 
         # 3a — Upper limit suppression (per band within this regime).
         after_suppression = _suppress_upper_limits(regime_rows)
@@ -399,6 +403,56 @@ def _resolve_band(
         wavelength_nm = float(lambda_eff) / 10.0  # Ångströms → nm
 
     return str(display), wavelength_nm
+
+
+# ---------------------------------------------------------------------------
+# Auto-flag large photometry errors as upper limits (P2)
+# ---------------------------------------------------------------------------
+
+
+def _auto_flag_large_errors(
+    rows: list[dict[str, Any]],
+    regime_id: str,
+    nova_id: str,
+) -> list[dict[str, Any]]:
+    """Flag optical observations with large mag_err as upper limits.
+
+    Observations with ``mag_err > _LARGE_ERROR_THRESHOLD`` that are not
+    already flagged as upper limits are treated as upper limits for
+    display purposes.  This is a display-layer decision — the DynamoDB
+    item is NOT mutated.
+
+    Only applies to the ``"optical"`` output regime (magnitude-based).
+    Non-optical regimes are returned unchanged because flux density
+    errors are not in magnitudes.
+    """
+    if regime_id != "optical":
+        return rows
+
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        mag_err = _to_float_or_none(row.get("mag_err"))
+        if (
+            mag_err is not None
+            and mag_err > _LARGE_ERROR_THRESHOLD
+            and not row.get("is_upper_limit", False)
+        ):
+            flagged = dict(row)
+            flagged["is_upper_limit"] = True
+            _logger.debug(
+                "Auto-flagged large-error observation as upper limit",
+                extra={
+                    "nova_id": nova_id,
+                    "band_id": row.get("band_id"),
+                    "time_mjd": row.get("time_mjd"),
+                    "mag_err": mag_err,
+                },
+            )
+            result.append(flagged)
+        else:
+            result.append(row)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -853,7 +907,15 @@ def _build_regime_records(
         if defn is None:
             continue
         rec = dict(defn)
-        rec["bands"] = sorted(regimes_present[regime_id])
+        rec["bands"] = sorted(
+            regimes_present[regime_id],
+            key=lambda b: (
+                all_bands[b]["wavelength_eff_nm"]
+                if all_bands[b]["wavelength_eff_nm"] is not None
+                else float("inf"),
+                b,
+            ),
+        )
         records.append(rec)
 
     return records

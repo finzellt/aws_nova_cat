@@ -28,7 +28,7 @@ import logging
 from decimal import Decimal
 from typing import Any
 
-from boto3.dynamodb.conditions import Attr  # type: ignore[import-untyped]
+from boto3.dynamodb.conditions import Attr
 
 from contracts.models.regeneration import NovaResult
 from generators.shared import format_coordinates, generated_at_timestamp

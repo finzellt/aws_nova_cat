@@ -164,8 +164,8 @@ def _resolve_nova(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize(name: str) -> str:
-    """Strip, lowercase, and collapse internal whitespace — identical to nova_resolver."""
-    return re.sub(r"\s+", " ", name.strip().lower())
+    """Strip, lowercase, replace underscores with spaces, and collapse internal whitespace — identical to nova_resolver."""
+    return re.sub(r"\s+", " ", name.replace("_", " ").strip().lower())
 
 
 def _extract_nova_id(output: dict[str, Any], execution_arn: str) -> str:

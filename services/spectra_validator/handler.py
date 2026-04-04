@@ -72,6 +72,7 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError
 from nova_common.logging import configure_logging, logger
+from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 from nova_common.web_ready_csv import build_web_ready_csv, write_web_ready_csv_to_s3
 from nova_common.work_item import DirtyType, write_work_item
@@ -324,12 +325,13 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
     # ProfileResult(success=False) → QUARANTINE (deterministic failure)
     # Unexpected exception from profile internals → propagate → RETRYABLE
     try:
-        result = validate_spectrum(
-            hdu_list,
-            provider=provider,
-            data_product_id=data_product_id,
-            hints=data_product.get("hints", {}),
-        )
+        with log_duration("fits_validation", data_product_id=data_product_id, provider=provider):
+            result = validate_spectrum(
+                hdu_list,
+                provider=provider,
+                data_product_id=data_product_id,
+                hints=data_product.get("hints", {}),
+            )
     except Exception as exc:
         raise RetryableError(
             f"Unexpected exception during profile validation "
@@ -348,6 +350,14 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
                 "profile_id": result.profile_id,
                 "quarantine_reason_code": result.quarantine_reason_code,
                 "quarantine_reason": result.quarantine_reason,
+            },
+        )
+        logger.info(
+            "Decision point: DuplicateByFingerprint",
+            extra={
+                "validation_outcome": "QUARANTINED",
+                "is_duplicate": False,
+                "data_product_id": data_product_id,
             },
         )
         return {

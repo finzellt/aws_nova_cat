@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * ObservationsTable — renders the observations summary table on the nova page.
  *
@@ -7,8 +9,11 @@
  * Columns: Instrument | Telescope | Epoch (MJD) | λ Range (nm) | Provider
  */
 
+import { useState } from 'react';
 import { Telescope } from 'lucide-react';
 import type { SpectrumRecord } from '@/types/nova';
+
+const COLLAPSED_ROW_COUNT = 4;
 
 interface ObservationsTableProps {
   /** Spectrum records from spectra.json. Empty array while loading or on error. */
@@ -70,68 +75,89 @@ export default function ObservationsTable({
   loading,
   error,
 }: ObservationsTableProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   if (loading) return <LoadingSkeleton />;
   if (error || spectra.length === 0) return <EmptyState error={error} />;
 
+  const canCollapse = spectra.length > COLLAPSED_ROW_COUNT;
+  const visibleRows = canCollapse && !isExpanded
+    ? spectra.slice(0, COLLAPSED_ROW_COUNT)
+    : spectra;
+
   return (
-    <div className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)]">
-      <table
-        className="w-full border-collapse text-sm"
-        aria-label="Spectra observations"
-      >
-        <thead>
-          <tr className="bg-[var(--color-surface-secondary)] border-b border-[var(--color-border-subtle)]">
-            {COLUMNS.map((col) => (
-              <th
-                key={col}
-                scope="col"
-                className="px-3 py-2 text-xs font-semibold text-left text-[var(--color-text-secondary)] whitespace-nowrap"
-              >
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>
-          {spectra.map((row, idx) => (
-            <tr
-              key={row.spectrum_id}
-              className={[
-                'border-b border-[var(--color-border-subtle)] last:border-0',
-                idx % 2 === 0
-                  ? 'bg-[var(--color-surface-primary)]'
-                  : 'bg-[var(--color-surface-secondary)]',
-              ].join(' ')}
-            >
-              {/* Instrument */}
-              <td className="px-3 py-2 text-[var(--color-text-primary)]">
-                {row.instrument}
-              </td>
-
-              {/* Telescope */}
-              <td className="px-3 py-2 text-[var(--color-text-secondary)]">
-                {row.telescope}
-              </td>
-
-              {/* Epoch — 4 decimal places gives ~8-second precision, per ADR-014 */}
-              <td className="px-3 py-2 font-mono tabular-nums text-[var(--color-text-primary)]">
-                {row.epoch_mjd.toFixed(4)}
-              </td>
-
-              {/* Wavelength range */}
-              <td className="px-3 py-2 font-mono tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap">
-                {row.wavelength_min}–{row.wavelength_max}
-              </td>
-
-              {/* Provider */}
-              <td className="px-3 py-2 text-[var(--color-text-secondary)]">
-                {row.provider}
-              </td>
+    <div>
+      <div className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)]">
+        <table
+          className="w-full border-collapse text-sm"
+          aria-label="Spectra observations"
+        >
+          <thead>
+            <tr className="bg-[var(--color-surface-secondary)] border-b border-[var(--color-border-subtle)]">
+              {COLUMNS.map((col) => (
+                <th
+                  key={col}
+                  scope="col"
+                  className="px-3 py-2 text-xs font-semibold text-left text-[var(--color-text-secondary)] whitespace-nowrap"
+                >
+                  {col}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {visibleRows.map((row, idx) => (
+              <tr
+                key={row.spectrum_id}
+                className={[
+                  'border-b border-[var(--color-border-subtle)] last:border-0',
+                  idx % 2 === 0
+                    ? 'bg-[var(--color-surface-primary)]'
+                    : 'bg-[var(--color-surface-secondary)]',
+                ].join(' ')}
+              >
+                {/* Instrument */}
+                <td className="px-3 py-2 text-[var(--color-text-primary)]">
+                  {row.instrument}
+                </td>
+
+                {/* Telescope */}
+                <td className="px-3 py-2 text-[var(--color-text-secondary)]">
+                  {row.telescope}
+                </td>
+
+                {/* Epoch — 4 decimal places gives ~8-second precision, per ADR-014 */}
+                <td className="px-3 py-2 font-mono tabular-nums text-[var(--color-text-primary)]">
+                  {row.epoch_mjd.toFixed(4)}
+                </td>
+
+                {/* Wavelength range */}
+                <td className="px-3 py-2 font-mono tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap">
+                  {parseFloat(row.wavelength_min.toPrecision(4))}–{parseFloat(row.wavelength_max.toPrecision(4))}
+                </td>
+
+                {/* Provider */}
+                <td className="px-3 py-2 text-[var(--color-text-secondary)]">
+                  {row.provider}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {canCollapse && (
+        <button
+          type="button"
+          onClick={() => setIsExpanded((prev) => !prev)}
+          className="mt-2 text-xs text-[var(--color-text-tertiary)] hover:underline hover:text-[var(--color-text-secondary)] cursor-pointer"
+        >
+          {isExpanded
+            ? 'Show less \u25B4'
+            : `Show all ${spectra.length} items \u25BE`}
+        </button>
+      )}
     </div>
   );
 }

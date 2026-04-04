@@ -10,18 +10,18 @@ is either performed directly on the filesystem path passed in or injected as
 a protocol-typed argument.  This makes the module trivially unit-testable
 without any AWS mocking.
 
-Band resolution (DESIGN-004 §6.5) uses a two-step sequence:
+Band resolution (DESIGN-004 §6.5) uses a three-step sequence:
 
   1. Alias lookup: ``registry.lookup_band_id(filter_string)``
      - If matched and not excluded → canonical resolution (high confidence).
      - If matched and excluded → row failure (excluded filter).
-  2. Generic fallback: ``registry.get_entry(f"Generic_{filter_string}")``
+  2. Radio frequency fuzzy match: ``registry.resolve_radio_frequency(filter_string)``
+     - If the string looks like a radio frequency (e.g. "36.5 GHz"),
+       finds the nearest registered radio band within ±20% tolerance.
+     - If matched → synonym resolution (medium confidence).
+  3. Generic fallback: ``registry.get_entry(f"Generic_{filter_string}")``
      - If present → generic_fallback resolution (low confidence).
      - If absent → row failure (unresolvable filter string).
-
-The full three-stage ADR-018 disambiguation funnel is not required here;
-the ticket corpus uses standard broadband filter names that resolve cleanly
-via these two steps.
 
 Row ID derivation (DESIGN-004 §8.2):
 
@@ -97,6 +97,8 @@ class BandRegistryProtocol(Protocol):
     def get_entry(self, band_id: str) -> Any: ...
 
     def is_excluded(self, band_id: str) -> bool: ...
+
+    def resolve_radio_frequency(self, filter_string: str) -> str | None: ...
 
 
 # ---------------------------------------------------------------------------
@@ -493,9 +495,12 @@ def _resolve_band(
 ) -> _BandResolution:
     """Resolve a filter string to a canonical band registry entry.
 
-    Two-step sequence (DESIGN-004 §6.5):
+    Three-step sequence:
       1. Alias lookup — exact case-sensitive match in the alias index.
-      2. Generic fallback — look up ``Generic_{filter_string}`` as a band_id.
+      2. Radio frequency fuzzy match — if the string looks like a radio
+         frequency (e.g. ``"36.5 GHz"``), find the nearest registered
+         radio band within ±20% tolerance.
+      3. Generic fallback — look up ``Generic_{filter_string}`` as a band_id.
 
     Raises:
         _RowError: If the filter is excluded or cannot be resolved.
@@ -519,7 +524,27 @@ def _resolve_band(
             entry=entry,
         )
 
-    # Step 2 — Generic fallback
+    # Step 2 — radio frequency fuzzy match
+    radio_band_id = registry.resolve_radio_frequency(filter_string)
+    if radio_band_id is not None:
+        if registry.is_excluded(radio_band_id):
+            raise _RowError(
+                f"Filter string {filter_string!r} fuzzy-matched to excluded band {radio_band_id!r}"
+            )
+        radio_entry = registry.get_entry(radio_band_id)
+        if radio_entry is None:
+            raise _RowError(
+                f"Radio fuzzy resolver returned {radio_band_id!r} "
+                "but get_entry returned None; registry may be corrupt."
+            )
+        return _BandResolution(
+            band_id=radio_band_id,
+            resolution_type=BandResolutionType.synonym,
+            confidence=BandResolutionConfidence.medium,
+            entry=radio_entry,
+        )
+
+    # Step 3 — Generic fallback
     generic_band_id = f"Generic_{filter_string}"
     generic_entry = registry.get_entry(generic_band_id)
     if generic_entry is not None:

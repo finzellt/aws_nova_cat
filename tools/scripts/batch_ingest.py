@@ -53,8 +53,10 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import boto3
@@ -130,6 +132,36 @@ def _get_config(need_tickets: bool = False, need_names: bool = False) -> dict[st
         sys.exit(1)
 
     return config
+
+
+def _get_ddb_table():
+    """Get the DynamoDB table resource for idempotency lock clearing."""
+    table_name = os.environ.get("NOVACAT_TABLE_NAME")
+    if not table_name:
+        print(
+            f"{_RED}Missing env var:{_RESET} NOVACAT_TABLE_NAME\n"
+            f"Required when using --force. Run deploy.sh first, or source ~/.zshrc.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    ddb = boto3.resource("dynamodb", region_name=_REGION)
+    return ddb.Table(table_name)
+
+
+def _clear_idempotency_lock(table, workflow_name: str, primary_id: str) -> int:
+    """Delete the current hour's idempotency lock for a workflow+primary_id.
+
+    Key format: PK=IDEMPOTENCY#{workflow_name}:{primary_id}:{schema_version}:{time_bucket}, SK=LOCK
+    Schema version is always 1. Time bucket is the current UTC hour.
+    delete_item is idempotent — succeeds even if no item exists.
+    """
+    time_bucket = datetime.now(UTC).strftime("%Y-%m-%dT%H")
+    idempotency_key = f"{workflow_name}:{primary_id}:1:{time_bucket}"
+    pk = f"IDEMPOTENCY#{idempotency_key}"
+
+    table.delete_item(Key={"PK": pk, "SK": "LOCK"})
+    print(f"  🔓 Cleared lock for {workflow_name}:{primary_id}")
+    return 1
 
 
 # ===========================================================================
@@ -371,6 +403,14 @@ def _run_tickets(args) -> None:
         _info("\n--upload-only — skipping ingestion.")
         return
 
+    # -- Force: clear idempotency locks --
+    ddb_table = None
+    if args.force:
+        ddb_table = _get_ddb_table()
+        _section("Clearing idempotency locks")
+        for paths in s3_paths:
+            _clear_idempotency_lock(ddb_table, "ingest_ticket", paths["ticket_s3_key"])
+
     # -- Ingest --
     _section("Ingesting tickets")
     results = []
@@ -506,6 +546,14 @@ def _run_names(args) -> None:
         "may take several minutes per nova after this script finishes.\n"
     )
 
+    # -- Force: clear idempotency locks --
+    if args.force:
+        ddb_table = _get_ddb_table()
+        _section("Clearing idempotency locks")
+        for name in names:
+            normalized = re.sub(r"\s+", " ", name.strip().lower().replace("_", " "))
+            _clear_idempotency_lock(ddb_table, "initialize_nova", normalized)
+
     # -- Ingest --
     _section("Initializing novae")
     results = []
@@ -592,6 +640,11 @@ def main() -> None:
         "--upload-only", action="store_true", help="Upload to S3 but don't trigger ingestion"
     )
     tickets_parser.add_argument("--nova", default=None, help="Process only this subdirectory")
+    tickets_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Delete idempotency locks before launching (for re-ingestion)",
+    )
 
     # -- names subcommand --
     names_parser = subparsers.add_parser(
@@ -610,6 +663,11 @@ def main() -> None:
         help="Read nova names from a file (one per line, # comments ok)",
     )
     names_parser.add_argument("--dry-run", action="store_true")
+    names_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Delete idempotency locks before launching (for re-ingestion)",
+    )
 
     args = parser.parse_args()
 
