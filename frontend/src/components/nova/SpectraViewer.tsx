@@ -694,8 +694,9 @@ function buildPlotData(
 
     // ── Feature markers (single-spectrum mode) ──────────────────────
     addFeatureMarkers(
-      activeFeatureGroups, shapes, allAnnotations,
+      activeFeatureGroups, traces, shapes,
       globalWlMin, globalWlMax,
+      fluxMin - fluxPadding, fluxMax + fluxPadding,
     );
 
     const layout = {
@@ -795,9 +796,12 @@ function buildPlotData(
   });
 
   // ── Feature markers (waterfall mode) ──────────────────────────────────
+  const waterfallYMin = Math.min(...baselines) - amp * 0.5;
+  const waterfallYMax = Math.max(...baselines) + amp * 1.5;
   addFeatureMarkers(
-    activeFeatureGroups, shapes, allAnnotations,
+    activeFeatureGroups, traces, shapes,
     globalWlMin, globalWlMax,
+    waterfallYMin, waterfallYMax,
   );
 
   const wlPadding = (globalWlMax - globalWlMin) * 0.02;
@@ -815,15 +819,11 @@ function buildPlotData(
       showticklabels: false,
       gridcolor: 'var(--color-border-subtle)',
       zerolinecolor: 'var(--color-border-subtle)',
-      range: [
-        Math.min(...baselines) - amp * 0.5,
-        Math.max(...baselines) + amp * 1.5,
-      ],
+      range: [waterfallYMin, waterfallYMax],
     },
     annotations: allAnnotations,
     shapes,
-    // Extra top margin to make room for feature line labels above the plot
-    margin: { l: 40, r: rightMargin, t: activeFeatureGroups.size > 0 ? 30 : 20, b: 50 },
+    margin: { l: 40, r: rightMargin, t: 20, b: 50 },
     plot_bgcolor: 'transparent',
     paper_bgcolor: 'transparent',
     hovermode: 'closest' as const,
@@ -843,11 +843,11 @@ function buildPlotData(
 // ── Feature marker builder ────────────────────────────────────────────────────
 //
 // ADR-013: "When a group is toggled on, full-height vertical dashed lines are
-// drawn at each line's wavelength, colored by group. Line wavelength labels
-// appear above the plot area."
+// drawn at each line's wavelength, colored by group."
 //
-// We use Plotly "shapes" for the vertical lines (they support dashed styling
-// and span the full Y range) and "annotations" for the labels above the plot.
+// We use Plotly "shapes" for the visible vertical dashed lines and invisible
+// scatter traces for hover tooltips (shapes don't natively support hover).
+// Labels appear only on hover to avoid clutter when lines are close together.
 //
 // Lines whose wavelength falls outside the displayed wavelength range are
 // filtered out — no point drawing markers for invisible regions.
@@ -855,11 +855,13 @@ function buildPlotData(
 function addFeatureMarkers(
   activeGroups: Set<FeatureGroup>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  shapes: any[],
+  traces: any[],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  annotations: any[],
+  shapes: any[],
   wlMin: number,
   wlMax: number,
+  yMin: number,
+  yMax: number,
 ) {
   if (activeGroups.size === 0) return;
 
@@ -871,26 +873,12 @@ function addFeatureMarkers(
       line.wavelength_nm <= wlMax
   );
 
-  // Sort by wavelength to help with label staggering
-  activeLines.sort((a, b) => a.wavelength_nm - b.wavelength_nm);
-
-  // Track label positions to stagger overlapping labels.
-  // If two labels would be within MIN_LABEL_GAP nm of each other, we
-  // alternate their vertical position to avoid overlap.
-  const MIN_LABEL_GAP = 15; // nm
-  let lastLabelWl = -Infinity;
-  let stagger = false;
-
   for (const line of activeLines) {
     const color = FEATURE_GROUP_COLORS[line.group];
+    const wavelengthAngstrom = Math.round(line.wavelength_nm * 10);
+    const hoverLabel = `${line.label} Å`;
 
     // ── Vertical dashed line (Plotly shape) ───────────────────────────
-    //
-    // type: 'line' draws a straight line between (x0,y0) and (x1,y1).
-    // yref: 'paper' means y0=0 is the bottom of the plot and y1=1 is
-    // the top, so the line spans the full height regardless of the
-    // Y axis range. xref: 'x' means x0/x1 are in data coordinates (nm).
-
     shapes.push({
       type: 'line',
       x0: line.wavelength_nm,
@@ -907,37 +895,23 @@ function addFeatureMarkers(
       opacity: 0.6,
     });
 
-    // ── Label above the plot area (annotation) ────────────────────────
-    //
-    // yref: 'paper', y: 1.0 places the label at the top of the plot.
-    // yanchor: 'bottom' ensures the text sits above the top edge.
-    //
-    // Labels for lines that are close together are staggered: one at
-    // y=1.0, the next at y=1.06, to prevent overlap.
-
-    if (line.wavelength_nm - lastLabelWl < MIN_LABEL_GAP) {
-      stagger = !stagger;
-    } else {
-      stagger = false;
-    }
-    lastLabelWl = line.wavelength_nm;
-
-    annotations.push({
-      x: line.wavelength_nm,
-      y: stagger ? 1.06 : 1.0,
-      text: line.label,
-      xref: 'x',
-      yref: 'paper',
-      showarrow: false,
-      font: {
-        size: 9,
-        color,
-        family: 'DM Mono, monospace',
+    // ── Invisible hover trace ────────────────────────────────────────
+    // A transparent line trace overlapping the shape to provide hover
+    // tooltips. Plotly interpolates hover along line segments, so two
+    // points spanning the y range is sufficient.
+    traces.push({
+      x: [line.wavelength_nm, line.wavelength_nm],
+      y: [yMin, yMax],
+      type: 'scatter' as const,
+      mode: 'lines' as const,
+      line: { color: 'rgba(0,0,0,0)', width: 10 },
+      hoverinfo: 'text' as const,
+      text: [hoverLabel, hoverLabel],
+      showlegend: false,
+      hoverlabel: {
+        bgcolor: color,
+        font: { color: 'white', family: 'DM Mono, monospace', size: 11 },
       },
-      xanchor: 'center',
-      yanchor: 'bottom',
-      // textangle rotates the label slightly for dense regions
-      textangle: activeLines.length > 12 ? -45 : 0,
     });
   }
 }

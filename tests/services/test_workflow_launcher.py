@@ -391,6 +391,90 @@ class TestPublishAcquireAndValidateSpectraRequests:
 
 
 # ---------------------------------------------------------------------------
+# Batched fan-out
+# ---------------------------------------------------------------------------
+
+
+class TestBatchedFanOut:
+    def test_25_products_batched_with_correct_sleep_calls(self, state_machines: Any) -> None:
+        """25 products → 3 batches (10, 10, 5). sleep called between 1→2 and 2→3, not after 3."""
+        products = [_product(f"aaaaaaaa-0000-0000-0000-{i:012d}") for i in range(25)]
+        with mock_aws():
+            handler = _load_handler()
+            with (
+                patch.object(handler, "_sfn") as mock_sfn,
+                patch.object(handler.time, "sleep") as mock_sleep,
+                patch.object(handler, "_record_execution_arn"),
+            ):
+                mock_sfn.exceptions.ExecutionAlreadyExists = type(
+                    "ExecutionAlreadyExists", (Exception,), {}
+                )
+                mock_sfn.start_execution.return_value = _sfn_success_response(
+                    "arn:aws:states:::execution:acquire:test"
+                )
+                result = handler.handle(_publish_event(products), None)
+
+            assert mock_sfn.start_execution.call_count == 25
+            assert mock_sleep.call_count == 2
+            for call in mock_sleep.call_args_list:
+                assert call.args[0] == 2.0
+        assert result["total"] == 25
+        assert len(result["launched"]) == 25
+
+    def test_small_batch_no_sleep(self, state_machines: Any) -> None:
+        """5 products (under batch size) → 1 batch, no sleep."""
+        products = [_product(f"aaaaaaaa-0000-0000-0000-{i:012d}") for i in range(5)]
+        with mock_aws():
+            handler = _load_handler()
+            with (
+                patch.object(handler, "_sfn") as mock_sfn,
+                patch.object(handler.time, "sleep") as mock_sleep,
+                patch.object(handler, "_record_execution_arn"),
+            ):
+                mock_sfn.exceptions.ExecutionAlreadyExists = type(
+                    "ExecutionAlreadyExists", (Exception,), {}
+                )
+                mock_sfn.start_execution.return_value = _sfn_success_response(
+                    "arn:aws:states:::execution:acquire:test"
+                )
+                result = handler.handle(_publish_event(products), None)
+
+            mock_sleep.assert_not_called()
+        assert result["total"] == 5
+        assert len(result["launched"]) == 5
+
+    def test_error_handling_preserved_across_batches(self, state_machines: Any) -> None:
+        """Error on 5th call: first 4 launched, 5th failed, remaining products still processed."""
+        products = [_product(f"aaaaaaaa-0000-0000-0000-{i:012d}") for i in range(10)]
+        call_count = 0
+
+        def _side_effect(**kwargs: Any) -> dict:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 5:
+                raise RuntimeError("boom")
+            return _sfn_success_response("arn:aws:states:::execution:acquire:test")
+
+        with mock_aws():
+            handler = _load_handler()
+            with (
+                patch.object(handler, "_sfn") as mock_sfn,
+                patch.object(handler.time, "sleep"),
+                patch.object(handler, "_record_execution_arn"),
+            ):
+                mock_sfn.exceptions.ExecutionAlreadyExists = type(
+                    "ExecutionAlreadyExists", (Exception,), {}
+                )
+                mock_sfn.start_execution.side_effect = _side_effect
+                result = handler.handle(_publish_event(products), None)
+
+        assert len(result["launched"]) == 9
+        assert len(result["failed"]) == 1
+        assert result["failed"][0]["data_product_id"] == products[4]["data_product_id"]
+        assert result["total"] == 10
+
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 

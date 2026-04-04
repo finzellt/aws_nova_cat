@@ -39,6 +39,7 @@ import requests
 from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError
 from nova_common.logging import configure_logging, logger
+from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 
 _TABLE_NAME = os.environ["NOVA_CAT_TABLE_NAME"]
@@ -162,6 +163,7 @@ def _handle_acquire_artifact(event: dict[str, Any], context: object) -> dict[str
             url=url,
             bucket=_PRIVATE_BUCKET,
             key=raw_s3_key,
+            data_product_id=data_product_id,
         )
     except _RetryableDownloadError as exc:
         backoff_s = _compute_backoff_seconds(attempt_count)
@@ -240,7 +242,9 @@ class _TerminalDownloadError(Exception):
     """Non-recoverable failure: 4xx (not 429), persistent S3 write error."""
 
 
-def _stream_to_s3(*, url: str, bucket: str, key: str) -> tuple[str, int, str]:
+def _stream_to_s3(
+    *, url: str, bucket: str, key: str, data_product_id: str = ""
+) -> tuple[str, int, str]:
     """
     Stream bytes from `url` into memory, compute SHA-256 in flight,
     then write to S3 via a single put_object call.
@@ -255,7 +259,8 @@ def _stream_to_s3(*, url: str, bucket: str, key: str) -> tuple[str, int, str]:
     session.headers["User-Agent"] = "NovaCat-Acquirer/1.0"
 
     try:
-        resp = session.get(url, timeout=_DOWNLOAD_TIMEOUT_S, stream=True, allow_redirects=True)
+        with log_duration("fits_download", data_product_id=data_product_id):
+            resp = session.get(url, timeout=_DOWNLOAD_TIMEOUT_S, stream=True, allow_redirects=True)
     except requests.Timeout as exc:
         raise _RetryableDownloadError(f"Request timed out: {exc}") from exc
     except requests.ConnectionError as exc:
@@ -289,12 +294,13 @@ def _stream_to_s3(*, url: str, bucket: str, key: str) -> tuple[str, int, str]:
     byte_length = len(data)
 
     try:
-        s3_resp = _s3.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=data,
-            ContentType="application/fits",
-        )
+        with log_duration("s3_upload", data_product_id=data_product_id):
+            s3_resp = _s3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=data,
+                ContentType="application/fits",
+            )
     except ClientError as exc:
         code = exc.response["Error"]["Code"]
         if code in {"ServiceUnavailable", "InternalError", "RequestTimeout", "SlowDown"}:

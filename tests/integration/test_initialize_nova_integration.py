@@ -494,6 +494,57 @@ class TestExistsAndLaunchedByName:
             assert job_run_item["status"] == "SUCCEEDED"
             assert job_run_item["outcome"] == "EXISTS_AND_LAUNCHED"
 
+    def test_underscore_variant_resolves_to_existing_nova(self, table: Any) -> None:
+        """V1324_Sco normalizes to 'v1324 sco' and matches seeded NameMapping."""
+        with mock_aws():
+            h = _load_handlers()
+
+            # Seed an existing Nova and NameMapping with space-separated name
+            table.put_item(
+                Item={
+                    "PK": _EXISTING_NOVA_ID,
+                    "SK": "NOVA",
+                    "entity_type": "Nova",
+                    "status": "ACTIVE",
+                    "nova_id": _EXISTING_NOVA_ID,
+                }
+            )
+            table.put_item(
+                Item={
+                    "PK": "NAME#v1324 sco",
+                    "SK": f"NOVA#{_EXISTING_NOVA_ID}",
+                    "entity_type": "NameMapping",
+                    "nova_id": _EXISTING_NOVA_ID,
+                }
+            )
+
+            # Normalize the underscore variant
+            norm = h["nova_resolver"].handle(
+                {
+                    "task_name": "NormalizeCandidateName",
+                    "workflow_name": "initialize_nova",
+                    "candidate_name": "V1324_Sco",
+                    "correlation_id": "c1",
+                    "job_run_id": "j1",
+                },
+                None,
+            )
+            assert norm["normalized_candidate_name"] == "v1324 sco"
+
+            # Check that it resolves to the existing nova
+            name_check = h["nova_resolver"].handle(
+                {
+                    "task_name": "CheckExistingNovaByName",
+                    "workflow_name": "initialize_nova",
+                    "normalized_candidate_name": norm["normalized_candidate_name"],
+                    "correlation_id": "c1",
+                    "job_run_id": "j1",
+                },
+                None,
+            )
+            assert name_check["exists"] is True
+            assert name_check["nova_id"] == _EXISTING_NOVA_ID
+
 
 # ---------------------------------------------------------------------------
 # Path 3: EXISTS_AND_LAUNCHED (coordinate match)

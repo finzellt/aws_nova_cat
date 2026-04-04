@@ -120,6 +120,9 @@ class _MockRegistry:
     def is_excluded(self, band_id: str) -> bool:
         return band_id in self._EXCLUDED
 
+    def resolve_radio_frequency(self, filter_string: str) -> str | None:
+        return None
+
 
 _REGISTRY = _MockRegistry()
 

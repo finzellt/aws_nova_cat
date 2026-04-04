@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * ReferencesTable — renders the literature references table on the nova page.
  *
@@ -8,8 +10,11 @@
  * The loading/error states here are therefore scoped to this section only.
  */
 
+import { useState } from 'react';
 import { BookOpen, ExternalLink } from 'lucide-react';
 import type { Reference } from '@/types/nova';
+
+const COLLAPSED_ROW_COUNT = 4;
 
 interface ReferencesTableProps {
   /** Reference records from references.json. Empty array while loading or on error. */
@@ -91,73 +96,93 @@ export default function ReferencesTable({
   loading,
   error,
 }: ReferencesTableProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   if (loading) return <LoadingSkeleton />;
   if (error || references.length === 0) return <EmptyState error={error} />;
 
+  const canCollapse = references.length > COLLAPSED_ROW_COUNT;
+  const visibleRows = canCollapse && !isExpanded
+    ? references.slice(0, COLLAPSED_ROW_COUNT)
+    : references;
+
   return (
-    <div className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)]">
-      <table
-        className="w-full border-collapse text-sm"
-        aria-label="Literature references"
-      >
-        <thead>
-          <tr className="bg-[var(--color-surface-secondary)] border-b border-[var(--color-border-subtle)]">
-            {COLUMNS.map((col) => (
-              <th
-                key={col}
-                scope="col"
-                className="px-3 py-2 text-xs font-semibold text-left text-[var(--color-text-secondary)] whitespace-nowrap"
-              >
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>
-          {references.map((ref, idx) => (
-            <tr
-              key={ref.bibcode}
-              className={[
-                'border-b border-[var(--color-border-subtle)] last:border-0',
-                idx % 2 === 0
-                  ? 'bg-[var(--color-surface-primary)]'
-                  : 'bg-[var(--color-surface-secondary)]',
-              ].join(' ')}
-            >
-              {/* Author / Year — monospace, compact citation label */}
-              <td className="px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] whitespace-nowrap align-top">
-                {formatCitation(ref.authors, ref.year)}
-              </td>
-
-              {/* Title — allows wrapping so long titles don't blow out the layout */}
-              <td className="px-3 py-2 text-[var(--color-text-primary)] max-w-xs align-top">
-                {ref.title}
-              </td>
-
-              {/* Bibcode — external link to ADS, with ExternalLink icon per ADR-012 */}
-              <td className="px-3 py-2 whitespace-nowrap align-top">
-                <a
-                  href={ref.ads_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={[
-                    'inline-flex items-center gap-1',
-                    'font-mono text-xs',
-                    'text-[var(--color-interactive)]',
-                    'hover:underline',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] rounded',
-                  ].join(' ')}
-                  aria-label={`View ${ref.bibcode} on ADS (opens in new tab)`}
+    <div>
+      <div className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)]">
+        <table
+          className="w-full border-collapse text-sm"
+          aria-label="Literature references"
+        >
+          <thead>
+            <tr className="bg-[var(--color-surface-secondary)] border-b border-[var(--color-border-subtle)]">
+              {COLUMNS.map((col) => (
+                <th
+                  key={col}
+                  scope="col"
+                  className="px-3 py-2 text-xs font-semibold text-left text-[var(--color-text-secondary)] whitespace-nowrap"
                 >
-                  {ref.bibcode}
-                  <ExternalLink size={11} aria-hidden="true" />
-                </a>
-              </td>
+                  {col}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {visibleRows.map((ref, idx) => (
+              <tr
+                key={ref.bibcode}
+                className={[
+                  'border-b border-[var(--color-border-subtle)] last:border-0',
+                  idx % 2 === 0
+                    ? 'bg-[var(--color-surface-primary)]'
+                    : 'bg-[var(--color-surface-secondary)]',
+                ].join(' ')}
+              >
+                {/* Author / Year — linked to ADS, with ExternalLink icon */}
+                <td className="px-3 py-2 font-mono text-xs whitespace-nowrap align-top">
+                  <a
+                    href={ref.ads_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={[
+                      'inline-flex items-center gap-1',
+                      'text-[var(--color-interactive)]',
+                      'hover:underline',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] rounded',
+                    ].join(' ')}
+                    aria-label={`View ${formatCitation(ref.authors, ref.year)} on ADS (opens in new tab)`}
+                  >
+                    {formatCitation(ref.authors, ref.year)}
+                    <ExternalLink size={11} aria-hidden="true" />
+                  </a>
+                </td>
+
+                {/* Title — allows wrapping so long titles don't blow out the layout */}
+                <td className="px-3 py-2 text-[var(--color-text-primary)] max-w-xs align-top">
+                  {ref.title}
+                </td>
+
+                {/* Bibcode — plain text identifier */}
+                <td className="px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] whitespace-nowrap align-top">
+                  {ref.bibcode}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {canCollapse && (
+        <button
+          type="button"
+          onClick={() => setIsExpanded((prev) => !prev)}
+          className="mt-2 text-xs text-[var(--color-text-tertiary)] hover:underline hover:text-[var(--color-text-secondary)] cursor-pointer"
+        >
+          {isExpanded
+            ? 'Show less \u25B4'
+            : `Show all ${references.length} items \u25BE`}
+        </button>
+      )}
     </div>
   );
 }

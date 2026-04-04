@@ -15,9 +15,11 @@ Design notes:
     a minimal continuation event. Downstream workflows fetch any additional data
     they need from DynamoDB rather than receiving it in the continuation payload.
   - For PublishAcquireAndValidateSpectraRequests, sfn:StartExecution is called
-    once per product in a Python loop. All N executions are non-blocking and run
-    in parallel as independent Express Workflow state machines — no SNS/SQS fan-out
-    is required.
+    once per product in a Python loop. Launches are batched (_FANOUT_BATCH_SIZE
+    executions per batch, _FANOUT_BATCH_DELAY_S seconds between batches) to
+    prevent overwhelming Lambda concurrent execution capacity. All N executions
+    are non-blocking and run in parallel as independent Express Workflow state
+    machines — no SNS/SQS fan-out is required.
   - Execution names:
       Single-product workflows: "<nova_id>-<job_run_id[:8]>" (45 chars)
       Per-product launches:     "<data_product_id>-<job_run_id[:8]>" (45 chars)
@@ -61,6 +63,9 @@ _DISCOVER_SPECTRA_PRODUCTS_STATE_MACHINE_ARN = os.environ[
 _ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN = os.environ[
     "ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN"
 ]
+
+_FANOUT_BATCH_SIZE = 10  # executions per batch
+_FANOUT_BATCH_DELAY_S = 2.0  # seconds between batches
 
 _sfn = boto3.client("stepfunctions")
 _dynamodb = boto3.resource("dynamodb")
@@ -175,48 +180,74 @@ def _publish_acquire_and_validate_spectra_requests(
     launched: list[dict[str, Any]] = []
     failed: list[dict[str, Any]] = []
 
-    for product in persisted_products:
-        data_product_id: str = product["data_product_id"]
-        provider: str = product["provider"]
+    # Split products into batches to avoid overwhelming Lambda concurrency.
+    total_batches = (
+        (len(persisted_products) + _FANOUT_BATCH_SIZE - 1) // _FANOUT_BATCH_SIZE
+        if persisted_products
+        else 0
+    )
 
-        try:
-            result = _start_execution(
-                state_machine_arn=_ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN,
-                workflow_label="acquire_and_validate_spectra",
-                nova_id=nova_id,
-                correlation_id=correlation_id,
-                job_run_id=job_run_id,
-                data_product_id=data_product_id,
-                provider=provider,
-            )
-            # Persist the execution ARN on the DataProduct so failed executions
-            # can be looked up directly without scanning all SFN executions.
-            execution_arn = result.get("execution_arn")
-            if execution_arn:
-                _record_execution_arn(
+    for batch_idx in range(total_batches):
+        start = batch_idx * _FANOUT_BATCH_SIZE
+        batch = persisted_products[start : start + _FANOUT_BATCH_SIZE]
+
+        logger.info(
+            "Launching fan-out batch",
+            extra={
+                "batch_number": batch_idx + 1,
+                "batch_size": len(batch),
+                "total_batches": total_batches,
+                "total_products": len(persisted_products),
+            },
+        )
+
+        for product in batch:
+            data_product_id: str = product["data_product_id"]
+            provider: str = product["provider"]
+
+            try:
+                result = _start_execution(
+                    state_machine_arn=_ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN,
+                    workflow_label="acquire_and_validate_spectra",
                     nova_id=nova_id,
-                    provider=provider,
+                    correlation_id=correlation_id,
+                    job_run_id=job_run_id,
                     data_product_id=data_product_id,
-                    execution_arn=execution_arn,
+                    provider=provider,
                 )
-            launched.append({"data_product_id": data_product_id, "provider": provider, **result})
-            time.sleep(0.25)  # stagger launches to avoid Lambda concurrency burst
-        except Exception as exc:
-            logger.error(
-                "Failed to launch acquire_and_validate_spectra execution",
-                extra={
-                    "data_product_id": data_product_id,
-                    "provider": provider,
-                    "error": str(exc),
-                },
-            )
-            failed.append(
-                {
-                    "data_product_id": data_product_id,
-                    "provider": provider,
-                    "error": str(exc),
-                }
-            )
+                # Persist the execution ARN on the DataProduct so failed executions
+                # can be looked up directly without scanning all SFN executions.
+                execution_arn = result.get("execution_arn")
+                if execution_arn:
+                    _record_execution_arn(
+                        nova_id=nova_id,
+                        provider=provider,
+                        data_product_id=data_product_id,
+                        execution_arn=execution_arn,
+                    )
+                launched.append(
+                    {"data_product_id": data_product_id, "provider": provider, **result}
+                )
+            except Exception as exc:
+                logger.error(
+                    "Failed to launch acquire_and_validate_spectra execution",
+                    extra={
+                        "data_product_id": data_product_id,
+                        "provider": provider,
+                        "error": str(exc),
+                    },
+                )
+                failed.append(
+                    {
+                        "data_product_id": data_product_id,
+                        "provider": provider,
+                        "error": str(exc),
+                    }
+                )
+
+        # Delay between batches — but not after the final batch.
+        if batch_idx < total_batches - 1:
+            time.sleep(_FANOUT_BATCH_DELAY_S)
 
     logger.info(
         "PublishAcquireAndValidateSpectraRequests complete",

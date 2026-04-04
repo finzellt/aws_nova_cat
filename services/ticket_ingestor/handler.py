@@ -109,6 +109,9 @@ class _RegistryAdapter:
     def is_excluded(self, band_id: str) -> bool:
         return _registry_module.is_excluded(band_id)
 
+    def resolve_radio_frequency(self, filter_string: str) -> str | None:
+        return _registry_module.resolve_radio_frequency(filter_string)
+
 
 _REGISTRY: BandRegistryProtocol = _RegistryAdapter()
 

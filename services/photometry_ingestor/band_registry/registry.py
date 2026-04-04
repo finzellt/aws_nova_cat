@@ -35,6 +35,7 @@ and patch mismatches are accepted without error.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -246,10 +247,80 @@ def _load_registry(
     return entry_index, alias_index
 
 
+# ---------------------------------------------------------------------------
+# Radio frequency fuzzy resolver
+# ---------------------------------------------------------------------------
+
+# Regex that matches strings like "36.5 GHz", "4.9GHz", "27.5_GHz", "100 MHz"
+_RADIO_FREQ_RE: re.Pattern[str] = re.compile(
+    r"^\s*(\d+(?:\.\d+)?)\s*[_ ]?(GHz|MHz)\s*$",
+    re.IGNORECASE,
+)
+
+# Relative tolerance for fuzzy matching: ±20% of center frequency.
+_RADIO_TOLERANCE: float = 0.20
+
+
+def _build_radio_index(
+    entry_index: dict[str, BandRegistryEntry],
+) -> list[tuple[float, str]]:
+    """Build a sorted list of (center_freq_ghz, band_id) for radio entries."""
+    radio: list[tuple[float, str]] = []
+    for band_id, entry in entry_index.items():
+        if entry.regime == "radio" and entry.lambda_eff is not None:
+            radio.append((entry.lambda_eff, band_id))
+    radio.sort()
+    return radio
+
+
+def _resolve_radio_frequency(
+    filter_string: str,
+    radio_index: list[tuple[float, str]],
+) -> str | None:
+    """Parse a radio frequency string and find the nearest registered band.
+
+    Returns the band_id if the parsed frequency is within ±20% of a
+    registered center frequency, otherwise None.
+    """
+    m = _RADIO_FREQ_RE.match(filter_string)
+    if m is None:
+        return None
+
+    freq = float(m.group(1))
+    unit = m.group(2).upper()
+
+    # Normalise to GHz
+    if unit == "MHZ":
+        freq /= 1000.0
+
+    if freq <= 0.0 or not radio_index:
+        return None
+
+    # Find the nearest center frequency
+    best_band_id: str | None = None
+    best_distance = float("inf")
+    for center_freq, band_id in radio_index:
+        distance = abs(freq - center_freq)
+        if distance < best_distance:
+            best_distance = distance
+            best_band_id = band_id
+            best_center = center_freq
+
+    if best_band_id is None:
+        return None
+
+    # Check tolerance: within ±20% of the center frequency
+    if best_distance / best_center > _RADIO_TOLERANCE:
+        return None
+
+    return best_band_id
+
+
 # Module-level singletons — loaded once at import time.
 _ENTRY_INDEX: dict[str, BandRegistryEntry]
 _ALIAS_INDEX: dict[str, str]
 _ENTRY_INDEX, _ALIAS_INDEX = _load_registry(_REGISTRY_PATH)
+_RADIO_INDEX: list[tuple[float, str]] = _build_radio_index(_ENTRY_INDEX)
 
 # ---------------------------------------------------------------------------
 # Public API (ADR-017 Decision 8)
@@ -259,6 +330,16 @@ _ENTRY_INDEX, _ALIAS_INDEX = _load_registry(_REGISTRY_PATH)
 def lookup_band_id(alias: str) -> str | None:
     """Return the band_id for an exact case-sensitive alias match, or None."""
     return _ALIAS_INDEX.get(alias)
+
+
+def resolve_radio_frequency(filter_string: str) -> str | None:
+    """Fuzzy-match a radio frequency string to the nearest registered band.
+
+    Accepts formats like ``"36.5 GHz"``, ``"4.9GHz"``, ``"1400 MHz"``.
+    Returns the band_id if the parsed frequency is within ±20% of a
+    registered center frequency, otherwise ``None``.
+    """
+    return _resolve_radio_frequency(filter_string, _RADIO_INDEX)
 
 
 def get_entry(band_id: str) -> BandRegistryEntry | None:

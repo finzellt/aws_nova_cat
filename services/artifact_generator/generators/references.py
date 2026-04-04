@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from boto3.dynamodb.conditions import Key  # type: ignore[import-untyped]
+from boto3.dynamodb.conditions import Key
 
 from generators.shared import generated_at_timestamp
 

@@ -23,17 +23,25 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import statistics
+import time
 from decimal import Decimal
 from typing import Any
 
-from boto3.dynamodb.conditions import Attr, Key  # type: ignore[import-untyped]
+from boto3.dynamodb.conditions import Attr, Key
 
-from generators.shared import generated_at_timestamp
+from generators.shared import generated_at_timestamp, lttb
 
 _logger = logging.getLogger("artifact_generator")
 
 _SCHEMA_VERSION = "1.1"  # §7.8: outburst_mjd_is_estimated addition
 _WAVELENGTH_UNIT = "nm"
+
+_FLUX_FLOOR = 1e-4  # minimum normalized flux; prevents log(0) in frontend
+_ZERO_THRESHOLD = 1e-10  # absolute threshold for "effectively zero" flux
+
+_LTTB_THRESHOLD = 2000  # max points per spectrum (DESIGN-003 §7.9, P-4)
+_TRIM_TOLERANCE = 1.1  # 10% beyond median before wavelength trim kicks in
 
 
 # ---------------------------------------------------------------------------
@@ -76,16 +84,51 @@ def generate_spectra_json(
     # Step 1 — Query VALID spectra DataProduct items.
     products = _query_valid_spectra(nova_id, table)
 
-    # Step 2 — Process each spectrum (S3 read + normalize).
-    spectra: list[dict[str, Any]] = []
+    # Step 2a — First pass: parse CSV + trim dead edges for each spectrum.
+    parsed: list[dict[str, Any]] = []
     for product in products:
-        record = _process_spectrum(
+        stage1 = _process_spectrum_stage1(
             nova_id,
             product,
             s3_client,
             private_bucket,
-            outburst_mjd,
         )
+        if stage1 is not None:
+            parsed.append(stage1)
+
+    # Step 2b — Compute display wavelength range from median bounds.
+    display_wavelength_min: float | None = None
+    display_wavelength_max: float | None = None
+
+    if len(parsed) >= 2:
+        wl_mins = [s["wavelengths"][0] for s in parsed]
+        wl_maxes = [s["wavelengths"][-1] for s in parsed]
+        display_wavelength_min = statistics.median(wl_mins)
+        display_wavelength_max = statistics.median(wl_maxes)
+        assert display_wavelength_min is not None  # nosec: narrowing for mypy
+        assert display_wavelength_max is not None  # nosec: narrowing for mypy
+
+        # Warn if trim would affect >50% of spectra (bimodal data).
+        trim_count = sum(1 for wmax in wl_maxes if wmax > display_wavelength_max * _TRIM_TOLERANCE)
+        if trim_count > len(parsed) / 2:
+            _logger.warning(
+                "Wavelength trim affects >50%% of spectra — data may be bimodal",
+                extra={
+                    "nova_id": nova_id,
+                    "trim_count": trim_count,
+                    "total": len(parsed),
+                },
+            )
+
+        # Trim outlier spectra to the display range.
+        for rec in parsed:
+            if rec["wavelengths"][-1] > display_wavelength_max * _TRIM_TOLERANCE:
+                _trim_wavelength_range(rec, display_wavelength_max)
+
+    # Step 2c — Second pass: LTTB downsampling + normalization.
+    spectra: list[dict[str, Any]] = []
+    for rec in parsed:
+        record = _process_spectrum_stage2(rec, outburst_mjd)
         if record is not None:
             spectra.append(record)
 
@@ -105,7 +148,7 @@ def generate_spectra_json(
         },
     )
 
-    return {
+    artifact: dict[str, Any] = {
         "schema_version": _SCHEMA_VERSION,
         "generated_at": generated_at_timestamp(),
         "nova_id": nova_id,
@@ -114,6 +157,12 @@ def generate_spectra_json(
         "wavelength_unit": _WAVELENGTH_UNIT,
         "spectra": spectra,
     }
+    if display_wavelength_min is not None:
+        artifact["display_wavelength_min"] = display_wavelength_min
+    if display_wavelength_max is not None:
+        artifact["display_wavelength_max"] = display_wavelength_max
+
+    return artifact
 
 
 # ---------------------------------------------------------------------------
@@ -148,25 +197,34 @@ def _query_valid_spectra(
 # ---------------------------------------------------------------------------
 
 
-def _process_spectrum(
+def _process_spectrum_stage1(
     nova_id: str,
     product: dict[str, Any],
     s3_client: Any,
     private_bucket: str,
-    outburst_mjd: float | None,
 ) -> dict[str, Any] | None:
-    """Read the web-ready CSV, normalize, and build a spectrum record.
+    """Stage 1: S3 read, CSV parse, and dead-edge trimming.
 
-    Returns ``None`` if the CSV is missing, empty, or corrupt — the
-    spectrum is skipped and does not count toward ``spectra_count``.
+    Returns a mutable dict carrying raw wavelength/flux arrays and the
+    original product metadata, or ``None`` to skip this spectrum.
     """
     data_product_id: str = product["data_product_id"]
     s3_key = f"derived/spectra/{nova_id}/{data_product_id}/web_ready.csv"
 
     # --- S3 read ---
     try:
+        _s3_start = time.perf_counter()
         response = s3_client.get_object(Bucket=private_bucket, Key=s3_key)
         body: str = response["Body"].read().decode("utf-8")
+        _s3_duration_ms = (time.perf_counter() - _s3_start) * 1000
+        _logger.info(
+            "Operation completed: s3_read_csv",
+            extra={
+                "operation": "s3_read_csv",
+                "duration_ms": round(_s3_duration_ms, 1),
+                "data_product_id": data_product_id,
+            },
+        )
     except Exception as exc:
         _logger.warning(
             "Missing or unreadable web-ready CSV — skipping spectrum",
@@ -188,6 +246,76 @@ def _process_spectrum(
             extra={"nova_id": nova_id, "data_product_id": data_product_id},
         )
         return None
+
+    # --- Edge trimming (strip detector rolloff artifacts) ---
+    wavelengths, fluxes = _trim_dead_edges(wavelengths, fluxes, data_product_id)
+
+    if not wavelengths:
+        _logger.warning(
+            "All-zero spectrum after edge trimming — skipping",
+            extra={"nova_id": nova_id, "data_product_id": data_product_id},
+        )
+        return None
+
+    return {
+        "wavelengths": wavelengths,
+        "fluxes": fluxes,
+        "product": product,
+        "nova_id": nova_id,
+    }
+
+
+def _trim_wavelength_range(
+    rec: dict[str, Any],
+    display_wavelength_max: float,
+) -> None:
+    """Trim a stage-1 record's arrays to the display wavelength range (in place)."""
+    wavelengths: list[float] = rec["wavelengths"]
+    fluxes: list[float] = rec["fluxes"]
+    data_product_id: str = rec["product"]["data_product_id"]
+    original_max = wavelengths[-1]
+
+    trimmed_wl: list[float] = []
+    trimmed_fx: list[float] = []
+    for wl, fx in zip(wavelengths, fluxes, strict=True):
+        if wl <= display_wavelength_max:
+            trimmed_wl.append(wl)
+            trimmed_fx.append(fx)
+
+    _logger.debug(
+        "Trimmed spectrum wavelength range to display bounds",
+        extra={
+            "data_product_id": data_product_id,
+            "original_wavelength_max": original_max,
+            "trimmed_wavelength_max": trimmed_wl[-1] if trimmed_wl else 0.0,
+            "display_wavelength_max": display_wavelength_max,
+        },
+    )
+
+    rec["wavelengths"] = trimmed_wl
+    rec["fluxes"] = trimmed_fx
+
+
+def _process_spectrum_stage2(
+    rec: dict[str, Any],
+    outburst_mjd: float | None,
+) -> dict[str, Any] | None:
+    """Stage 2: LTTB downsampling, normalization, and record assembly."""
+    wavelengths: list[float] = rec["wavelengths"]
+    fluxes: list[float] = rec["fluxes"]
+    product: dict[str, Any] = rec["product"]
+    nova_id: str = rec["nova_id"]
+    data_product_id: str = product["data_product_id"]
+
+    if not wavelengths:
+        return None
+
+    # --- LTTB downsampling (§7.9) — preserve peaks within point budget ---
+    if len(wavelengths) > _LTTB_THRESHOLD:
+        points = list(zip(wavelengths, fluxes, strict=True))
+        downsampled = lttb(points, _LTTB_THRESHOLD)
+        wavelengths = [p[0] for p in downsampled]
+        fluxes = [p[1] for p in downsampled]
 
     # --- Flux normalization (§7.3) ---
     flux_normalized, normalization_scale = _normalize_flux(fluxes)
@@ -251,6 +379,60 @@ def _parse_web_ready_csv(body: str) -> tuple[list[float], list[float]]:
 
 
 # ---------------------------------------------------------------------------
+# Edge trimming
+# ---------------------------------------------------------------------------
+
+
+def _trim_dead_edges(
+    wavelengths: list[float],
+    fluxes: list[float],
+    data_product_id: str,
+) -> tuple[list[float], list[float]]:
+    """Remove runs of >1 consecutive near-zero flux from each edge.
+
+    Detector sensitivity roll-off produces dead edges where flux drops
+    to zero and stays there for several nm.  A single zero at the edge
+    is left alone — it could be legitimate signal.
+
+    Both arrays are trimmed together to stay aligned.
+    """
+    n = len(fluxes)
+    if n == 0:
+        return wavelengths, fluxes
+
+    # --- blue (low-wavelength) edge ---
+    blue_zeros = 0
+    for f in fluxes:
+        if abs(f) < _ZERO_THRESHOLD:
+            blue_zeros += 1
+        else:
+            break
+    blue_trim = blue_zeros if blue_zeros > 1 else 0
+
+    # --- red (high-wavelength) edge ---
+    red_zeros = 0
+    for f in reversed(fluxes):
+        if abs(f) < _ZERO_THRESHOLD:
+            red_zeros += 1
+        else:
+            break
+    red_trim = red_zeros if red_zeros > 1 else 0
+
+    if blue_trim or red_trim:
+        _logger.debug(
+            "Trimmed dead spectral edges",
+            extra={
+                "data_product_id": data_product_id,
+                "blue_points_removed": blue_trim,
+                "red_points_removed": red_trim,
+            },
+        )
+
+    end = n - red_trim if red_trim else n
+    return wavelengths[blue_trim:end], fluxes[blue_trim:end]
+
+
+# ---------------------------------------------------------------------------
 # Flux normalization (§7.3)
 # ---------------------------------------------------------------------------
 
@@ -258,11 +440,14 @@ def _parse_web_ready_csv(body: str) -> tuple[list[float], list[float]]:
 def _normalize_flux(
     fluxes: list[float],
 ) -> tuple[list[float], float | None]:
-    """Peak-normalize a flux array.
+    """Peak-normalize a flux array and clamp to floor.
 
     Returns ``(normalized, scale)`` where *scale* is the peak absolute
     flux.  Returns ``([], None)`` when the peak is zero or the array
     is empty — the caller should skip the spectrum.
+
+    After normalization, all values are clamped to ``_FLUX_FLOOR`` to
+    prevent ``log(0)`` on the frontend log-scale toggle.
     """
     if not fluxes:
         return [], None
@@ -272,7 +457,7 @@ def _normalize_flux(
     if peak == 0.0:
         return [], None
 
-    normalized = [f / peak for f in fluxes]
+    normalized = [max(f / peak, _FLUX_FLOOR) for f in fluxes]
     return normalized, peak
 
 

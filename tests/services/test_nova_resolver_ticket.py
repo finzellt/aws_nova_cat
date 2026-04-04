@@ -550,3 +550,115 @@ class TestNotAClassicalNovaOutcome:
 
             with pytest.raises(TerminalError):
                 handler.handle(self._make_event(), None)
+
+
+# ===========================================================================
+# 13. Preflight hit with underscore normalization — skip initialize_nova
+# ===========================================================================
+
+
+class TestPreflightHitUnderscoreNormalization:
+    """
+    NameMapping seeded for "v4739 sgr". Ticket arrives with object_name
+    "V4739_Sgr". The underscore→space normalization ensures the preflight
+    query hits, skipping initialize_nova entirely.
+    """
+
+    @staticmethod
+    def _make_event() -> dict[str, Any]:
+        return {"task_name": "ResolveNova", "object_name": "V4739_Sgr"}
+
+    def test_skips_initialize_nova(self, handler: Any) -> None:
+        """initialize_nova is NOT called when the NameMapping exists under normalized form."""
+        with (
+            patch(f"{_MODULE}._table") as mock_table,
+            patch(f"{_MODULE}._sfn") as mock_sfn,
+        ):
+            mock_table.query.return_value = {"Items": [{"nova_id": _NOVA_ID}]}
+            mock_table.get_item.return_value = _nova_item()
+
+            result: dict[str, Any] = handler.handle(self._make_event(), None)
+
+        assert result["nova_id"] == _NOVA_ID
+        assert result["primary_name"] == "V4739_Sgr"
+        mock_sfn.start_sync_execution.assert_not_called()
+
+    def test_query_key_uses_underscore_normalized_form(self, handler: Any) -> None:
+        """DDB query PK must be "NAME#v4739 sgr" (underscore replaced with space)."""
+        with (
+            patch(f"{_MODULE}._table") as mock_table,
+            patch(f"{_MODULE}._sfn"),
+            patch(f"{_MODULE}.Key") as mock_key,
+        ):
+            mock_table.query.return_value = {"Items": [{"nova_id": _NOVA_ID}]}
+            mock_table.get_item.return_value = _nova_item()
+
+            handler.handle(self._make_event(), None)
+
+        mock_key.assert_called_once_with("PK")
+        mock_key.return_value.eq.assert_called_once_with("NAME#v4739 sgr")
+
+
+# ===========================================================================
+# 14. Preflight miss — nova does not exist, proceed with initialize_nova
+# ===========================================================================
+
+
+class TestPreflightMissProceeds:
+    """
+    No NameMapping seeded. Preflight query returns empty. Handler must
+    fire initialize_nova via start_sync_execution.
+    """
+
+    @staticmethod
+    def _make_event() -> dict[str, Any]:
+        return {"task_name": "ResolveNova", "object_name": "V4739 Sgr"}
+
+    def test_calls_initialize_nova(self, handler: Any) -> None:
+        """start_sync_execution IS called when the preflight DDB query misses."""
+        sfn_out = _sfn_output("CREATED_AND_LAUNCHED", _NOVA_ID)
+        with (
+            patch(f"{_MODULE}._table") as mock_table,
+            patch(f"{_MODULE}._sfn") as mock_sfn,
+        ):
+            mock_table.query.return_value = {"Items": []}
+            mock_sfn.start_sync_execution.return_value = _sfn_sync("SUCCEEDED", sfn_out)
+            mock_table.get_item.return_value = _nova_item()
+
+            result: dict[str, Any] = handler.handle(self._make_event(), None)
+
+        assert result["nova_id"] == _NOVA_ID
+        mock_sfn.start_sync_execution.assert_called_once()
+
+
+# ===========================================================================
+# 15. Underscore normalization matches existing NameMapping (V1324_Sco)
+# ===========================================================================
+
+
+class TestUnderscoreNormalizationV1324Sco:
+    """
+    NameMapping seeded for "v1324 sco". Ticket has object_name "V1324_Sco".
+    Verifies the I1 underscore→space normalization fix produces a match.
+    """
+
+    @staticmethod
+    def _make_event() -> dict[str, Any]:
+        return {"task_name": "ResolveNova", "object_name": "V1324_Sco"}
+
+    def test_match_found(self, handler: Any) -> None:
+        """Preflight hit: underscore in object_name does not prevent NameMapping match."""
+        with (
+            patch(f"{_MODULE}._table") as mock_table,
+            patch(f"{_MODULE}._sfn") as mock_sfn,
+            patch(f"{_MODULE}.Key") as mock_key,
+        ):
+            mock_table.query.return_value = {"Items": [{"nova_id": _NOVA_ID}]}
+            mock_table.get_item.return_value = _nova_item()
+
+            result: dict[str, Any] = handler.handle(self._make_event(), None)
+
+        assert result["nova_id"] == _NOVA_ID
+        mock_sfn.start_sync_execution.assert_not_called()
+        mock_key.assert_called_once_with("PK")
+        mock_key.return_value.eq.assert_called_once_with("NAME#v1324 sco")

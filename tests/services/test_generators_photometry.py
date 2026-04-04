@@ -67,6 +67,11 @@ _REGISTRY: dict[str, Any] = {
     "Generic_V": {"band_name": "V", "lambda_eff": 5510.0},
     "Generic_B": {"band_name": "B", "lambda_eff": 4450.0},
     "Generic_R": {"band_name": "R", "lambda_eff": 6580.0},
+    "Generic_I": {"band_name": "I", "lambda_eff": 8060.0},
+    "Generic_U": {"band_name": "U", "lambda_eff": 3600.0},
+    "2MASS_J": {"band_name": "J", "lambda_eff": 12350.0},
+    "2MASS_H": {"band_name": "H", "lambda_eff": 16620.0},
+    "2MASS_K": {"band_name": "K", "lambda_eff": 21590.0},
     "Swift_UVOT_UVW2": {"band_name": "UVW2", "lambda_eff": 2030.0},
     "VLA_5GHz": {"band_name": "5 GHz", "lambda_eff": None},
 }
@@ -765,3 +770,175 @@ class TestSchemaAndContext:
         )
         for band in artifact["bands"]:
             assert band["vertical_offset"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Auto-flag large photometry errors as upper limits (P2)
+# ---------------------------------------------------------------------------
+
+
+class TestAutoFlagLargeErrors:
+    """Optical points with mag_err > 1.0 are auto-flagged as upper limits."""
+
+    def test_large_error_auto_flagged(self, phot_table: Any, main_table: Any) -> None:
+        """mag_err=1.5, is_upper_limit=False → treated as upper limit in output."""
+        _seed_phot_row(
+            phot_table,
+            _NOVA_ID,
+            "r1",
+            regime="optical",
+            magnitude=16.0,
+            mag_err=1.5,
+            is_upper_limit=False,
+        )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        assert len(artifact["observations"]) == 1
+        assert artifact["observations"][0]["is_upper_limit"] is True
+
+    def test_below_threshold_not_flagged(self, phot_table: Any, main_table: Any) -> None:
+        """mag_err=0.8 → remains a detection."""
+        _seed_phot_row(
+            phot_table,
+            _NOVA_ID,
+            "r1",
+            regime="optical",
+            magnitude=12.0,
+            mag_err=0.8,
+            is_upper_limit=False,
+        )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        assert len(artifact["observations"]) == 1
+        assert artifact["observations"][0]["is_upper_limit"] is False
+
+    def test_already_upper_limit_not_double_flagged(self, phot_table: Any, main_table: Any) -> None:
+        """mag_err=2.0, is_upper_limit=True → unchanged (no double-flagging)."""
+        _seed_phot_row(
+            phot_table,
+            _NOVA_ID,
+            "r1",
+            regime="optical",
+            magnitude=18.0,
+            mag_err=2.0,
+            is_upper_limit=True,
+        )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        assert len(artifact["observations"]) == 1
+        assert artifact["observations"][0]["is_upper_limit"] is True
+
+    def test_non_optical_not_flagged(self, phot_table: Any, main_table: Any) -> None:
+        """Radio point with large flux_density_err → not auto-flagged."""
+        _seed_phot_row(
+            phot_table,
+            _NOVA_ID,
+            "r1",
+            regime="radio",
+            band_id="VLA_5GHz",
+            magnitude=None,
+            mag_err=None,
+            flux_density=1.5,
+            flux_density_err=5.0,
+            is_upper_limit=False,
+        )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        assert len(artifact["observations"]) == 1
+        assert artifact["observations"][0]["is_upper_limit"] is False
+
+    def test_boundary_exactly_threshold_not_flagged(self, phot_table: Any, main_table: Any) -> None:
+        """mag_err=1.0 exactly → NOT flagged (strictly greater than)."""
+        _seed_phot_row(
+            phot_table,
+            _NOVA_ID,
+            "r1",
+            regime="optical",
+            magnitude=14.0,
+            mag_err=1.0,
+            is_upper_limit=False,
+        )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        assert len(artifact["observations"]) == 1
+        assert artifact["observations"][0]["is_upper_limit"] is False
+
+
+# ---------------------------------------------------------------------------
+# Regime band wavelength ordering (P5)
+# ---------------------------------------------------------------------------
+
+
+class TestRegimeBandWavelengthOrder:
+    """Bands within each regime record are sorted by wavelength, not alphabetically."""
+
+    def test_optical_bands_sorted_by_wavelength(self, phot_table: Any, main_table: Any) -> None:
+        """B (4450Å), V (5510Å), R (6580Å), I (8060Å) — wavelength order, not alpha."""
+        for row_id, band_id in [
+            ("r1", "Generic_I"),
+            ("r2", "Generic_B"),
+            ("r3", "Generic_R"),
+            ("r4", "Generic_V"),
+        ]:
+            _seed_phot_row(
+                phot_table,
+                _NOVA_ID,
+                row_id,
+                band_id=band_id,
+                regime="optical",
+                magnitude=12.0,
+            )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        optical_regime = [r for r in artifact["regimes"] if r["id"] == "optical"]
+        assert len(optical_regime) == 1
+        assert optical_regime[0]["bands"] == ["B", "V", "R", "I"]
+
+    def test_unknown_band_sorts_to_end(self, phot_table: Any, main_table: Any) -> None:
+        """A band_id not in the registry appears after all known bands."""
+        for row_id, band_id in [
+            ("r1", "Generic_V"),
+            ("r2", "Generic_B"),
+            ("r3", "UNKNOWN_FILTER_X"),
+        ]:
+            _seed_phot_row(
+                phot_table,
+                _NOVA_ID,
+                row_id,
+                band_id=band_id,
+                regime="optical",
+                magnitude=12.0,
+            )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        optical_regime = [r for r in artifact["regimes"] if r["id"] == "optical"]
+        assert len(optical_regime) == 1
+        bands = optical_regime[0]["bands"]
+        # B and V first (wavelength order), unknown last
+        assert bands[:2] == ["B", "V"]
+        assert bands[-1] == "UNKNOWN_FILTER_X"
+
+    def test_mixed_regimes_sorted_independently(self, phot_table: Any, main_table: Any) -> None:
+        """Optical and NIR bands sort independently within the optical regime tab."""
+        for row_id, band_id, regime in [
+            ("r1", "Generic_R", "optical"),
+            ("r2", "Generic_B", "optical"),
+            ("r3", "2MASS_K", "nir"),
+            ("r4", "2MASS_J", "nir"),
+            ("r5", "2MASS_H", "nir"),
+        ]:
+            _seed_phot_row(
+                phot_table,
+                _NOVA_ID,
+                row_id,
+                band_id=band_id,
+                regime=regime,
+                magnitude=12.0,
+            )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        # NIR maps to optical, so all are in one regime tab
+        optical_regime = [r for r in artifact["regimes"] if r["id"] == "optical"]
+        assert len(optical_regime) == 1
+        # Should be: B (4450), R (6580), J (12350), H (16620), K (21590)
+        assert optical_regime[0]["bands"] == ["B", "R", "J", "H", "K"]

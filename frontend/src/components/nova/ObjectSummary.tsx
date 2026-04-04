@@ -91,12 +91,18 @@ export default function ObjectSummary({ nova, bundleHref }: ObjectSummaryProps) 
           {nova.primary_name}
         </h1>
 
-        {/* Aliases — dot-separated below the heading */}
-        {nova.aliases.length > 0 && (
-          <p className="mt-1.5 text-sm text-[var(--color-text-secondary)]">
-            {nova.aliases.join(' · ')}
-          </p>
-        )}
+        {/* Aliases — comma-separated, labeled, below the heading */}
+        {(() => {
+          const filtered = nova.aliases.filter(
+            (a) => a.trim().toLowerCase() !== nova.primary_name.trim().toLowerCase(),
+          );
+          return filtered.length > 0 ? (
+            <p className="mt-1.5 text-xl italic text-[var(--color-text-tertiary)]">
+              <span className="not-italic text-[var(--color-text-secondary)]">Also known as: </span>
+              {filtered.join(', ')}
+            </p>
+          ) : null;
+        })()}
       </div>
 
       {/*

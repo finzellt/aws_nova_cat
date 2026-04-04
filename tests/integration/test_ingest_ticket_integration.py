@@ -87,16 +87,16 @@ _GQ_MUS_NOVA_ID = "22222222-0000-0000-0000-000000000001"
 _GQ_MUS_PRIMARY_NAME = "GQ Mus"
 _GQ_MUS_RA_DEG = 176.59
 _GQ_MUS_DEC_DEG = -67.25
-# _normalize("GQ_Mus") → "gq_mus"
-_GQ_MUS_NORMALIZED = "gq_mus"
+# _normalize("GQ_Mus") → "gq mus"  (underscore → space per I1 fix)
+_GQ_MUS_NORMALIZED = "gq mus"
 
 # V4739 Sgr — happy-path photometry case
 _V4739_SGR_NOVA_ID = "11111111-0000-0000-0000-000000000001"
 _V4739_SGR_PRIMARY_NAME = "V4739 Sgr"
 _V4739_SGR_RA_DEG = 270.123
 _V4739_SGR_DEC_DEG = -23.456
-# _normalize("V4739_Sgr") → "v4739_sgr"
-_V4739_SGR_NORMALIZED = "v4739_sgr"
+# _normalize("V4739_Sgr") → "v4739 sgr"  (underscore → space per I1 fix)
+_V4739_SGR_NORMALIZED = "v4739 sgr"
 
 # Real fixture directories — TestSpectraHappyPath is skipped if absent.
 _GQ_MUS_FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "spectra" / "gq_mus"

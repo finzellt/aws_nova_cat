@@ -22,9 +22,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from astropy.io import fits  # type: ignore[import-untyped]
-from boto3.dynamodb.conditions import Attr, Key  # type: ignore[import-untyped]
-from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from astropy.io import fits
+from boto3.dynamodb.conditions import Attr, Key
+from botocore.exceptions import ClientError
 
 from generators.shared import format_coordinates, generated_at_timestamp
 

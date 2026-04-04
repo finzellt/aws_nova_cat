@@ -26,9 +26,9 @@ import math
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-import astropy.units as u  # type: ignore[import-untyped]
-from astropy.coordinates import SkyCoord  # type: ignore[import-untyped]
-from astropy.time import Time  # type: ignore[import-untyped]
+import astropy.units as u
+from astropy.coordinates import SkyCoord
+from astropy.time import Time
 
 # ---------------------------------------------------------------------------
 # §7.6 — Outburst MJD resolution

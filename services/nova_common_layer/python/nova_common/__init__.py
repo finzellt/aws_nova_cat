@@ -9,10 +9,11 @@ Step Functions event payload into every subsequent log line.
 Usage in a handler:
 
     from nova_common.logging import logger, configure_logging
+    from nova_common.timing import log_duration
     from nova_common.tracing import tracer
 
     def handle(event, context):
         configure_logging(event)
-        logger.info("Handler invoked")
-        ...
+        with log_duration("my_operation", key="value"):
+            ...
 """

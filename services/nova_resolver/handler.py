@@ -86,7 +86,7 @@ def _normalize_candidate_name(event: dict[str, Any], context: object) -> dict[st
     if not candidate_name or not candidate_name.strip():
         raise TerminalError(f"candidate_name is empty or whitespace-only: {candidate_name!r}")
 
-    normalized = re.sub(r"\s+", " ", candidate_name.strip().lower())
+    normalized = re.sub(r"\s+", " ", candidate_name.replace("_", " ").strip().lower())
 
     logger.info(
         "Candidate name normalized",
@@ -119,12 +119,23 @@ def _check_existing_nova_by_name(event: dict[str, Any], context: object) -> dict
     if items:
         nova_id = cast(str, items[0]["nova_id"])
         logger.info(
-            "Nova found by name",
-            extra={"nova_id": nova_id},
+            "Decision point: ExistsInDB",
+            extra={
+                "exists": True,
+                "normalized_candidate_name": normalized_candidate_name,
+                "matched_nova_id": nova_id,
+            },
         )
         return {"exists": True, "nova_id": nova_id}
 
-    logger.info("No nova found by name")
+    logger.info(
+        "Decision point: ExistsInDB",
+        extra={
+            "exists": False,
+            "normalized_candidate_name": normalized_candidate_name,
+            "matched_nova_id": None,
+        },
+    )
     return {"exists": False}
 
 
@@ -299,6 +310,7 @@ def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dic
     )
 
     # Write PRIMARY NameMapping
+    _check_name_collision(normalized_candidate_name, nova_id)
     _table.put_item(
         Item={
             "PK": f"NAME#{normalized_candidate_name}",
@@ -318,11 +330,12 @@ def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dic
     # Write ALIAS NameMapping items for each SIMBAD alias
     alias_count = 0
     for alias_raw in aliases:
-        normalized_alias = re.sub(r"\s+", " ", alias_raw.strip().lower())
+        normalized_alias = re.sub(r"\s+", " ", alias_raw.replace("_", " ").strip().lower())
         if not normalized_alias:
             continue
         if normalized_alias == normalized_candidate_name:
             continue
+        _check_name_collision(normalized_alias, nova_id)
         _table.put_item(
             Item={
                 "PK": f"NAME#{normalized_alias}",
@@ -363,6 +376,7 @@ def _upsert_alias_for_existing_nova(event: dict[str, Any], context: object) -> d
     nova_id: str = event["nova_id"]
     now = _now()
 
+    _check_name_collision(normalized_candidate_name, nova_id)
     _table.put_item(
         Item={
             "PK": f"NAME#{normalized_candidate_name}",
@@ -389,6 +403,29 @@ def _upsert_alias_for_existing_nova(event: dict[str, Any], context: object) -> d
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _check_name_collision(
+    normalized_name: str,
+    target_nova_id: str,
+) -> None:
+    """Log a warning if *normalized_name* already maps to a different nova."""
+    response = _table.query(
+        KeyConditionExpression=Key("PK").eq(f"NAME#{normalized_name}"),
+    )
+    for item in response.get("Items", []):
+        existing_nova_id: str = cast(str, item["nova_id"])
+        if existing_nova_id != target_nova_id:
+            logger.warning(
+                "NameMapping collision detected",
+                extra={
+                    "normalized_name": normalized_name,
+                    "target_nova_id": target_nova_id,
+                    "existing_nova_id": existing_nova_id,
+                    "existing_name_kind": item.get("name_kind", "UNKNOWN"),
+                    "existing_source": item.get("source", "UNKNOWN"),
+                },
+            )
 
 
 def _angular_separation_arcsec(

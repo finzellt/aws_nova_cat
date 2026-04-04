@@ -39,6 +39,7 @@ from uuid import uuid4
 import boto3
 from boto3.dynamodb.conditions import Key
 from nova_common.logging import logger
+from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 
 from contracts.models.regeneration import (
@@ -81,7 +82,8 @@ def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
     logger.info("Coordinator invoked")
 
     # Step 1 — Query the work queue
-    work_items = _query_work_queue()
+    with log_duration("workqueue_query"):
+        work_items = _query_work_queue()
     if not work_items:
         logger.info("Work queue is empty — exiting with no action")
         return {"action": "no_op", "reason": "empty_queue"}
