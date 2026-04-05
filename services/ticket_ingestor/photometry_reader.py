@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -284,6 +285,12 @@ def _process_row(
         raise _RowError(f"Cannot convert epoch to float: {raw.epoch_raw!r}") from exc
     time_mjd, time_bary_corr, time_orig_sys = _convert_time(epoch_float, ticket.time_system)
 
+    # 2b. Validate / correct truncated MJD values.
+    outburst_mjd: float | None = None
+    if ticket.assumed_outburst_date is not None:
+        outburst_mjd = _convert_time(ticket.assumed_outburst_date, ticket.time_system)[0]
+    time_mjd = _validate_mjd(time_mjd, outburst_mjd, primary_name, row_number)
+
     # 3. Parse flux value and optional error.
     try:
         flux_value = float(raw.flux_value_raw)
@@ -480,6 +487,15 @@ def _extract_fields(
 # JD epoch offset: JD 0.0 = MJD −2400000.5
 _JD_TO_MJD_OFFSET: float = 2_400_000.5
 
+# Truncated-MJD validation constants
+_MJD_FLOOR: float = 40_000.0  # ~1968 — before any nova in the catalog
+_MJD_CEILING: float = 70_000.0  # ~2050 — generous upper bound
+_MJD_STEP: float = 10_000.0
+_OUTBURST_WINDOW_BEFORE: float = 30.0  # days before outburst (pre-discovery obs)
+_OUTBURST_WINDOW_AFTER: float = 5_000.0  # days after outburst
+
+_log = logging.getLogger(__name__)
+
 
 def _convert_time(
     value: float,
@@ -509,6 +525,66 @@ def _convert_time(
         # "other" is used until the enum is extended (non-blocking for MVP).
         return value - _JD_TO_MJD_OFFSET, True, TimeOrigSys.other
     raise _RowError(f"Unrecognised time_system: {time_system!r}")
+
+
+def _validate_mjd(
+    mjd: float,
+    outburst_mjd: float | None,
+    nova_name: str,
+    row_number: int,
+) -> float:
+    """Detect and correct truncated MJD values.
+
+    Some radio data sources provide 4-digit MJD values (e.g. 9500 instead of
+    59500).  This function adds multiples of 10000 until the value falls within
+    the plausible range [40000, 70000].  When multiple candidates are valid, the
+    outburst date (if available) is used to pick the value nearest to the
+    nova's timeline; otherwise the value closest to the current epoch wins.
+
+    Returns the (possibly corrected) MJD value unchanged when it is already
+    within range.
+    """
+    if mjd >= _MJD_FLOOR:
+        return mjd
+
+    # Build candidate list by adding multiples of _MJD_STEP.
+    candidates: list[float] = []
+    shifted = mjd
+    while shifted < _MJD_CEILING:
+        shifted += _MJD_STEP
+        if _MJD_FLOOR <= shifted <= _MJD_CEILING:
+            candidates.append(shifted)
+
+    if not candidates:
+        # No candidate falls in the valid range — pass through unchanged.
+        return mjd
+
+    # Pick the best candidate.
+    if outburst_mjd is not None:
+        # Prefer the candidate closest to outburst that lies within the
+        # plausible observation window.
+        windowed = [
+            c
+            for c in candidates
+            if (outburst_mjd - _OUTBURST_WINDOW_BEFORE)
+            <= c
+            <= (outburst_mjd + _OUTBURST_WINDOW_AFTER)
+        ]
+        best = min(windowed, key=lambda c: abs(c - outburst_mjd)) if windowed else max(candidates)
+    else:
+        # No outburst date — choose the value closest to the current epoch.
+        # MJD 60676 ≈ 2025-01-01; using a round reference avoids time.time()
+        # coupling while still preferring modern-era observations.
+        _CURRENT_EPOCH_MJD: float = 60676.0
+        best = min(candidates, key=lambda c: abs(c - _CURRENT_EPOCH_MJD))
+
+    _log.warning(
+        "Corrected truncated MJD: %.4f → %.4f",
+        mjd,
+        best,
+        extra={"nova_id": nova_name, "row_number": row_number},
+    )
+    return best
 
 
 # ---------------------------------------------------------------------------

@@ -103,6 +103,7 @@ def generate_bundle_zip(
                         extra={
                             "nova_id": nova_id,
                             "data_product_id": dp_id,
+                            "s3_key": s3_key,
                             "error": str(exc),
                         },
                     )

@@ -36,8 +36,6 @@ export interface SpectraViewerProps {
 }
 
 type EpochFormat = 'dpo' | 'mjd' | 'calendar';
-type TemporalScale = 'log' | 'linear';
-
 /** The three spectral feature groups from ADR-013. */
 type FeatureGroup = 'fe2' | 'hen' | 'nebular';
 
@@ -156,19 +154,6 @@ function assignColor(sortIndex: number, totalCount: number, isDense: boolean): s
 }
 
 // ── Helpers: temporal ─────────────────────────────────────────────────────────
-
-function computeDefaultScale(epochValues: number[]): TemporalScale {
-  if (epochValues.length < 2) return 'linear';
-  const sorted = [...epochValues].sort((a, b) => a - b);
-  const totalSpan = sorted[sorted.length - 1] - sorted[0];
-  if (totalSpan === 0) return 'linear';
-  let maxGap = 0;
-  for (let i = 1; i < sorted.length; i++) {
-    maxGap = Math.max(maxGap, sorted[i] - sorted[i - 1]);
-  }
-  if (maxGap / totalSpan > 0.5) return 'log';
-  return epochValues.length > 8 ? 'log' : 'linear';
-}
 
 function selectRepresentativeSubset(
   spectra: SpectrumRecord[],
@@ -455,16 +440,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
   const [renderError, setRenderError] = useState(false);
   const hasDpo = data.outburst_mjd !== null;
 
-  const autoDefaults = useMemo(() => {
-    const sorted = [...data.spectra].sort((a, b) => a.epoch_mjd - b.epoch_mjd);
-    const epochValues = sorted.map((s) =>
-      hasDpo && s.days_since_outburst !== null ? s.days_since_outburst : s.epoch_mjd
-    );
-    return { scale: computeDefaultScale(epochValues) };
-  }, [data, hasDpo]);
-
   const [epochFormat, setEpochFormat] = useState<EpochFormat>(hasDpo ? 'dpo' : 'mjd');
-  const [temporalScale, setTemporalScale] = useState<TemporalScale>(autoDefaults.scale);
   const [selectedSpectrumId, setSelectedSpectrumId] = useState<string | null>(null);
   const [logFluxY, setLogFluxY] = useState(false);
 
@@ -505,14 +481,14 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
   const plotData = useMemo(() => {
     try {
       return buildPlotData(
-        data, epochFormat, temporalScale,
+        data, epochFormat,
         selectedSpectrumId, logFluxY, activeFeatureGroups,
       );
     } catch {
       setRenderError(true);
       return null;
     }
-  }, [data, epochFormat, temporalScale, selectedSpectrumId, logFluxY, activeFeatureGroups]);
+  }, [data, epochFormat, selectedSpectrumId, logFluxY, activeFeatureGroups]);
 
   if (renderError || plotData === null) {
     return <ErrorState onRetry={onRetry} />;
@@ -546,20 +522,6 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
               },
               { value: 'mjd', label: 'MJD' },
               { value: 'calendar', label: 'Calendar' },
-            ]}
-          />
-        </div>
-
-        {/* Temporal scale */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Scale</span>
-          <ToggleGroup<TemporalScale>
-            ariaLabel="Temporal scale"
-            value={temporalScale}
-            onChange={setTemporalScale}
-            options={[
-              { value: 'linear', label: 'Linear' },
-              { value: 'log', label: 'Log' },
             ]}
           />
         </div>
@@ -611,7 +573,6 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
 function buildPlotData(
   data: SpectraArtifact,
   epochFormat: EpochFormat,
-  temporalScale: TemporalScale,
   selectedSpectrumId: string | null,
   logFluxY: boolean,
   activeFeatureGroups: Set<FeatureGroup>,
@@ -750,21 +711,9 @@ function buildPlotData(
 
   // ── Waterfall mode ──────────────────────────────────────────────────────
 
-  const displayEpochs = displaySpectra.map(epochKey);
-  const minEpoch = Math.min(...displayEpochs);
-  const baselines = displayEpochs.map((e) => {
-    const rel = effectiveFormat === 'dpo' ? e : e - minEpoch + 1;
-    return temporalScale === 'log' ? Math.log10(Math.max(rel, 0.1)) : rel;
-  });
-
-  let minGap = Infinity;
-  const sortedBaselines = [...baselines].sort((a, b) => a - b);
-  for (let i = 1; i < sortedBaselines.length; i++) {
-    const gap = sortedBaselines[i] - sortedBaselines[i - 1];
-    if (gap > 0) minGap = Math.min(minGap, gap);
-  }
-  if (!isFinite(minGap) || minGap === 0) minGap = 1;
-  const amp = minGap * 0.78;
+  // Evenly-spaced baselines — oldest at bottom (index 0), newest at top.
+  const baselines = preparedSpectra.map((_, idx) => idx);
+  const amp = 0.78; // Each lane is 1 unit; features fill 78% of it
 
   preparedSpectra.forEach((ps) => {
     const spectrum = ps.record;
@@ -807,8 +756,8 @@ function buildPlotData(
   });
 
   // ── Feature markers (waterfall mode) ──────────────────────────────────
-  const waterfallYMin = Math.min(...baselines) - amp * 0.5;
-  const waterfallYMax = Math.max(...baselines) + amp * 1.5;
+  const waterfallYMin = -0.5;
+  const waterfallYMax = preparedSpectra.length - 0.5 + amp;
   addFeatureMarkers(
     activeFeatureGroups, traces, shapes,
     globalWlMin, globalWlMax,
@@ -830,7 +779,7 @@ function buildPlotData(
       showticklabels: false,
       gridcolor: 'var(--color-border-subtle)',
       zerolinecolor: 'var(--color-border-subtle)',
-      range: [waterfallYMin, waterfallYMax],
+      range: [-0.5, preparedSpectra.length - 0.5],
     },
     annotations: allAnnotations,
     shapes,

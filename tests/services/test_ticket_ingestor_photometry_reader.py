@@ -24,6 +24,7 @@ from ticket_ingestor.photometry_reader import (
     _extract_fields,
     _resolve_band,
     _RowError,
+    _validate_mjd,
     read_photometry_csv,
 )
 
@@ -811,3 +812,51 @@ class TestRadioRegime:
             registry=_REGISTRY,
         )
         assert result.rows[0].row.flux_density_unit == FluxDensityUnit.mjy
+
+
+# ===========================================================================
+# Truncated MJD validation
+# ===========================================================================
+
+
+class TestValidateMjd:
+    def test_4digit_corrected_with_outburst_date(self) -> None:
+        """4-digit MJD 9500 with outburst ~56000 should correct to 59500."""
+        result = _validate_mjd(
+            mjd=9500.1234,
+            outburst_mjd=56000.0,
+            nova_name="V1674 Her",
+            row_number=1,
+        )
+        assert result == pytest.approx(59500.1234)
+
+    def test_4digit_corrected_closest_to_present_without_outburst(self) -> None:
+        """Without outburst date, pick the largest valid candidate (closest to now)."""
+        result = _validate_mjd(
+            mjd=9500.0,
+            outburst_mjd=None,
+            nova_name="V1674 Her",
+            row_number=1,
+        )
+        # 49500 and 59500 are both in range; 59500 is closest to present.
+        assert result == pytest.approx(59500.0)
+
+    def test_valid_5digit_passes_unchanged(self) -> None:
+        """A normal 5-digit MJD in range should not be altered."""
+        result = _validate_mjd(
+            mjd=59400.5,
+            outburst_mjd=56000.0,
+            nova_name="V1674 Her",
+            row_number=1,
+        )
+        assert result == pytest.approx(59400.5)
+
+    def test_mjd_at_floor_not_corrected(self) -> None:
+        """MJD exactly at the floor (40000) is valid and should not be corrected."""
+        result = _validate_mjd(
+            mjd=40000.0,
+            outburst_mjd=None,
+            nova_name="RS Oph",
+            row_number=1,
+        )
+        assert result == pytest.approx(40000.0)
