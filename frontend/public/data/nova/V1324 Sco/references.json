@@ -1,0 +1,343 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-04-05T15:45:00Z",
+  "nova_id": "79f0e89e-2ab6-487c-96c6-9d681b935192",
+  "references": [
+    {
+      "bibcode": "2012AAN...461....1W",
+      "title": "Nova Scorpii 2012 = MOA 2012 BLG-320",
+      "authors": [
+        "Waagen, Elizabeth O."
+      ],
+      "year": 2012,
+      "doi": null,
+      "arxiv_id": null,
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2012AAN...461....1W"
+    },
+    {
+      "bibcode": "2012ATel.4157....1W",
+      "title": "MOA 2012 BLG-320: Discovery and Observations of a Nova Candidate Towards the Galactic Bulge",
+      "authors": [
+        "Wagner, R. M.",
+        "Dong, S.",
+        "Bensby, T.",
+        "Prieto, J.",
+        "Bond, I.",
+        "Tristram, P.",
+        "Bennett, D.",
+        "Wada, K.",
+        "Sumi, T.",
+        "Gould, A.",
+        "Starrfield, S."
+      ],
+      "year": 2012,
+      "doi": null,
+      "arxiv_id": null,
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2012ATel.4157....1W"
+    },
+    {
+      "bibcode": "2012CBET.3136....1W",
+      "title": "Nova Scorpii 2012",
+      "authors": [
+        "Wagner, R. M.",
+        "Dong, S.",
+        "Bensby, T.",
+        "Prieto, J.",
+        "Bond, I.",
+        "Tristram, P.",
+        "Bennett, D.",
+        "Wada, K.",
+        "Sumi, T.",
+        "Gould, A.",
+        "Starrfield, S."
+      ],
+      "year": 2012,
+      "doi": null,
+      "arxiv_id": null,
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2012CBET.3136....1W"
+    },
+    {
+      "bibcode": "2013ATel.5541....1P",
+      "title": "Non-detection of V1324 Sco (Nova Sco 2012) by the Swift-XRT",
+      "authors": [
+        "Page, K. L.",
+        "Osborne, J. P."
+      ],
+      "year": 2013,
+      "doi": null,
+      "arxiv_id": null,
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2013ATel.5541....1P"
+    },
+    {
+      "bibcode": "2014MNRAS.442..713M",
+      "title": "Shocks in nova outflows - I. Thermal emission",
+      "authors": [
+        "Metzger, Brian D.",
+        "Hasco\u00ebt, Romain",
+        "Vurm, Indrek",
+        "Beloborodov, Andrei M.",
+        "Chomiuk, Laura",
+        "Sokoloski, J. L.",
+        "Nelson, Thomas"
+      ],
+      "year": 2014,
+      "doi": "10.1093/mnras/stu844",
+      "arxiv_id": "1403.1579",
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2014MNRAS.442..713M"
+    },
+    {
+      "bibcode": "2015ApJ...809..160F",
+      "title": "Distance and Reddening of the Enigmatic Gamma-ray-Detected Nova V1324 Sco",
+      "authors": [
+        "Finzell, Thomas",
+        "Chomiuk, Laura",
+        "Munari, Ulisse",
+        "Walter, Frederick M."
+      ],
+      "year": 2015,
+      "doi": "10.1088/0004-637X/809/2/160",
+      "arxiv_id": "1506.04953",
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2015ApJ...809..160F"
+    },
+    {
+      "bibcode": "2015IBVS.6139....1M",
+      "title": "Photometric evolution and peculiar dust formation in the gamma-ray Nova Sco 2012 (V1324 Sco)",
+      "authors": [
+        "Munari, U.",
+        "Walter, F. M.",
+        "Henden, A.",
+        "Dallaporta, S.",
+        "Finzell, T.",
+        "Chomiuk, L."
+      ],
+      "year": 2015,
+      "doi": null,
+      "arxiv_id": null,
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2015IBVS.6139....1M"
+    },
+    {
+      "bibcode": "2015MNRAS.450.2739M",
+      "title": "Gamma-ray novae as probes of relativistic particle acceleration at non-relativistic shocks",
+      "authors": [
+        "Metzger, B. D.",
+        "Finzell, T.",
+        "Vurm, I.",
+        "Hasco\u00ebt, R.",
+        "Beloborodov, A. M.",
+        "Chomiuk, L."
+      ],
+      "year": 2015,
+      "doi": "10.1093/mnras/stv742",
+      "arxiv_id": "1501.05308",
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2015MNRAS.450.2739M"
+    },
+    {
+      "bibcode": "2015arXiv150606031M",
+      "title": "Photometric evolution and peculiar dust formation in the gamma-ray Nova Sco 2012 (V1324 Sco)",
+      "authors": [
+        "Munari, U.",
+        "Walter, F. M.",
+        "Henden, A.",
+        "Dallaporta, S.",
+        "Finzell, T.",
+        "Chomiuk, L."
+      ],
+      "year": 2015,
+      "doi": "10.48550/arXiv.1506.06031",
+      "arxiv_id": "1506.06031",
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2015arXiv150606031M"
+    },
+    {
+      "bibcode": "2017PhDT........41F",
+      "title": "A Detailed Study of the Gamma-Ray Nova V1324 Sco",
+      "authors": [
+        "Finzell, Thomas Michael Broen"
+      ],
+      "year": 2017,
+      "doi": null,
+      "arxiv_id": null,
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2017PhDT........41F"
+    },
+    {
+      "bibcode": "2018A&A...612A..38M",
+      "title": "Gamma-ray emission from internal shocks in novae",
+      "authors": [
+        "Martin, P.",
+        "Dubus, G.",
+        "Jean, P.",
+        "Tatischeff, V.",
+        "Dosne, C."
+      ],
+      "year": 2018,
+      "doi": "10.1051/0004-6361/201731692",
+      "arxiv_id": "1710.05515",
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2018A&A...612A..38M"
+    },
+    {
+      "bibcode": "2018ApJ...852..108F",
+      "title": "A Detailed Observational Analysis of V1324 Sco, the Most Gamma-Ray-luminous Classical Nova to Date",
+      "authors": [
+        "Finzell, Thomas",
+        "Chomiuk, Laura",
+        "Metzger, Brian D.",
+        "Walter, Frederick M.",
+        "Linford, Justin D.",
+        "Mukai, Koji",
+        "Nelson, Thomas",
+        "Weston, Jennifer H. S.",
+        "Zheng, Yong",
+        "Sokoloski, Jennifer L.",
+        "Mioduszewski, Amy",
+        "Rupen, Michael P.",
+        "Dong, Subo",
+        "Starrfield, Sumner",
+        "Cheung, C. C.",
+        "Woodward, Charles E.",
+        "Taylor, Gregory B.",
+        "Bohlsen, Terry",
+        "Buil, Christian",
+        "Prieto, Jose",
+        "Wagner, R. Mark",
+        "Bensby, Thomas",
+        "Bond, I. A.",
+        "Sumi, T.",
+        "Bennett, D. P.",
+        "Abe, F.",
+        "Koshimoto, N.",
+        "Suzuki, D.",
+        "Tristram, P. J.",
+        "Christie, Grant W.",
+        "Natusch, Tim",
+        "McCormick, Jennie",
+        "Yee, Jennifer",
+        "Gould, Andy"
+      ],
+      "year": 2018,
+      "doi": "10.3847/1538-4357/aaa12a",
+      "arxiv_id": "1701.03094",
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2018ApJ...852..108F"
+    },
+    {
+      "bibcode": "2018yCat..18520108F",
+      "title": "VizieR Online Data Catalog: Multiwavelength obs. of gamma-ray NOVA Sco 2012 (Finzell+, 2018)",
+      "authors": [
+        "Finzell, T.",
+        "Chomiuk, L.",
+        "Metzger, B. D.",
+        "Walter, F. M.",
+        "Linford, J. D.",
+        "Mukai, K.",
+        "Nelson, T.",
+        "Weston, J. H. S.",
+        "Zheng, Y.",
+        "Sokoloski, J. L.",
+        "Mioduszewski, A.",
+        "Rupen, M. P.",
+        "Dong, S.",
+        "Starrfield, S.",
+        "Cheung, C. C.",
+        "Woodward, C. E.",
+        "Taylor, G. B.",
+        "Bohlsen, T.",
+        "Buil, C.",
+        "Prieto, J.",
+        "Wagner, R. M.",
+        "Bensby, T.",
+        "Bond, I. A.",
+        "Sumi, T.",
+        "Bennett, D. P.",
+        "Abe, F.",
+        "Koshimoto, N.",
+        "Suzuki, D.",
+        "Tristram, P. J.",
+        "Christie, G. W.",
+        "Natusch, T.",
+        "McCormick, J.",
+        "Yee, J.",
+        "Gould, A."
+      ],
+      "year": 2018,
+      "doi": "10.26093/cds/vizier.18520108",
+      "arxiv_id": null,
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2018yCat..18520108F"
+    },
+    {
+      "bibcode": "2020ApJ...903..153F",
+      "title": "Erratum: \"A Detailed Observational Analysis of V1324 Sco, the Most Gamma-Ray-luminous Classical Nova to Date\" (2018, ApJ, 852, 108)",
+      "authors": [
+        "Finzell, Thomas",
+        "Chomiuk, Laura",
+        "Metzger, Brian D.",
+        "Walter, Frederick M.",
+        "Linford, Justin D.",
+        "Mukai, Koji",
+        "Nelson, Thomas",
+        "Weston, Jennifer H. S.",
+        "Zheng, Yong",
+        "Sokoloski, Jennifer L.",
+        "Mioduszewski, Amy",
+        "Rupen, Michael P.",
+        "Dong, Subo",
+        "Starrfield, Sumner",
+        "Cheung, C. C.",
+        "Woodward, Charles E.",
+        "Taylor, Gregory B.",
+        "Bohlsen, Terry",
+        "Buil, Christian",
+        "Prieto, Jose",
+        "Wagner, R. Mark",
+        "Bensby, Thomas",
+        "Bond, I. A.",
+        "Sumi, T.",
+        "Bennett, D. P.",
+        "Abe, F.",
+        "Koshimoto, N.",
+        "Suzuki, D.",
+        "Tristram, P. J.",
+        "Christie, Grant W.",
+        "Natusch, Tim",
+        "McCormick, Jennie",
+        "Yee, Jennifer",
+        "Gould, Andy"
+      ],
+      "year": 2020,
+      "doi": "10.3847/1538-4357/abb6f1",
+      "arxiv_id": null,
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2020ApJ...903..153F"
+    },
+    {
+      "bibcode": "2021PhDT........45B",
+      "title": "Uncovering Shocking Mysteries Buried in the Ejecta of Classical Novae and Magnetars",
+      "authors": [
+        "Babul, Aliya Nur Virji"
+      ],
+      "year": 2021,
+      "doi": "10.7916/d6mf-yj52",
+      "arxiv_id": null,
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2021PhDT........45B"
+    },
+    {
+      "bibcode": "2021PhDT........46B",
+      "title": "Uncovering Shocking Mysteries Buried in the Ejecta of Classical Novae and Magnetars",
+      "authors": [
+        "Babul, Aliya Nur Virji"
+      ],
+      "year": 2021,
+      "doi": "10.7916/d6mf-yj52",
+      "arxiv_id": null,
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2021PhDT........46B"
+    },
+    {
+      "bibcode": "2023MNRAS.519.2680P",
+      "title": "An update on Fermi-LAT transients in the Galactic plane, including strong activity of Cygnus X-3 in mid-2020",
+      "authors": [
+        "Prokhorov, D. A.",
+        "Moraghan, A."
+      ],
+      "year": 2023,
+      "doi": "10.1093/mnras/stac3453",
+      "arxiv_id": "2209.12461",
+      "ads_url": "https://ui.adsabs.harvard.edu/abs/2023MNRAS.519.2680P"
+    }
+  ]
+}

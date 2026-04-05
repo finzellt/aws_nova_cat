@@ -1,83 +1,52 @@
 {
   "schema_version": "1.1",
-  "generated_at": "2026-03-22T00:00:00Z",
+  "generated_at": "2026-04-05T15:46:05Z",
   "stats": {
-    "nova_count": 6,
-    "spectra_count": 91,
-    "photometry_count": 3420
+    "nova_count": 2,
+    "spectra_count": 70,
+    "photometry_count": 576
   },
   "novae": [
     {
-      "nova_id": "a1b2c3d4-e5f6-7890-ab12-cd34ef567890",
-      "primary_name": "V1674 Her",
-      "aliases": ["Nova Her 2021"],
-      "ra": "18:57:30.98",
-      "dec": "+16:53:39.6",
-      "discovery_date": "2021-06-12",
-      "spectra_count": 31,
-      "photometry_count": 1200,
-      "references_count": 8,
-      "has_sparkline": false
-    },
-    {
-      "nova_id": "b2c3d4e5-f6a7-8901-bc23-de45fa678901",
-      "primary_name": "V1405 Cas",
-      "aliases": ["Nova Cas 2021"],
-      "ra": "23:24:47.68",
-      "dec": "+61:11:14.8",
-      "discovery_date": "2021-03-18",
-      "spectra_count": 18,
-      "photometry_count": 740,
-      "references_count": 5,
-      "has_sparkline": false
-    },
-    {
-      "nova_id": "c3d4e5f6-a7b8-9012-cd34-ef56ab789012",
-      "primary_name": "RS Oph",
-      "aliases": ["Nova Oph 2021", "HD 162214"],
-      "ra": "17:50:13.19",
-      "dec": "-06:42:28.5",
-      "discovery_date": "2021-08-00",
-      "spectra_count": 24,
-      "photometry_count": 980,
-      "references_count": 14,
-      "has_sparkline": true
-    },
-    {
-      "nova_id": "d4e5f6a7-b8c9-0123-de45-fa67bc890123",
-      "primary_name": "V906 Car",
-      "aliases": ["Nova Car 2018", "ASASSN-18fv"],
-      "ra": "10:36:15.44",
-      "dec": "-59:35:55.2",
-      "discovery_date": "2018-03-00",
-      "spectra_count": 9,
-      "photometry_count": 380,
-      "references_count": 6,
-      "has_sparkline": false
-    },
-    {
-      "nova_id": "e5f6a7b8-c9d0-1234-ef56-ab78cd901234",
-      "primary_name": "V838 Her",
-      "aliases": ["Nova Her 1991"],
-      "ra": "18:46:31.58",
-      "dec": "+12:35:41.0",
-      "discovery_date": null,
-      "spectra_count": 5,
-      "photometry_count": 120,
-      "references_count": 3,
-      "has_sparkline": false
-    },
-    {
-      "nova_id": "3f2a1b4c-8d5e-4f6a-9b2c-1d7e3a8f5c2b",
-      "primary_name": "GK Per",
-      "aliases": ["Nova Per 1901", "V650 Per"],
-      "ra": "03:31:11.82",
-      "dec": "+43:54:16.8",
-      "discovery_date": "1901-02-22",
-      "spectra_count": 4,
+      "nova_id": "d5e88804-eb74-4f7b-8510-667971665fae",
+      "primary_name": "V1369 Cen",
+      "aliases": [
+        "TIC 208504429",
+        "4FGL J1353.3-5910",
+        "Gaia DR3 5870613848610810880",
+        "NOVA Cen 2013",
+        "V1369 Cen",
+        "PNV J13544700-5909080",
+        "2MASS J13544534-5909040",
+        "USNO-B1.0 0308-00442031",
+        "UCAC4 155-128029",
+        "Gaia DR2 5870613848610810880"
+      ],
+      "ra": "13:54:45.35",
+      "dec": "-59:09:04.1",
+      "discovery_date": "2013-12-00",
+      "spectra_count": 68,
       "photometry_count": 0,
-      "references_count": 4,
+      "references_count": 40,
       "has_sparkline": false
+    },
+    {
+      "nova_id": "79f0e89e-2ab6-487c-96c6-9d681b935192",
+      "primary_name": "V1324 Sco",
+      "aliases": [
+        "Gaia DR3 4043499439062100096",
+        "NOVA Sco 2012",
+        "MOA  2012-BLG-320",
+        "V1324 Sco",
+        "Gaia DR2 4043499439062100096"
+      ],
+      "ra": "17:50:53.91",
+      "dec": "-32:37:21.1",
+      "discovery_date": "2012-06-00",
+      "spectra_count": 2,
+      "photometry_count": 576,
+      "references_count": 17,
+      "has_sparkline": true
     }
   ]
 }
