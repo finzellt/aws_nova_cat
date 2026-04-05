@@ -166,9 +166,8 @@ const MS_PER_DAY = 86400000;
 
 /**
  * Convert an MJD value to a JavaScript Date object.
- * Used internally for calendar date formatting.
  */
-function mjdToDate(mjd: number): Date {
+export function mjdToDate(mjd: number): Date {
   const unixMs = (mjd - MJD_UNIX_EPOCH) * MS_PER_DAY;
   return new Date(unixMs);
 }

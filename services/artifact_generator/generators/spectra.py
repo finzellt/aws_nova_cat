@@ -222,7 +222,9 @@ def _process_spectrum_stage1(
             extra={
                 "operation": "s3_read_csv",
                 "duration_ms": round(_s3_duration_ms, 1),
+                "nova_id": nova_id,
                 "data_product_id": data_product_id,
+                "s3_key": s3_key,
             },
         )
     except Exception as exc:

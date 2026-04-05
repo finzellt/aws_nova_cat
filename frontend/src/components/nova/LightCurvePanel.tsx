@@ -35,6 +35,7 @@ import {
   getTimeValue,
   getTimeAxisLabel,
   shouldDefaultToLogTime,
+  mjdToDate,
   type EpochFormat,
 } from '@/lib/photometry';
 
@@ -515,17 +516,20 @@ function LightCurvePlot({
 
       // ── Detections ──────────────────────────────────────────────────
       if (group.detections.length > 0) {
-        const x: number[] = [];
+        const x: (number | string)[] = [];
         const y: number[] = [];
         const errorY: number[] = [];
         const hoverTexts: string[] = [];
 
         for (const obs of group.detections) {
-          const timeVal = getTimeValue(obs, epochFormat);
           const { value, error } = getObservationValue(obs, regimeId);
           if (value == null) continue;
 
-          x.push(timeVal);
+          if (epochFormat === 'calendar') {
+            x.push(mjdToDate(obs.epoch_mjd).toISOString());
+          } else {
+            x.push(getTimeValue(obs, epochFormat));
+          }
           y.push(value + vOffset);
           errorY.push(error ?? 0);
 
@@ -570,16 +574,19 @@ function LightCurvePlot({
 
       // ── Upper limits ────────────────────────────────────────────────
       if (group.upperLimits.length > 0) {
-        const x: number[] = [];
+        const x: (number | string)[] = [];
         const y: number[] = [];
         const hoverTexts: string[] = [];
 
         for (const obs of group.upperLimits) {
-          const timeVal = getTimeValue(obs, epochFormat);
           const { value } = getObservationValue(obs, regimeId);
           if (value == null) continue;
 
-          x.push(timeVal);
+          if (epochFormat === 'calendar') {
+            x.push(mjdToDate(obs.epoch_mjd).toISOString());
+          } else {
+            x.push(getTimeValue(obs, epochFormat));
+          }
           y.push(value + vOffset);
 
           const timeLabel = formatEpoch(obs, epochFormat);
@@ -639,7 +646,7 @@ function LightCurvePlot({
           text: getTimeAxisLabel(epochFormat),
           font: { family: 'DM Sans, sans-serif', size: 12, color: '#5A554F' },
         },
-        type: timeScaleLog ? 'log' : 'linear',
+        type: epochFormat === 'calendar' ? 'date' : (timeScaleLog ? 'log' : 'linear'),
         gridcolor: '#E2DED6',
         gridwidth: 1,
         griddash: 'dot',

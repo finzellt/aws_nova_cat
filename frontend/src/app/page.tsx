@@ -13,6 +13,7 @@
 import Link from 'next/link';
 import { CatalogTable } from '@/components/catalog/CatalogTable';
 import { getCatalogData } from '@/lib/catalog';
+import { resolveRelease } from '@/lib/dataClient';
 import type { CatalogStats } from '@/types/catalog';
 
 // ── Stats bar ────────────────────────────────────────────────────────────────
@@ -60,7 +61,10 @@ function StatsBar({ stats }: { stats: CatalogStats }) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function HomePage() {
-  const { stats, novae } = await getCatalogData();
+  const [{ stats, novae }, releaseId] = await Promise.all([
+    getCatalogData(),
+    resolveRelease().catch(() => 'local'),
+  ]);
 
   /*
    * The homepage preview table shows the top 10 novae by spectra count —
@@ -124,7 +128,7 @@ export default async function HomePage() {
 
         {previewNovae.length > 0 ? (
           <>
-            <CatalogTable novae={previewNovae} preview />
+            <CatalogTable novae={previewNovae} releaseId={releaseId} preview />
             {/*
              * "View Full Catalog" link below the table as well, per ADR-011.
              * The one in the heading is the primary affordance; this one is
