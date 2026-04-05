@@ -32,6 +32,7 @@ from contracts.models.entities import (
     BandResolutionType,
     DataOrigin,
     DataRights,
+    FluxDensityUnit,
     PhotometryRow,
     QualityFlag,
     SpectralCoordUnit,
@@ -95,6 +96,13 @@ _EXCLUDED_ENTRY = _MockEntry(
     band_id="Generic_EXCLUDED_BAND",
     regime="optical",
 )
+_RADIO_C_ENTRY = _MockEntry(
+    band_id="Radio_C",
+    band_name="C band",
+    regime="radio",
+    lambda_eff=None,
+    spectral_coord_unit=SpectralCoordUnit.ghz,
+)
 
 
 class _MockRegistry:
@@ -103,11 +111,13 @@ class _MockRegistry:
     _ALIAS_INDEX: dict[str, str] = {
         "V": "Generic_V",
         "EXCLUDED_BAND": "Generic_EXCLUDED_BAND",
+        "C": "Radio_C",
     }
     _ENTRIES: dict[str, _MockEntry] = {
         "Generic_V": _V_ENTRY,
         "Generic_Gg": _GENERIC_GG_ENTRY,
         "Generic_EXCLUDED_BAND": _EXCLUDED_ENTRY,
+        "Radio_C": _RADIO_C_ENTRY,
     }
     _EXCLUDED: set[str] = {"Generic_EXCLUDED_BAND"}
 
@@ -342,8 +352,8 @@ class TestExtractFields:
     def test_all_columns_present(self, v4739_ticket: PhotometryTicket) -> None:
         raw = _extract_fields(self._make_row(), v4739_ticket, row_number=1)
         assert raw.epoch_raw == "2452148.839"
-        assert raw.magnitude_raw == "7.46"
-        assert raw.mag_err_raw == "0.009"
+        assert raw.flux_value_raw == "7.46"
+        assert raw.flux_error_raw == "0.009"
         assert raw.filter_string == "V"
         assert raw.upper_limit is False
         assert "Mt John" in (raw.telescope or "")
@@ -660,3 +670,144 @@ class TestReadPhotometryCsv:
         assert row.band_name == "Generic_Gg"  # fallback: band_name was None
         assert row.band_resolution_type == BandResolutionType.generic_fallback
         assert row.band_resolution_confidence == BandResolutionConfidence.low
+
+
+# ===========================================================================
+# Radio regime ingestion
+# ===========================================================================
+
+
+@pytest.fixture()
+def radio_ticket() -> PhotometryTicket:
+    """Minimal PhotometryTicket for radio regime data."""
+    return PhotometryTicket(
+        object_name="V1674_Her",
+        wavelength_regime="radio",
+        time_system="MJD",
+        time_units="days",
+        flux_units="mJy",
+        flux_error_units="mJy",
+        filter_system="C",
+        magnitude_system=None,
+        telescope="VLA",
+        observer=None,
+        reference="Test radio ref (2024)",
+        bibcode="2024ApJ...000....0T",
+        ticket_status="completed",
+        assumed_outburst_date=None,
+        data_filename="V1674_Her_radio.csv",
+        time_col=0,
+        flux_col=1,
+        flux_error_col=2,
+        filter_col=None,
+        upper_limit_flag_col=None,
+    )
+
+
+class TestRadioRegime:
+    def test_radio_row_populates_flux_density(
+        self, tmp_path: Path, radio_ticket: PhotometryTicket
+    ) -> None:
+        """Radio data should populate flux_density fields, not magnitude."""
+        csv_path = tmp_path / radio_ticket.data_filename
+        with open(csv_path, "w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["59400.5", "1.23", "0.05"])
+        result = read_photometry_csv(
+            csv_path=csv_path,
+            ticket=radio_ticket,
+            nova_id=_NOVA_ID,
+            primary_name=_PRIMARY_NAME,
+            ra_deg=_RA_DEG,
+            dec_deg=_DEC_DEG,
+            registry=_REGISTRY,
+        )
+        assert len(result.failures) == 0
+        assert len(result.rows) == 1
+        row = result.rows[0].row
+        assert row.flux_density == pytest.approx(1.23)
+        assert row.flux_density_err == pytest.approx(0.05)
+        assert row.magnitude is None
+        assert row.mag_err is None
+
+    def test_radio_flux_density_unit_from_ticket(
+        self, tmp_path: Path, radio_ticket: PhotometryTicket
+    ) -> None:
+        """flux_density_unit should be set from ticket.flux_units."""
+        csv_path = tmp_path / radio_ticket.data_filename
+        with open(csv_path, "w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["59400.5", "1.23", "0.05"])
+        result = read_photometry_csv(
+            csv_path=csv_path,
+            ticket=radio_ticket,
+            nova_id=_NOVA_ID,
+            primary_name=_PRIMARY_NAME,
+            ra_deg=_RA_DEG,
+            dec_deg=_DEC_DEG,
+            registry=_REGISTRY,
+        )
+        row = result.rows[0].row
+        assert row.flux_density_unit == FluxDensityUnit.mjy
+
+    def test_radio_flux_density_unit_jy(
+        self, tmp_path: Path, radio_ticket: PhotometryTicket
+    ) -> None:
+        """Jy flux_units should map to FluxDensityUnit.jy."""
+        ticket = radio_ticket.model_copy(update={"flux_units": "Jy"})
+        csv_path = tmp_path / ticket.data_filename
+        with open(csv_path, "w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["59400.5", "0.00123", "0.00005"])
+        result = read_photometry_csv(
+            csv_path=csv_path,
+            ticket=ticket,
+            nova_id=_NOVA_ID,
+            primary_name=_PRIMARY_NAME,
+            ra_deg=_RA_DEG,
+            dec_deg=_DEC_DEG,
+            registry=_REGISTRY,
+        )
+        assert result.rows[0].row.flux_density_unit == FluxDensityUnit.jy
+
+    def test_radio_flux_density_unit_ujy(
+        self, tmp_path: Path, radio_ticket: PhotometryTicket
+    ) -> None:
+        """μJy flux_units should map to FluxDensityUnit.ujy."""
+        ticket = radio_ticket.model_copy(update={"flux_units": "μJy"})
+        csv_path = tmp_path / ticket.data_filename
+        with open(csv_path, "w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["59400.5", "1230.0", "50.0"])
+        result = read_photometry_csv(
+            csv_path=csv_path,
+            ticket=ticket,
+            nova_id=_NOVA_ID,
+            primary_name=_PRIMARY_NAME,
+            ra_deg=_RA_DEG,
+            dec_deg=_DEC_DEG,
+            registry=_REGISTRY,
+        )
+        assert result.rows[0].row.flux_density_unit == FluxDensityUnit.ujy
+
+    def test_radio_defaults_to_mjy_when_flux_units_none(
+        self, tmp_path: Path, radio_ticket: PhotometryTicket
+    ) -> None:
+        """When ticket.flux_units is unrecognisable, default to mJy."""
+        ticket = radio_ticket.model_copy(
+            update={"flux_units": "unknown_unit", "flux_error_units": "unknown_unit"}
+        )
+        csv_path = tmp_path / ticket.data_filename
+        with open(csv_path, "w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["59400.5", "1.23", "0.05"])
+        result = read_photometry_csv(
+            csv_path=csv_path,
+            ticket=ticket,
+            nova_id=_NOVA_ID,
+            primary_name=_PRIMARY_NAME,
+            ra_deg=_RA_DEG,
+            dec_deg=_DEC_DEG,
+            registry=_REGISTRY,
+        )
+        assert result.rows[0].row.flux_density_unit == FluxDensityUnit.mjy

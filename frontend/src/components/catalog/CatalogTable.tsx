@@ -44,6 +44,7 @@ import {
   Search,
 } from 'lucide-react';
 import type { NovaSummary } from '@/types/catalog';
+import { getArtifactUrl } from '@/lib/dataClient';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -153,6 +154,12 @@ export interface CatalogTableProps {
   novae: NovaSummary[];
 
   /**
+   * Active release ID from resolveRelease(). Used to construct sparkline
+   * artifact URLs. Falls back to "local" (dev-mode paths) when omitted.
+   */
+  releaseId?: string;
+
+  /**
    * When true, renders a condensed preview: no search bar, no pagination,
    * all passed rows visible. Used for the homepage preview table (ADR-011).
    * The caller is responsible for slicing `novae` to the desired row count.
@@ -163,6 +170,7 @@ export interface CatalogTableProps {
 
 export function CatalogTable({
   novae,
+  releaseId = 'local',
   preview = false,
   autoFocusSearch = false,
 }: CatalogTableProps): React.ReactElement {
@@ -301,25 +309,45 @@ export function CatalogTable({
         ),
       },
 
-      // ── Light curve sparkline (post-MVP placeholder) ───────────────────
-      // ADR-012: "Column slot present from launch with a — placeholder."
-      // When ADR-013 lands, this cell will render an <img> of sparkline.svg
-      // gated on row.original.has_sparkline.
+      // ── Light curve sparkline ────────────────────────────────────────
+      // Renders a sparkline SVG when available; em-dash placeholder otherwise.
+      // Path segment logic mirrors NovaPage: dev uses primary_name, prod uses nova_id.
       {
         id: 'light_curve',
         header: 'Light Curve',
         enableSorting: false,
-        cell: () => (
-          <span
-            className="text-[var(--color-text-disabled)]"
-            aria-label="Light curve not yet available"
-          >
-            —
-          </span>
-        ),
+        cell: ({ row }) => {
+          if (!row.original.has_sparkline) {
+            return (
+              <span
+                className="text-[var(--color-text-disabled)]"
+                aria-label="Light curve not yet available"
+              >
+                —
+              </span>
+            );
+          }
+          const pathSegment =
+            releaseId === 'local'
+              ? encodeURIComponent(row.original.primary_name)
+              : row.original.nova_id;
+          const src = getArtifactUrl(
+            releaseId,
+            `nova/${pathSegment}/sparkline.svg`,
+          );
+          return (
+            <img
+              src={src}
+              width={90}
+              height={55}
+              alt={`Light curve sparkline for ${row.original.primary_name}`}
+              className="block"
+            />
+          );
+        },
       },
     ],
-    [],
+    [releaseId],
   );
 
   // ── Table instance ───────────────────────────────────────────────────────

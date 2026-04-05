@@ -282,8 +282,7 @@ class TestGenerateBundleZip:
         assert result["spectra_skipped"] == 0
         assert result["photometry_rows"] == 2
         assert result["references_count"] == 1
-        assert result["s3_key"].startswith(f"nova/{_NOVA_ID}/GK-Per_bundle_")
-        assert result["s3_key"].endswith(".zip")
+        assert result["s3_key"] == f"nova/{_NOVA_ID}/bundle.zip"
 
         # Verify ZIP was uploaded and contains expected files
         obj = s3.get_object(Bucket=_PUBLIC_BUCKET, Key=result["s3_key"])
@@ -394,8 +393,7 @@ class TestGenerateBundleZip:
             public_bucket=_PUBLIC_BUCKET,
             nova_context=ctx,
         )
-        assert result["s3_key"].startswith(f"nova/{_NOVA_ID}/GK-Per_bundle_")
-        assert result["s3_key"].endswith(".zip")
+        assert result["s3_key"] == f"nova/{_NOVA_ID}/bundle.zip"
 
     def test_bundle_filename_includes_date(self, aws: tuple[Any, Any]) -> None:
         table, s3 = aws

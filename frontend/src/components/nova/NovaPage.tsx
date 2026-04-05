@@ -244,11 +244,10 @@ export default function NovaPage({ identifier }: NovaPageProps) {
 
   const nova = novaState.status === 'success' ? novaState.data : null;
 
-  // Bundle download URL (§14.8). Derived from basePath (which already
-  // contains the correct path segment — display name in dev, UUID in prod).
-  const bundleHref = nova && basePath
-    ? `${basePath}/${nova.primary_name.replace(/\s+/g, '-')}_bundle.zip`
-    : '#';
+  // Bundle download URL (§14.8, DESIGN-003 OQ-5 resolved).  The S3 key
+  // is the stable name "bundle.zip"; the dated human-readable filename
+  // is delivered via Content-Disposition on the response.
+  const bundleHref = basePath ? `${basePath}/bundle.zip` : '#';
 
   return (
     <div className="py-8">

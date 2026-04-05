@@ -56,6 +56,10 @@ def generate_bundle_zip(
     now = generated_at_timestamp()
     date_str = datetime.now(UTC).strftime("%Y%m%d")
 
+    # S3 key uses a stable name so the frontend can construct the URL
+    # deterministically (resolves DESIGN-003 OQ-5).  The human-readable
+    # dated name is preserved via Content-Disposition.
+    bundle_s3_name = "bundle.zip"
     bundle_filename = f"{hyphenated}_bundle_{date_str}.zip"
 
     # Query spectra DataProducts (own DDB query — broader than spectra.json)
@@ -163,7 +167,9 @@ def generate_bundle_zip(
             bundle_files.append(bib_filename)
 
         # Upload ZIP to S3 under the release prefix (§12.4, §12.5).
-        s3_key = f"{s3_key_prefix}nova/{nova_id}/{bundle_filename}"
+        # Stable S3 key (bundle.zip) + dated Content-Disposition filename
+        # so browsers save the file with the human-readable name.
+        s3_key = f"{s3_key_prefix}nova/{nova_id}/{bundle_s3_name}"
         s3_client.upload_file(
             tmp_path,
             public_bucket,

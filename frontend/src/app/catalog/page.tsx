@@ -14,6 +14,7 @@
 
 import { CatalogTable } from '@/components/catalog/CatalogTable';
 import { getCatalogData } from '@/lib/catalog';
+import { resolveRelease } from '@/lib/dataClient';
 
 export const metadata = {
   title: 'Catalog — Open Nova Catalog',
@@ -22,7 +23,10 @@ export const metadata = {
 };
 
 export default async function CatalogPage() {
-  const { novae } = await getCatalogData();
+  const [{ novae }, releaseId] = await Promise.all([
+    getCatalogData(),
+    resolveRelease().catch(() => 'local'),
+  ]);
 
   return (
     <div className="py-10 flex flex-col gap-8">
@@ -48,7 +52,7 @@ export default async function CatalogPage() {
        * No `preview` prop: CatalogTable renders with its built-in search bar
        * and pagination controls (25 rows/page, ADR-010).
        */}
-      <CatalogTable novae={novae} />
+      <CatalogTable novae={novae} releaseId={releaseId} />
 
     </div>
   );

@@ -97,7 +97,7 @@ export default function ObjectSummary({ nova, bundleHref }: ObjectSummaryProps) 
             (a) => a.trim().toLowerCase() !== nova.primary_name.trim().toLowerCase(),
           );
           return filtered.length > 0 ? (
-            <p className="mt-1.5 text-xl italic text-[var(--color-text-tertiary)]">
+            <p className="mt-1.5 text-sm italic text-[var(--color-text-tertiary)]">
               <span className="not-italic text-[var(--color-text-secondary)]">Also known as: </span>
               {filtered.join(', ')}
             </p>
