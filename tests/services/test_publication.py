@@ -356,6 +356,79 @@ class TestCopyForward:
 
 
 # ===========================================================================
+# Phase 1.5 — Copy forward missing artifacts for swept novae
+# ===========================================================================
+
+
+class TestCopyForwardMissingArtifacts:
+    def test_partial_manifest_copies_missing(self) -> None:
+        """Artifacts not in generated_artifacts are copied from previous release."""
+        with mock_aws():
+            s3 = _make_s3()
+            prev = "20260329-140000"
+            _seed_pointer(s3, prev)
+            _seed_nova_artifacts(
+                s3,
+                prev,
+                _NOVA_A,
+                ["spectra.json", "references.json", "photometry.json", "nova.json"],
+            )
+
+            pub = ReleasePublisher(s3, _BUCKET)
+            pub.read_previous_pointer()
+
+            # Simulate that photometry.json and nova.json were freshly generated.
+            generated = {"photometry.json", "nova.json"}
+            result = pub.copy_forward_missing_artifacts(_NOVA_A, generated)
+
+            assert result == 2  # spectra.json + references.json copied
+
+            new_prefix = f"releases/{pub.release_id}/nova/{_NOVA_A}/"
+            keys = _list_keys(s3, new_prefix)
+            filenames = sorted(k.split("/")[-1] for k in keys)
+            assert filenames == ["references.json", "spectra.json"]
+
+    def test_bootstrap_returns_zero(self) -> None:
+        """No previous release → nothing to copy, no S3 calls."""
+        with mock_aws():
+            s3 = _make_s3()
+            pub = ReleasePublisher(s3, _BUCKET)
+            pub.read_previous_pointer()
+            assert pub.previous_release_id is None
+
+            result = pub.copy_forward_missing_artifacts(_NOVA_A, {"nova.json"})
+            assert result == 0
+
+    def test_all_generated_copies_nothing(self) -> None:
+        """When generated_artifacts covers everything, 0 copied."""
+        with mock_aws():
+            s3 = _make_s3()
+            prev = "20260329-140000"
+            _seed_pointer(s3, prev)
+            _seed_nova_artifacts(s3, prev, _NOVA_A, ["photometry.json", "nova.json"])
+
+            pub = ReleasePublisher(s3, _BUCKET)
+            pub.read_previous_pointer()
+
+            result = pub.copy_forward_missing_artifacts(_NOVA_A, {"photometry.json", "nova.json"})
+            assert result == 0
+
+    def test_new_nova_nothing_in_previous(self) -> None:
+        """Nova has no artifacts in the previous release — 0 copied, no errors."""
+        with mock_aws():
+            s3 = _make_s3()
+            prev = "20260329-140000"
+            _seed_pointer(s3, prev)
+            # No artifacts seeded for _NOVA_A.
+
+            pub = ReleasePublisher(s3, _BUCKET)
+            pub.read_previous_pointer()
+
+            result = pub.copy_forward_missing_artifacts(_NOVA_A, {"nova.json"})
+            assert result == 0
+
+
+# ===========================================================================
 # Phase 3 — Write catalog (§12.5)
 # ===========================================================================
 
