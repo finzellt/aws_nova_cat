@@ -227,12 +227,12 @@ class TestUploadSvgArtifact:
 
 
 class TestUploadBundleArtifact:
-    def test_writes_to_correct_key(self) -> None:
+    def test_writes_to_stable_key(self) -> None:
         with mock_aws():
             s3 = _make_s3()
             pub = ReleasePublisher(s3, _BUCKET)
-            pub.upload_bundle_artifact(_NOVA_A, "v1674-her_bundle_20260330.zip", b"PK\x03\x04fake")
-            key = f"releases/{pub.release_id}/nova/{_NOVA_A}/v1674-her_bundle_20260330.zip"
+            pub.upload_bundle_artifact(_NOVA_A, b"PK\x03\x04fake")
+            key = f"releases/{pub.release_id}/nova/{_NOVA_A}/bundle.zip"
             body = _get_object_body(s3, key)
             assert body == b"PK\x03\x04fake"
 
@@ -240,20 +240,33 @@ class TestUploadBundleArtifact:
         with mock_aws():
             s3 = _make_s3()
             pub = ReleasePublisher(s3, _BUCKET)
-            pub.upload_bundle_artifact(_NOVA_A, "bundle.zip", b"data")
+            pub.upload_bundle_artifact(_NOVA_A, b"data")
             key = f"releases/{pub.release_id}/nova/{_NOVA_A}/bundle.zip"
             head = s3.head_object(Bucket=_BUCKET, Key=key)
             assert head["ContentType"] == "application/zip"
 
-    def test_content_disposition_attachment(self) -> None:
+    def test_content_disposition_with_dated_filename(self) -> None:
         with mock_aws():
             s3 = _make_s3()
             pub = ReleasePublisher(s3, _BUCKET)
-            fname = "v1674-her_bundle_20260330.zip"
-            pub.upload_bundle_artifact(_NOVA_A, fname, b"data")
-            key = f"releases/{pub.release_id}/nova/{_NOVA_A}/{fname}"
+            dated = "v1674-her_bundle_20260330.zip"
+            pub.upload_bundle_artifact(
+                _NOVA_A,
+                b"data",
+                disposition_filename=dated,
+            )
+            key = f"releases/{pub.release_id}/nova/{_NOVA_A}/bundle.zip"
             head = s3.head_object(Bucket=_BUCKET, Key=key)
-            assert head["ContentDisposition"] == f'attachment; filename="{fname}"'
+            assert head["ContentDisposition"] == f'attachment; filename="{dated}"'
+
+    def test_content_disposition_defaults_to_bundle_zip(self) -> None:
+        with mock_aws():
+            s3 = _make_s3()
+            pub = ReleasePublisher(s3, _BUCKET)
+            pub.upload_bundle_artifact(_NOVA_A, b"data")
+            key = f"releases/{pub.release_id}/nova/{_NOVA_A}/bundle.zip"
+            head = s3.head_object(Bucket=_BUCKET, Key=key)
+            assert head["ContentDisposition"] == 'attachment; filename="bundle.zip"'
 
 
 # ===========================================================================

@@ -690,7 +690,9 @@ function buildPlotData(
     const fluxMin = Math.min(...selectedFlux);
     const fluxMax = Math.max(...selectedFlux);
     const fluxPadding = (fluxMax - fluxMin) * 0.08;
-    const wlPadding = (globalWlMax - globalWlMin) * 0.02;
+    const selectedWlMin = selectedPs?.record.wavelength_min ?? globalWlMin;
+    const selectedWlMax = selectedPs?.record.wavelength_max ?? globalWlMax;
+    const singleWlPadding = (selectedWlMax - selectedWlMin) * 0.02;
 
     // ── Feature markers (single-spectrum mode) ──────────────────────
     // In log mode the hover trace y-values must be positive (Plotly
@@ -704,14 +706,14 @@ function buildPlotData(
       : fluxMax + fluxPadding;
     addFeatureMarkers(
       activeFeatureGroups, traces, shapes,
-      globalWlMin, globalWlMax,
+      selectedWlMin, selectedWlMax,
       markerYMin, markerYMax,
     );
 
     const layout = {
       xaxis: {
         title: { text: 'Wavelength (nm)', font: { size: 12, color: 'var(--color-text-secondary)', family: 'DM Sans, sans-serif' } },
-        range: [globalWlMin - wlPadding, globalWlMax + wlPadding],
+        range: [selectedWlMin - singleWlPadding, selectedWlMax + singleWlPadding],
         gridcolor: 'var(--color-border-subtle)',
         zerolinecolor: 'var(--color-border-subtle)',
         tickfont: { size: 10, color: 'var(--color-text-tertiary)', family: 'DM Mono, monospace' },
@@ -905,17 +907,26 @@ function addFeatureMarkers(
     });
 
     // ── Invisible hover trace ────────────────────────────────────────
-    // A transparent line trace overlapping the shape to provide hover
-    // tooltips. Plotly interpolates hover along line segments, so two
-    // points spanning the y range is sufficient.
+    // With hovermode:'closest', Plotly measures distance to the nearest
+    // data *point*, not interpolated positions along a line segment.
+    // Two points at yMin/yMax would only trigger near the extremes, so
+    // we densify to ~20 points so there is always a nearby hover target.
+    const N_HOVER_POINTS = 20;
+    const hoverY = Array.from(
+      { length: N_HOVER_POINTS },
+      (_, i) => yMin + (yMax - yMin) * i / (N_HOVER_POINTS - 1),
+    );
+    const hoverX = Array(N_HOVER_POINTS).fill(line.wavelength_nm);
+    const hoverText = Array(N_HOVER_POINTS).fill(hoverLabel);
+
     traces.push({
-      x: [line.wavelength_nm, line.wavelength_nm],
-      y: [yMin, yMax],
+      x: hoverX,
+      y: hoverY,
       type: 'scatter' as const,
       mode: 'lines' as const,
       line: { color: 'rgba(0,0,0,0)', width: 10 },
       hoverinfo: 'text' as const,
-      text: [hoverLabel, hoverLabel],
+      text: hoverText,
       showlegend: false,
       hoverlabel: {
         bgcolor: color,

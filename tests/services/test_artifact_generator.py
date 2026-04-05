@@ -385,7 +385,7 @@ class TestGenerateAndPublish:
             publisher = MagicMock()
             with patch.object(mod, "generate_bundle_zip") as mock_gen:
                 mock_gen.return_value = {
-                    "s3_key": "nova/test/test_bundle_20260403.zip",
+                    "s3_key": "nova/test/bundle.zip",
                     "bundle_filename": "test_bundle_20260403.zip",
                 }
                 mod._generate_and_publish(_NOVA_A, mod.ArtifactType.bundle_zip, ctx, publisher)

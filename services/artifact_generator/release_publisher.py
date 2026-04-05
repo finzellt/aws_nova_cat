@@ -226,25 +226,30 @@ class ReleasePublisher:
     def upload_bundle_artifact(
         self,
         nova_id: str,
-        filename: str,
         body: bytes,
+        *,
+        disposition_filename: str = "",
     ) -> None:
         """Write a bundle ZIP to the release prefix (Phase 1).
 
-        Sets ``Content-Disposition: attachment`` so browsers trigger a
-        download dialog with the human-readable filename (§12.5).
+        The S3 key is always ``bundle.zip`` (stable, so the frontend can
+        construct the URL deterministically — resolves DESIGN-003 OQ-5).
+        ``Content-Disposition`` uses the dated *disposition_filename* so
+        browsers save the file with a human-readable name.
         """
-        key = self._nova_key(nova_id, filename)
+        s3_name = "bundle.zip"
+        key = self._nova_key(nova_id, s3_name)
+        disp_name = disposition_filename or s3_name
         self._s3.put_object(
             Bucket=self._bucket,
             Key=key,
             Body=body,
             ContentType="application/zip",
-            ContentDisposition=f'attachment; filename="{filename}"',
+            ContentDisposition=f'attachment; filename="{disp_name}"',
         )
         _logger.info(
             "Uploaded bundle artifact",
-            extra={"nova_id": nova_id, "artifact": filename, "s3_key": key},
+            extra={"nova_id": nova_id, "artifact": s3_name, "s3_key": key},
         )
 
     # ------------------------------------------------------------------

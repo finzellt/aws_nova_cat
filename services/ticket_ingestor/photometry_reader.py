@@ -25,7 +25,7 @@ Band resolution (DESIGN-004 §6.5) uses a three-step sequence:
 
 Row ID derivation (DESIGN-004 §8.2):
 
-  row_id = UUID(SHA-256(nova_id|epoch_raw|band_id|magnitude_raw|filename)[:16 bytes])
+  row_id = UUID(SHA-256(nova_id|epoch_raw|band_id|flux_value_raw|filename)[:16 bytes])
 
 All five participating fields are string representations so the derivation
 is deterministic regardless of float representation choices at the call site.
@@ -45,6 +45,7 @@ from contracts.models.entities import (
     BandResolutionType,
     DataOrigin,
     DataRights,
+    FluxDensityUnit,
     PhotometryRow,
     QualityFlag,
     SpectralCoordType,
@@ -156,8 +157,8 @@ class _RawFields:
     """Per-row extracted values before type conversion."""
 
     epoch_raw: str
-    magnitude_raw: str
-    mag_err_raw: str | None
+    flux_value_raw: str
+    flux_error_raw: str | None
     filter_string: str
     upper_limit: bool
     telescope: str | None
@@ -283,20 +284,18 @@ def _process_row(
         raise _RowError(f"Cannot convert epoch to float: {raw.epoch_raw!r}") from exc
     time_mjd, time_bary_corr, time_orig_sys = _convert_time(epoch_float, ticket.time_system)
 
-    # 3. Parse magnitude and optional error.
+    # 3. Parse flux value and optional error.
     try:
-        magnitude = float(raw.magnitude_raw)
+        flux_value = float(raw.flux_value_raw)
     except ValueError as exc:
-        raise _RowError(f"Cannot convert magnitude to float: {raw.magnitude_raw!r}") from exc
+        raise _RowError(f"Cannot convert flux value to float: {raw.flux_value_raw!r}") from exc
 
-    mag_err: float | None = None
-    if raw.mag_err_raw is not None:
+    flux_error: float | None = None
+    if raw.flux_error_raw is not None:
         try:
-            mag_err = float(raw.mag_err_raw)
+            flux_error = float(raw.flux_error_raw)
         except ValueError as exc:
-            raise _RowError(
-                f"Cannot convert magnitude error to float: {raw.mag_err_raw!r}"
-            ) from exc
+            raise _RowError(f"Cannot convert flux error to float: {raw.flux_error_raw!r}") from exc
 
     # 4. Resolve filter string → band registry entry.
     band_res = _resolve_band(raw.filter_string, registry)
@@ -306,7 +305,7 @@ def _process_row(
         nova_id=nova_id,
         epoch_raw=raw.epoch_raw,
         band_id=band_res.band_id,
-        magnitude_raw=raw.magnitude_raw,
+        flux_value_raw=raw.flux_value_raw,
         filename=ticket.data_filename,
     )
 
@@ -319,8 +318,33 @@ def _process_row(
         else SpectralCoordUnit.angstrom  # safe default for optical/UV/NIR corpus
     )
 
-    # 7. Construct and validate PhotometryRow.
-    limiting_value: float | None = magnitude if raw.upper_limit else None
+    # 7. Branch on wavelength regime to populate measurement fields.
+    regime = ticket.wavelength_regime
+
+    magnitude: float | None = None
+    mag_err: float | None = None
+    flux_density: float | None = None
+    flux_density_err: float | None = None
+    flux_density_unit: FluxDensityUnit | None = None
+
+    if regime in ("optical", "uv", "nir", "mir"):
+        # Magnitude regimes — current behavior.
+        if not raw.upper_limit:
+            magnitude = flux_value
+            mag_err = flux_error
+    elif regime == "radio":
+        # Radio regime — flux density semantics.
+        if not raw.upper_limit:
+            flux_density = flux_value
+            flux_density_err = flux_error
+        flux_density_unit = _resolve_flux_density_unit(ticket.flux_units)
+    elif regime in ("xray", "gamma"):
+        raise _RowError(f"X-ray/gamma regime not yet supported: {regime!r}")
+    else:
+        raise _RowError(f"Unrecognised wavelength regime: {regime!r}")
+
+    # 8. Construct and validate PhotometryRow.
+    limiting_value: float | None = flux_value if raw.upper_limit else None
 
     return ResolvedRow(
         row_id=row_id,
@@ -345,8 +369,11 @@ def _process_row(
             spectral_coord_unit=spectral_coord_unit,
             bandpass_width=entry.bandpass_width,
             # Section 4 — Photometric Measurement
-            magnitude=None if raw.upper_limit else magnitude,
-            mag_err=None if raw.upper_limit else mag_err,
+            magnitude=magnitude,
+            mag_err=mag_err,
+            flux_density=flux_density,
+            flux_density_err=flux_density_err,
+            flux_density_unit=flux_density_unit,
             is_upper_limit=raw.upper_limit,
             limiting_value=limiting_value,
             quality_flag=QualityFlag.good,
@@ -392,13 +419,13 @@ def _extract_fields(
 
     # Required per-row columns
     epoch_raw = _cell(ticket.time_col, "time_col")
-    magnitude_raw = _cell(ticket.flux_col, "flux_col")
+    flux_value_raw = _cell(ticket.flux_col, "flux_col")
 
     # Optional error column
-    mag_err_raw: str | None = None
+    flux_error_raw: str | None = None
     if ticket.flux_error_col is not None:
         val = _cell(ticket.flux_error_col, "flux_error_col").strip()
-        mag_err_raw = val if val else None
+        flux_error_raw = val if val else None
 
     # Filter string: per-row column or ticket-level default.
     filter_string: str
@@ -437,8 +464,8 @@ def _extract_fields(
 
     return _RawFields(
         epoch_raw=epoch_raw,
-        magnitude_raw=magnitude_raw,
-        mag_err_raw=mag_err_raw,
+        flux_value_raw=flux_value_raw,
+        flux_error_raw=flux_error_raw,
         filter_string=filter_string,
         upper_limit=upper_limit,
         telescope=telescope,
@@ -568,6 +595,28 @@ def _resolve_band(
 
 
 # ---------------------------------------------------------------------------
+# Flux density unit resolution
+# ---------------------------------------------------------------------------
+
+_FLUX_UNIT_MAP: dict[str, FluxDensityUnit] = {
+    "mJy": FluxDensityUnit.mjy,
+    "Jy": FluxDensityUnit.jy,
+    "uJy": FluxDensityUnit.ujy,
+    "μJy": FluxDensityUnit.ujy,
+}
+
+
+def _resolve_flux_density_unit(flux_units: str | None) -> FluxDensityUnit:
+    """Map a ticket's flux_units string to a FluxDensityUnit enum value.
+
+    Falls back to mJy when the value is None or unrecognised.
+    """
+    if flux_units is None:
+        return FluxDensityUnit.mjy
+    return _FLUX_UNIT_MAP.get(flux_units, FluxDensityUnit.mjy)
+
+
+# ---------------------------------------------------------------------------
 # Row ID derivation (DESIGN-004 §8.2)
 # ---------------------------------------------------------------------------
 
@@ -576,17 +625,17 @@ def _derive_row_id(
     nova_id: UUID,
     epoch_raw: str,
     band_id: str,
-    magnitude_raw: str,
+    flux_value_raw: str,
     filename: str,
 ) -> UUID:
     """Derive a deterministic row_id UUID from the row's natural identity.
 
     Participating fields:
-      nova_id       — isolates rows across novae
-      epoch_raw     — raw CSV string (pre-conversion) for reproducibility
-      band_id       — resolved canonical band identifier
-      magnitude_raw — raw CSV string (pre-conversion) for reproducibility
-      filename      — ticket data_filename for source traceability
+      nova_id        — isolates rows across novae
+      epoch_raw      — raw CSV string (pre-conversion) for reproducibility
+      band_id        — resolved canonical band identifier
+      flux_value_raw — raw CSV string (pre-conversion) for reproducibility
+      filename       — ticket data_filename for source traceability
 
     The hash input uses '|' as a field separator.  Fields are taken as their
     string representations so the derivation is stable across Python sessions
@@ -594,6 +643,6 @@ def _derive_row_id(
 
     Hash: SHA-256, first 16 bytes → UUID (version-unset raw bytes variant).
     """
-    payload = f"{nova_id}|{epoch_raw}|{band_id}|{magnitude_raw}|{filename}"
+    payload = f"{nova_id}|{epoch_raw}|{band_id}|{flux_value_raw}|{filename}"
     digest = hashlib.sha256(payload.encode("utf-8")).digest()
     return UUID(bytes=digest[:16])
