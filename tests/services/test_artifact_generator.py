@@ -145,22 +145,37 @@ def _load_module() -> types.ModuleType:
 # ---------------------------------------------------------------------------
 
 
-def _seed_nova(table: Any, nova_id: str) -> None:
-    """Write an ACTIVE Nova item."""
-    table.put_item(
-        Item={
-            "PK": nova_id,
-            "SK": "NOVA",
-            "entity_type": "Nova",
-            "nova_id": nova_id,
-            "primary_name": "Test Nova",
-            "aliases": ["Alias A"],
-            "ra_deg": Decimal("52.799083"),
-            "dec_deg": Decimal("43.904667"),
-            "status": "ACTIVE",
-            "discovery_date": "2000-01-01",
-        }
-    )
+def _seed_nova(
+    table: Any,
+    nova_id: str,
+    *,
+    spectra_count: int | None = None,
+    photometry_count: int | None = None,
+    references_count: int | None = None,
+    has_sparkline: bool | None = None,
+) -> None:
+    """Write an ACTIVE Nova item, optionally with pre-existing counts."""
+    item: dict[str, Any] = {
+        "PK": nova_id,
+        "SK": "NOVA",
+        "entity_type": "Nova",
+        "nova_id": nova_id,
+        "primary_name": "Test Nova",
+        "aliases": ["Alias A"],
+        "ra_deg": Decimal("52.799083"),
+        "dec_deg": Decimal("43.904667"),
+        "status": "ACTIVE",
+        "discovery_date": "2000-01-01",
+    }
+    if spectra_count is not None:
+        item["spectra_count"] = spectra_count
+    if photometry_count is not None:
+        item["photometry_count"] = photometry_count
+    if references_count is not None:
+        item["references_count"] = references_count
+    if has_sparkline is not None:
+        item["has_sparkline"] = has_sparkline
+    table.put_item(Item=item)
 
 
 def _seed_plan(
@@ -588,3 +603,138 @@ class TestGenerationOrder:
             "nova.json",
             "bundle.zip",
         ]
+
+
+# ---------------------------------------------------------------------------
+# DDB count pre-population (partial sweep correctness)
+# ---------------------------------------------------------------------------
+
+
+class TestDdbCountPrePopulation:
+    """Verify nova_context is seeded with counts from the Nova DDB item."""
+
+    def test_partial_sweep_preserves_skipped_counts(self, table: Any) -> None:
+        """Counts for skipped generators come from DDB; fresh generators overwrite."""
+        with mock_aws():
+            mod = _load_module()
+            _seed_nova(
+                table,
+                _NOVA_A,
+                spectra_count=5,
+                photometry_count=10,
+                references_count=3,
+                has_sparkline=True,
+            )
+            # Manifest includes ONLY photometry.json and nova.json — no
+            # spectra, no references generators will run.
+            manifest: dict[str, Any] = {
+                "dirty_types": ["photometry"],
+                "artifacts": ["photometry.json", "nova.json"],
+            }
+
+            captured_ctx: dict[str, Any] = {}
+
+            def _capture_generate(
+                nova_id: str,
+                artifact: Any,
+                nova_context: dict[str, Any],
+                publisher: Any = None,
+            ) -> None:
+                _noop_generate(nova_id, artifact, nova_context, publisher)
+                # Snapshot context after nova.json generation (last in order).
+                artifact_val = artifact.value if hasattr(artifact, "value") else str(artifact)
+                if artifact_val == "nova.json":
+                    captured_ctx.update(nova_context)
+
+            publisher = MagicMock()
+            with patch.object(mod, "_generate_and_publish", _capture_generate):
+                result = mod._process_nova(_NOVA_A, manifest, publisher)
+
+        assert result.success is True
+        # spectra and references generators didn't run — DDB values preserved.
+        assert captured_ctx["spectra_count"] == 5
+        assert captured_ctx["references_count"] == 3
+        # has_sparkline from DDB preserved (sparkline generator didn't run).
+        assert captured_ctx["has_sparkline"] is True
+        # photometry generator DID run — overwrote the DDB value (noop sets 0).
+        assert captured_ctx["photometry_count"] == 0
+
+    def test_full_sweep_uses_fresh_counts(self, table: Any) -> None:
+        """When all generators run, their counts overwrite stale DDB values."""
+        with mock_aws():
+            mod = _load_module()
+            # DDB has stale counts that differ from what generators produce.
+            _seed_nova(
+                table,
+                _NOVA_A,
+                spectra_count=5,
+                photometry_count=10,
+                references_count=3,
+            )
+
+            def _fresh_generate(
+                nova_id: str,
+                artifact: Any,
+                nova_context: dict[str, Any],
+                publisher: Any = None,
+            ) -> None:
+                artifact_val = artifact.value if hasattr(artifact, "value") else str(artifact)
+                if artifact_val == "spectra.json":
+                    nova_context["spectra_count"] = 7
+                elif artifact_val == "photometry.json":
+                    nova_context["photometry_count"] = 15
+                    nova_context["photometry_raw_items"] = []
+                    nova_context["photometry_observations"] = []
+                    nova_context["photometry_bands"] = []
+                elif artifact_val == "references.json":
+                    nova_context["references_count"] = 4
+                    nova_context["references_output"] = []
+                elif artifact_val == "sparkline.svg":
+                    nova_context["has_sparkline"] = True
+
+            publisher = MagicMock()
+            with patch.object(mod, "_generate_and_publish", _fresh_generate):
+                result = mod._process_nova(_NOVA_A, _all_artifacts_manifest(), publisher)
+
+        assert result.success is True
+        # Fresh values from generators, NOT the stale DDB values.
+        assert result.spectra_count == 7
+        assert result.photometry_count == 15
+        assert result.references_count == 4
+        assert result.has_sparkline is True
+
+    def test_new_nova_defaults_to_zero(self, table: Any) -> None:
+        """Nova DDB item has no count fields — defaults to 0 without error."""
+        with mock_aws():
+            mod = _load_module()
+            # Seed nova WITHOUT any count fields (brand-new nova).
+            _seed_nova(table, _NOVA_A)
+
+            captured_ctx: dict[str, Any] = {}
+
+            def _capture_generate(
+                nova_id: str,
+                artifact: Any,
+                nova_context: dict[str, Any],
+                publisher: Any = None,
+            ) -> None:
+                # Capture BEFORE generators modify — snapshot right away.
+                artifact_val = artifact.value if hasattr(artifact, "value") else str(artifact)
+                if artifact_val == "references.json":
+                    # First generator in order — counts reflect DDB defaults.
+                    captured_ctx["spectra_count"] = nova_context["spectra_count"]
+                    captured_ctx["photometry_count"] = nova_context["photometry_count"]
+                    captured_ctx["references_count"] = nova_context["references_count"]
+                    captured_ctx["has_sparkline"] = nova_context["has_sparkline"]
+                _noop_generate(nova_id, artifact, nova_context, publisher)
+
+            publisher = MagicMock()
+            with patch.object(mod, "_generate_and_publish", _capture_generate):
+                result = mod._process_nova(_NOVA_A, _all_artifacts_manifest(), publisher)
+
+        assert result.success is True
+        # All counts default to 0 / False before generators run.
+        assert captured_ctx["spectra_count"] == 0
+        assert captured_ctx["photometry_count"] == 0
+        assert captured_ctx["references_count"] == 0
+        assert captured_ctx["has_sparkline"] is False

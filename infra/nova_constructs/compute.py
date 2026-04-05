@@ -65,14 +65,21 @@ class _LocalPipBundler:
     def __init__(self, service_path: str) -> None:
         self._service_path = service_path
 
+    @staticmethod
+    def _ignore_junk(directory: str, contents: list[str]) -> set[str]:
+        """Exclude __pycache__, .DS_Store, and fixtures from Lambda bundles."""
+        return {c for c in contents if c in {"__pycache__", ".DS_Store", "fixtures"}}
+
     def try_bundle(self, output_dir: str, *, image: object = None, **kwargs: object) -> bool:
         try:
             # Copy all source files first
             for item in os.listdir(self._service_path):
+                if item in {"__pycache__", ".DS_Store"}:
+                    continue
                 src = os.path.join(self._service_path, item)
                 dst = os.path.join(output_dir, item)
                 if os.path.isdir(src):
-                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                    shutil.copytree(src, dst, dirs_exist_ok=True, ignore=self._ignore_junk)
                 else:
                     shutil.copy2(src, dst)
 
@@ -85,6 +92,7 @@ class _LocalPipBundler:
                     contracts_dir,
                     os.path.join(output_dir, "contracts"),
                     dirs_exist_ok=True,
+                    ignore=self._ignore_junk,
                 )
 
             # Install dependencies if requirements.txt exists
@@ -146,13 +154,18 @@ class _PackagedLocalBundler:
             os.makedirs(pkg_dir, exist_ok=True)
 
             for item in os.listdir(self._service_path):
-                if item == "__pycache__" or item == "requirements.txt":
+                if item in {"__pycache__", ".DS_Store", "requirements.txt"}:
                     continue
                 src = os.path.join(self._service_path, item)
                 if item == "handler.py":
                     shutil.copy2(src, output_dir)
                 elif os.path.isdir(src):
-                    shutil.copytree(src, os.path.join(pkg_dir, item), dirs_exist_ok=True)
+                    shutil.copytree(
+                        src,
+                        os.path.join(pkg_dir, item),
+                        dirs_exist_ok=True,
+                        ignore=_LocalPipBundler._ignore_junk,
+                    )
                 else:
                     shutil.copy2(src, pkg_dir)
 
@@ -160,7 +173,10 @@ class _PackagedLocalBundler:
             contracts_dir = os.path.normpath(os.path.join(self._service_path, "../../contracts"))
             if os.path.exists(contracts_dir):
                 shutil.copytree(
-                    contracts_dir, os.path.join(output_dir, "contracts"), dirs_exist_ok=True
+                    contracts_dir,
+                    os.path.join(output_dir, "contracts"),
+                    dirs_exist_ok=True,
+                    ignore=_LocalPipBundler._ignore_junk,
                 )
 
             req_file = os.path.join(self._service_path, "requirements.txt")
@@ -417,6 +433,14 @@ class NovaCatCompute(Construct):
         # ------------------------------------------------------------------
         self._functions: dict[str, lambda_.Function | lambda_.DockerImageFunction] = {}
 
+        # Absolute path to contracts/ — bundled into every Lambda so that
+        # services importing from contracts.models resolve at runtime.
+        contracts_abs = os.path.normpath(os.path.join(self._services_root, "..", "contracts"))
+        # Docker copy snippet shared by both bundler branches.
+        _docker_contracts = (
+            "if [ -d /contracts ]; then cp -r /contracts /asset-output/contracts; fi"
+        )
+
         for name, spec in _FUNCTION_SPECS.items():
             service_path = os.path.join(self._services_root, spec.service_dir)
             if spec.package_name:
@@ -430,13 +454,16 @@ class NovaCatCompute(Construct):
                     f"cp handler.py /asset-output/ && "
                     f'for f in *.py; do [ "$f" != handler.py ] && '
                     f'cp "$f" /asset-output/{pkg}/; done && '
+                    f"{_docker_contracts} && "
                     f"if [ -f requirements.txt ]; then "
                     f"pip install -r requirements.txt -t /asset-output --quiet; fi"
                 )
                 local_bundler: cdk.ILocalBundling = _PackagedLocalBundler(service_path, pkg)
             else:
                 docker_cmd = (
-                    "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output"
+                    "pip install -r requirements.txt -t /asset-output && "
+                    "cp -r . /asset-output && "
+                    f"{_docker_contracts}"
                 )
                 local_bundler = _LocalPipBundler(service_path)
 
@@ -448,10 +475,17 @@ class NovaCatCompute(Construct):
                 handler="handler.handle",
                 code=lambda_.Code.from_asset(
                     service_path,
+                    asset_hash_type=cdk.AssetHashType.OUTPUT,
                     bundling=cdk.BundlingOptions(
                         image=_PYTHON_RUNTIME.bundling_image,
                         command=["bash", "-c", docker_cmd],
                         local=local_bundler,
+                        volumes=[
+                            cdk.DockerVolume(
+                                host_path=contracts_abs,
+                                container_path="/contracts",
+                            ),
+                        ],
                     ),
                 ),
                 description=spec.description,

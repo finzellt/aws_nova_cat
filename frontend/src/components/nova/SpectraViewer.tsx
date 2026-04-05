@@ -693,10 +693,19 @@ function buildPlotData(
     const wlPadding = (globalWlMax - globalWlMin) * 0.02;
 
     // ── Feature markers (single-spectrum mode) ──────────────────────
+    // In log mode the hover trace y-values must be positive (Plotly
+    // drops non-positive points on a log axis).  Match the visible
+    // axis range so the invisible hover line spans the full plot.
+    const markerYMin = logFluxY
+      ? Math.max(fluxMin, 0.001)
+      : fluxMin - fluxPadding;
+    const markerYMax = logFluxY
+      ? fluxMax * 1.1
+      : fluxMax + fluxPadding;
     addFeatureMarkers(
       activeFeatureGroups, traces, shapes,
       globalWlMin, globalWlMax,
-      fluxMin - fluxPadding, fluxMax + fluxPadding,
+      markerYMin, markerYMax,
     );
 
     const layout = {

@@ -359,6 +359,15 @@ def _process_nova(
 
         nova_context["nova_item"] = nova_item
 
+        # Pre-populate observation counts from the Nova DDB item.
+        # The Finalize Lambda (§4.5) writes these after each successful
+        # sweep.  They serve as defaults for generators that are skipped
+        # during a partial sweep — generators that DO run will overwrite.
+        nova_context["spectra_count"] = int(nova_item.get("spectra_count", 0))
+        nova_context["photometry_count"] = int(nova_item.get("photometry_count", 0))
+        nova_context["references_count"] = int(nova_item.get("references_count", 0))
+        nova_context["has_sparkline"] = nova_item.get("has_sparkline", False)
+
         # Resolve outburst MJD (§7.6).
         observation_epochs = _collect_observation_epochs(nova_id)
         outburst_mjd, is_estimated = resolve_outburst_mjd(
@@ -370,6 +379,7 @@ def _process_nova(
         nova_context["outburst_mjd_is_estimated"] = is_estimated
 
         # --- Generate and publish artifacts in dependency order ---
+        generated_artifacts: set[str] = set()
         for artifact_type in GENERATION_ORDER:
             if artifact_type.value in artifacts_to_generate:
                 _logger.info(
@@ -381,6 +391,16 @@ def _process_nova(
                     },
                 )
                 _generate_and_publish(nova_id, artifact_type, nova_context, publisher)
+                generated_artifacts.add(artifact_type.value)
+
+        # --- Copy forward any artifacts from the previous release that
+        #     were NOT in this nova's manifest (partial sweep). ---
+        copied = publisher.copy_forward_missing_artifacts(nova_id, generated_artifacts)
+        if copied:
+            _logger.info(
+                "Copied forward missing artifacts for swept nova",
+                extra={"nova_id": nova_id, "copied": copied},
+            )
 
     except Exception as exc:
         duration_ms = int((time.monotonic() - start) * 1000)

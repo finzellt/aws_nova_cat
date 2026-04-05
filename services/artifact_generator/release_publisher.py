@@ -248,6 +248,92 @@ class ReleasePublisher:
         )
 
     # ------------------------------------------------------------------
+    # Phase 1.5 — Copy forward missing artifacts for swept novae
+    # ------------------------------------------------------------------
+
+    def copy_forward_missing_artifacts(
+        self,
+        nova_id: str,
+        generated_artifacts: set[str],
+    ) -> int:
+        """Copy artifacts from the previous release that were not regenerated.
+
+        After a swept nova's manifest-specified artifacts are generated,
+        this method copies any *other* artifacts that exist in the
+        previous release but were not part of the current manifest.
+
+        Parameters
+        ----------
+        nova_id
+            The nova whose missing artifacts should be copied forward.
+        generated_artifacts
+            Set of artifact filenames that were freshly generated in
+            this sweep (e.g. ``{"photometry.json", "nova.json"}``).
+            These will be skipped — they already exist in the new release.
+
+        Returns
+        -------
+        int
+            Number of artifacts copied forward.
+        """
+        if self._previous_release_id is None:
+            return 0
+
+        source_prefix = f"releases/{self._previous_release_id}/nova/{nova_id}/"
+        target_prefix = f"releases/{self._release_id}/nova/{nova_id}/"
+
+        paginator = self._s3.get_paginator("list_objects_v2")
+        pages = paginator.paginate(Bucket=self._bucket, Prefix=source_prefix)
+
+        copied = 0
+        skipped = 0
+        for page in pages:
+            for obj in page.get("Contents", []):
+                source_key: str = obj["Key"]
+                filename = source_key[len(source_prefix) :]
+                if not filename:
+                    continue
+
+                if filename in generated_artifacts:
+                    skipped += 1
+                    _logger.debug(
+                        "Skipping already-generated artifact",
+                        extra={
+                            "nova_id": nova_id,
+                            "artifact": filename,
+                            "phase": "copy_forward_missing",
+                        },
+                    )
+                    continue
+
+                target_key = target_prefix + filename
+                self._s3.copy_object(
+                    Bucket=self._bucket,
+                    CopySource={"Bucket": self._bucket, "Key": source_key},
+                    Key=target_key,
+                )
+                copied += 1
+                _logger.debug(
+                    "Copied forward missing artifact",
+                    extra={
+                        "nova_id": nova_id,
+                        "artifact": filename,
+                        "phase": "copy_forward_missing",
+                    },
+                )
+
+        _logger.info(
+            "Copy-forward missing artifacts complete",
+            extra={
+                "nova_id": nova_id,
+                "copied": copied,
+                "skipped": skipped,
+                "phase": "copy_forward_missing",
+            },
+        )
+        return copied
+
+    # ------------------------------------------------------------------
     # Phase 2 — Copy forward unchanged novae (§12.5)
     # ------------------------------------------------------------------
 
