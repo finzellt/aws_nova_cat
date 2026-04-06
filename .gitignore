@@ -62,3 +62,6 @@ services/nova_common_layer/python/boto3*
 services/nova_common_layer/python/bin/
 services/nova_common_layer/python/__pycache__/
 services/nova_common_layer/python/*.dist-info/
+/docs/engineering
+/tools/diagnose_xshooter
+frontend/public/data
