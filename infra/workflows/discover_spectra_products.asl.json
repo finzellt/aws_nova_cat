@@ -198,7 +198,7 @@
                     },
                     "SuppressDownstreamCheck": {
                         "Type": "Choice",
-                        "Comment": "If suppress_downstream=true is set on the input, skip launching acquire_and_validate_spectra. Intended for smoke tests and operator dry-runs where stub creation should be verified in isolation without triggering downstream acquisition executions.",
+                        "Comment": "Skip downstream launch if suppress_downstream=true (smoke tests / dry-runs) or if DiscoverAndPersistProducts found zero new products to acquire.",
                         "Choices": [
                             {
                                 "And": [
@@ -212,9 +212,14 @@
                                     }
                                 ],
                                 "Next": "DownstreamSuppressed"
+                            },
+                            {
+                                "Variable": "$.discover_result.total_new",
+                                "NumericGreaterThan": 0,
+                                "Next": "PublishAcquireAndValidateSpectraRequests"
                             }
                         ],
-                        "Default": "PublishAcquireAndValidateSpectraRequests"
+                        "Default": "DownstreamSuppressed"
                     },
                     "DownstreamSuppressed": {
                         "Type": "Pass",

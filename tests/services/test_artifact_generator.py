@@ -428,6 +428,7 @@ class TestProcessNova:
         assert "not found" in (result.error or "").lower()
 
     def test_generator_exception_produces_failed_result(self, table: Any) -> None:
+        """With per-generator isolation, ALL generators must fail for success=False."""
         with mock_aws():
             mod = _load_module()
             _seed_nova(table, _NOVA_A)
@@ -439,7 +440,7 @@ class TestProcessNova:
             with patch.object(mod, "_generate_and_publish", _boom):
                 result = mod._process_nova(_NOVA_A, _spectra_manifest(), publisher)
         assert result.success is False
-        assert "generator exploded" in (result.error or "")
+        assert "All generators failed" in (result.error or "")
 
     def test_failed_nova_has_no_counts(self, table: Any) -> None:
         with mock_aws():
@@ -451,6 +452,78 @@ class TestProcessNova:
         assert result.photometry_count is None
         assert result.references_count is None
         assert result.has_sparkline is None
+
+    def test_single_generator_failure_continues_others(self, table: Any) -> None:
+        """A single generator failure should NOT fail the nova if others succeed."""
+        with mock_aws():
+            mod = _load_module()
+            _seed_nova(table, _NOVA_A)
+            publisher = MagicMock()
+
+            def _selective_boom(
+                nova_id: str,
+                artifact: Any,
+                nova_context: dict[str, Any],
+                publisher: Any = None,
+            ) -> None:
+                artifact_val = artifact.value if hasattr(artifact, "value") else str(artifact)
+                if artifact_val == "spectra.json":
+                    raise ValueError("spectra generator exploded")
+                _noop_generate(nova_id, artifact, nova_context, publisher)
+
+            with patch.object(mod, "_generate_and_publish", _selective_boom):
+                result = mod._process_nova(_NOVA_A, _all_artifacts_manifest(), publisher)
+        assert result.success is True
+        assert result.nova_id == _NOVA_A
+
+    def test_all_generators_fail_produces_failed_result(self, table: Any) -> None:
+        """When every generator fails, the nova result should have success=False."""
+        with mock_aws():
+            mod = _load_module()
+            _seed_nova(table, _NOVA_A)
+            publisher = MagicMock()
+
+            def _boom(*args: Any, **kwargs: Any) -> None:
+                raise ValueError("generator exploded")
+
+            with patch.object(mod, "_generate_and_publish", _boom):
+                result = mod._process_nova(_NOVA_A, _all_artifacts_manifest(), publisher)
+        assert result.success is False
+        assert "All generators failed" in (result.error or "")
+
+    def test_partial_failure_preserves_successful_counts(self, table: Any) -> None:
+        """Counts from successful generators are preserved when one generator fails."""
+        with mock_aws():
+            mod = _load_module()
+            _seed_nova(table, _NOVA_A)
+            publisher = MagicMock()
+
+            def _selective_boom(
+                nova_id: str,
+                artifact: Any,
+                nova_context: dict[str, Any],
+                publisher: Any = None,
+            ) -> None:
+                artifact_val = artifact.value if hasattr(artifact, "value") else str(artifact)
+                if artifact_val == "spectra.json":
+                    raise ValueError("spectra generator exploded")
+                if artifact_val == "references.json":
+                    nova_context["references_count"] = 7
+                    nova_context["references_output"] = []
+                elif artifact_val == "photometry.json":
+                    nova_context["photometry_count"] = 12
+                    nova_context["photometry_raw_items"] = []
+                    nova_context["photometry_observations"] = []
+                    nova_context["photometry_bands"] = []
+                elif artifact_val == "sparkline.svg":
+                    nova_context["has_sparkline"] = True
+
+            with patch.object(mod, "_generate_and_publish", _selective_boom):
+                result = mod._process_nova(_NOVA_A, _all_artifacts_manifest(), publisher)
+        assert result.success is True
+        assert result.references_count == 7
+        assert result.photometry_count == 12
+        assert result.has_sparkline is True
 
 
 # ---------------------------------------------------------------------------

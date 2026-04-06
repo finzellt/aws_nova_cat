@@ -1201,19 +1201,17 @@ class TestDiscoverSpectraProducts:
             (r for r in (model.discovery_results or []) if r.get("provider") == "ESO"),
             None,
         )
-        eso_persisted = (
-            eso_result.get("persist_result", {}).get("newly_persisted", 0) if eso_result else 0
-        )
+        eso_new = eso_result.get("discover_result", {}).get("total_new", 0) if eso_result else 0
 
         stubs = _query_partition(table, nova_id, "PRODUCT#SPECTRA#")
         if not stubs:
-            if eso_persisted == 0:
+            if eso_new == 0:
                 pytest.skip("ESO returned no spectra products — stub validation skipped")
             else:
                 pytest.fail(
-                    f"ESO reported {eso_persisted} newly persisted product(s) in the workflow "
+                    f"ESO reported {eso_new} newly persisted product(s) in the workflow "
                     f"output, but no PRODUCT#SPECTRA# items were found in DynamoDB under "
-                    f"nova_id={nova_id!r}. PersistDataProductMetadata likely failed silently."
+                    f"nova_id={nova_id!r}. DiscoverAndPersistProducts likely failed silently."
                 )
 
         _VALID_ACQUISITION_STATUSES = {
@@ -1276,19 +1274,17 @@ class TestDiscoverSpectraProducts:
             (r for r in (model.discovery_results or []) if r.get("provider") == "ESO"),
             None,
         )
-        eso_persisted = (
-            eso_result.get("persist_result", {}).get("newly_persisted", 0) if eso_result else 0
-        )
+        eso_new = eso_result.get("discover_result", {}).get("total_new", 0) if eso_result else 0
 
         stubs = _query_partition(table, nova_id, "PRODUCT#SPECTRA#")
         if not stubs:
-            if eso_persisted == 0:
+            if eso_new == 0:
                 pytest.skip("ESO returned no spectra products — LocatorAlias validation skipped")
             else:
                 pytest.fail(
-                    f"ESO reported {eso_persisted} newly persisted product(s) in the workflow "
+                    f"ESO reported {eso_new} newly persisted product(s) in the workflow "
                     f"output, but no PRODUCT#SPECTRA# items were found in DynamoDB under "
-                    f"nova_id={nova_id!r}. PersistDataProductMetadata likely failed silently."
+                    f"nova_id={nova_id!r}. DiscoverAndPersistProducts likely failed silently."
                 )
 
         for stub in stubs:
@@ -1435,8 +1431,9 @@ class TestDiscoverSpectraProducts:
     ) -> None:
         """
         Each element of $.discovery_results is the accumulated $ of one
-        provider iteration. It must contain the four task ResultPath keys:
-        query_result, normalize_result, dedup_result, persist_result.
+        provider iteration. It must contain ``discover_result`` — the
+        lightweight summary dict returned by the combined
+        DiscoverAndPersistProducts task.
         For MVP, there is exactly one element (ESO).
         """
         table = dynamodb_resource.Table(stack.table_name)
@@ -1467,16 +1464,26 @@ class TestDiscoverSpectraProducts:
         assert eso_result.get("provider") == "ESO"
         assert eso_result.get("nova_id") == nova_id
 
-        for key in ("query_result", "normalize_result", "dedup_result", "persist_result"):
-            assert key in eso_result, (
-                f"Expected key '{key}' in ESO provider iteration result, got keys: "
-                f"{list(eso_result.keys())}"
-            )
+        # The combined DiscoverAndPersistProducts task writes a summary at
+        # $.discover_result (ResultPath in the ASL). No individual task keys
+        # (query_result, normalize_result, etc.) appear in the state output.
+        assert "discover_result" in eso_result, (
+            f"Expected key 'discover_result' in ESO provider iteration result, got keys: "
+            f"{list(eso_result.keys())}"
+        )
 
-        assert "raw_products" in eso_result["query_result"]
-        assert "normalized_products" in eso_result["normalize_result"]
-        assert "products_with_ids" in eso_result["dedup_result"]
-        assert "persisted_products" in eso_result["persist_result"]
+        summary = eso_result["discover_result"]
+        for key in (
+            "provider",
+            "nova_id",
+            "total_queried",
+            "total_normalized",
+            "total_new",
+            "total_existing",
+        ):
+            assert key in summary, (
+                f"Expected key '{key}' in discover_result summary, got keys: {list(summary.keys())}"
+            )
 
 
 # ---------------------------------------------------------------------------

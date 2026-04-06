@@ -55,6 +55,7 @@ import boto3
 from nova_common.errors import TerminalError
 from nova_common.file_io import resolve_dir
 from nova_common.logging import configure_logging, logger
+from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 from nova_common.work_item import DirtyType, write_work_item
 
@@ -125,11 +126,13 @@ _REGISTRY: BandRegistryProtocol = _RegistryAdapter()
 def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
     configure_logging(event)
     task_name = event.get("task_name")
-    if task_name == "IngestPhotometry":
-        return _ingest_photometry(event)
-    if task_name == "IngestSpectra":
-        return _ingest_spectra(event)
-    raise TerminalError(f"Unknown task_name: {task_name!r}")
+    if task_name not in ("IngestPhotometry", "IngestSpectra"):
+        raise TerminalError(f"Unknown task_name: {task_name!r}")
+    logger.info("Task started", extra={"task_name": task_name})
+    handler_fn = _ingest_photometry if task_name == "IngestPhotometry" else _ingest_spectra
+    with log_duration(f"task:{task_name}"):
+        result = handler_fn(event)
+    return result
 
 
 # ---------------------------------------------------------------------------

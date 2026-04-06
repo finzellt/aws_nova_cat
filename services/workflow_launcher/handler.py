@@ -54,6 +54,7 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError
 from nova_common.logging import configure_logging, logger
+from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 
 _INGEST_NEW_NOVA_STATE_MACHINE_ARN = os.environ["INGEST_NEW_NOVA_STATE_MACHINE_ARN"]
@@ -85,7 +86,10 @@ def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
     handler_fn = _TASK_HANDLERS.get(task_name)  # type: ignore[arg-type]
     if handler_fn is None:
         raise ValueError(f"Unknown task_name: {task_name!r}")
-    return handler_fn(event, context)
+    logger.info("Task started", extra={"task_name": task_name})
+    with log_duration(f"task:{task_name}"):
+        result = handler_fn(event, context)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +259,7 @@ def _publish_acquire_and_validate_spectra_requests(
         "PublishAcquireAndValidateSpectraRequests complete",
         extra={
             "nova_id": nova_id,
+            "primary_name": event.get("primary_name", "unknown"),
             "launched": len(launched),
             "failed": len(failed),
             "total": len(eligible_products),

@@ -364,6 +364,7 @@ class NovaCatWorkflows(Construct):
         # Task role grants (the Fargate task's runtime identity)
         table.grant_read_write_data(task_def.task_role)
         private_bucket.grant_read(task_def.task_role)
+        private_bucket.grant_write(task_def.task_role, "derived/*")
         public_site_bucket.grant_read_write(task_def.task_role)
         photometry_table.grant_read_data(task_def.task_role)
 

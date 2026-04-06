@@ -32,11 +32,12 @@ from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 import boto3
-import requests  # type: ignore[import-untyped]
+import requests
 from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError, TerminalError
 from nova_common.logging import configure_logging, logger
+from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 from nova_common.work_item import DirtyType, write_work_item
 
@@ -587,7 +588,10 @@ def handle(event: dict, context: object) -> dict:
     if handler_fn is None:
         raise ValueError(f"Unknown task_name: {task_name!r}. Known tasks: {list(_TASK_HANDLERS)}")
 
-    return handler_fn(event, context)
+    logger.info("Task started", extra={"task_name": task_name})
+    with log_duration(f"task:{task_name}"):
+        result = handler_fn(event, context)
+    return result
 
 
 # ---------------------------------------------------------------------------

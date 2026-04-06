@@ -76,7 +76,7 @@ from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 from nova_common.web_ready_csv import build_web_ready_csv, write_web_ready_csv_to_s3
 from nova_common.work_item import DirtyType, write_work_item
-from profiles import validate_spectrum  # type: ignore[import-not-found]
+from profiles import validate_spectrum
 
 
 def _bootstrap_astropy(base: str = "/tmp") -> None:
@@ -121,16 +121,10 @@ def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
     handler_fn = _TASK_HANDLERS.get(task_name)
     if handler_fn is None:
         raise ValueError(f"Unknown task_name: {task_name!r}. Known tasks: {list(_TASK_HANDLERS)}")
-    logger.info(
-        "Dispatching task",
-        extra={
-            "task_name": task_name,
-            "correlation_id": event.get("correlation_id"),
-            "nova_id": event.get("nova_id"),
-            "data_product_id": event.get("data_product_id"),
-        },
-    )
-    return handler_fn(event, context)
+    logger.info("Task started", extra={"task_name": task_name})
+    with log_duration(f"task:{task_name}"):
+        result = handler_fn(event, context)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +423,7 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
                 extra={
                     "data_product_id": data_product_id,
                     "nova_id": nova_id,
+                    "primary_name": event.get("primary_name", "unknown"),
                 },
                 exc_info=True,
             )
