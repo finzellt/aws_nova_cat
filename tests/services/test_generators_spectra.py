@@ -7,7 +7,7 @@ Covers:
   - Both edges: leading and trailing zeros trimmed
   - Single zero at each edge preserved (could be legitimate)
   - No zeros: unchanged
-  - Near-zero values below _ZERO_THRESHOLD treated as zero
+  - Near-zero values below relative threshold treated as zero
   - All zeros: returns empty lists
 
   _normalize_flux (with floor):
@@ -28,11 +28,12 @@ from generators.shared import lttb
 from generators.spectra import (
     _FLUX_FLOOR,
     _LTTB_THRESHOLD,
+    _RELATIVE_ZERO_FRACTION,
     _TRIM_TOLERANCE,
-    _ZERO_THRESHOLD,
     _normalize_flux,
     _trim_dead_edges,
     _trim_wavelength_range,
+    _trim_wavelength_range_min,
     generate_spectra_json,
 )
 
@@ -80,7 +81,8 @@ class TestTrimDeadEdges:
         assert wl_out == wl
 
     def test_near_zero_below_threshold_treated_as_zero(self) -> None:
-        tiny = _ZERO_THRESHOLD / 10
+        # Edge values are 1e-8 of peak (1.0), well below _RELATIVE_ZERO_FRACTION (1e-6)
+        tiny = 1.0 * _RELATIVE_ZERO_FRACTION * 0.01  # 1e-8
         wl = [400.0, 401.0, 402.0, 403.0, 404.0]
         fx = [tiny, tiny, 0.5, 1.0, 0.8]
         wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-tiny")
@@ -98,6 +100,23 @@ class TestTrimDeadEdges:
         wl_out, fx_out = _trim_dead_edges([], [], "dp-empty")
         assert fx_out == []
         assert wl_out == []
+
+    def test_physical_flux_units_not_trimmed(self) -> None:
+        """X-Shooter spectra in physical flux units must survive trimming."""
+        wl = [300.0, 301.0, 302.0, 303.0, 304.0, 305.0, 306.0, 307.0]
+        # Genuine dead edges (zero), then real signal at ~1e-14, peak ~3e-13
+        fx = [0.0, 0.0, 1.2e-14, 8.5e-14, 3.1e-13, 2.7e-13, 0.0, 0.0]
+        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-xshooter")
+        assert wl_out == [302.0, 303.0, 304.0, 305.0]
+        assert fx_out == [1.2e-14, 8.5e-14, 3.1e-13, 2.7e-13]
+
+    def test_relative_threshold_trims_rolloff(self) -> None:
+        """Edges at 1e-8 of peak (~1.0) are below 1e-6 fraction → trimmed."""
+        wl = [400.0, 401.0, 402.0, 403.0, 404.0, 405.0, 406.0]
+        fx = [1e-8, 1e-8, 0.4, 1.0, 0.6, 1e-8, 1e-8]
+        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-rolloff")
+        assert wl_out == [402.0, 403.0, 404.0]
+        assert fx_out == [0.4, 1.0, 0.6]
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +296,57 @@ class TestWavelengthRangeTrim:
         # wavelengths unchanged
         assert rec["wavelengths"] == original_wl
 
+    def test_blue_outlier_trimmed(self) -> None:
+        """300nm outlier is trimmed when median min is ~400."""
+        # Median of [300, 390, 400, 410, 420] = 400
+        recs = [
+            _make_stage1_rec(300, 900, n_points=500, dp_id="dp-300"),
+            _make_stage1_rec(390, 900, dp_id="dp-390"),
+            _make_stage1_rec(400, 900, dp_id="dp-400"),
+            _make_stage1_rec(410, 900, dp_id="dp-410"),
+            _make_stage1_rec(420, 900, dp_id="dp-420"),
+        ]
+
+        wl_mins = [r["wavelengths"][0] for r in recs]
+        display_min = statistics.median(wl_mins)  # 400
+
+        outlier = recs[0]
+        original_len = len(outlier["wavelengths"])
+
+        # 300 < 400 / 1.1 ≈ 363.6 → outlier
+        assert outlier["wavelengths"][0] < display_min / _TRIM_TOLERANCE
+        _trim_wavelength_range_min(outlier, display_min)
+
+        assert len(outlier["wavelengths"]) < original_len
+        assert outlier["wavelengths"][0] >= display_min
+
+    def test_blue_no_trimming_when_similar_ranges(self) -> None:
+        """All spectra with similar blue starts are left untouched."""
+        recs = [
+            _make_stage1_rec(390, 900, dp_id="dp-a"),
+            _make_stage1_rec(400, 900, dp_id="dp-b"),
+            _make_stage1_rec(410, 900, dp_id="dp-c"),
+        ]
+
+        wl_mins = [r["wavelengths"][0] for r in recs]
+        display_min = statistics.median(wl_mins)  # 400
+
+        for rec in recs:
+            original_wl = list(rec["wavelengths"])
+            # None below 400 / 1.1 ≈ 363.6
+            if rec["wavelengths"][0] < display_min / _TRIM_TOLERANCE:
+                _trim_wavelength_range_min(rec, display_min)
+            assert rec["wavelengths"] == original_wl
+
+    def test_blue_single_spectrum_no_trim(self) -> None:
+        """A single spectrum should never be trimmed on the blue side."""
+        rec = _make_stage1_rec(200, 900, dp_id="dp-solo")
+        original_wl = list(rec["wavelengths"])
+
+        recs = [rec]
+        assert len(recs) < 2  # guard condition
+        assert rec["wavelengths"] == original_wl
+
 
 class TestDisplayWavelengthFields:
     """Top-level display_wavelength_min/max in artifact output."""
@@ -343,6 +413,49 @@ class TestDisplayWavelengthFields:
         assert "display_wavelength_max" in artifact
         assert isinstance(artifact["display_wavelength_min"], float)
         assert isinstance(artifact["display_wavelength_max"], float)
+
+    def test_display_min_trims_blue_outlier(self) -> None:
+        """End-to-end: blue outlier at 200nm trimmed to near median min (~400)."""
+        csvs = {
+            "dp-1": self._make_csv(390, 900),
+            "dp-2": self._make_csv(400, 900),
+            "dp-3": self._make_csv(410, 900),
+            "dp-outlier": self._make_csv(200, 900, n=200),
+        }
+        products = [
+            self._make_product("dp-1", mjd="59000"),
+            self._make_product("dp-2", mjd="59001"),
+            self._make_product("dp-3", mjd="59002"),
+            self._make_product("dp-outlier", mjd="59003"),
+        ]
+
+        class FakeBody:
+            def __init__(self, content: str) -> None:
+                self._content = content
+
+            def read(self) -> bytes:
+                return self._content.encode()
+
+        class FakeS3:
+            def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:  # noqa: N803
+                dp_id = Key.split("/")[-2]
+                return {"Body": FakeBody(csvs[dp_id])}
+
+        class FakeTable:
+            def query(self, **kwargs: Any) -> dict[str, Any]:
+                return {"Items": products}
+
+        ctx: dict[str, Any] = {"outburst_mjd": 58000.0, "outburst_mjd_is_estimated": False}
+        artifact = generate_spectra_json("nova-test", FakeTable(), FakeS3(), "bucket", ctx)
+
+        # median min of [390, 400, 410, 200] = (390+400)/2 = 395
+        display_min = artifact["display_wavelength_min"]
+
+        # Find the outlier spectrum (originally started at 200nm)
+        outlier = [s for s in artifact["spectra"] if s["spectrum_id"] == "dp-outlier"]
+        assert len(outlier) == 1
+        # Its wavelength_min should now be at or near the display_min, not 200
+        assert outlier[0]["wavelength_min"] >= display_min - 1.0
 
     def test_no_display_fields_for_single_spectrum(self) -> None:
         """Single spectrum: no display bounds in artifact."""
