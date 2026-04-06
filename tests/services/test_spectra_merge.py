@@ -214,14 +214,17 @@ class TestMergeValidation:
         merged = _merge_arm_group(group, "nova-t", MagicMock(), "bucket")
         assert merged is not None
 
-    def test_excessive_overlap_rejected(self) -> None:
-        """200nm overlap (>100nm limit) → returns None."""
+    def test_excessive_overlap_drops_worse_arm(self) -> None:
+        """200nm overlap (>100nm limit) → worse arm dropped, survivor returned."""
         group = [
             _make_stage1(dp_id="a", wl_min=400, wl_max=700),
             _make_stage1(dp_id="b", wl_min=500, wl_max=900),
         ]
         merged = _merge_arm_group(group, "nova-t", MagicMock(), "bucket")
-        assert merged is None
+        # One arm survives — returned as a single record (no merge possible).
+        assert merged is not None
+        # Arm "b" has broader range (400nm vs 300nm) → kept.
+        assert merged["product"]["data_product_id"] == "b"
 
     def test_single_arm_group_skipped(self) -> None:
         """Single-arm input to _merge_multi_arm_spectra → passed through unchanged."""

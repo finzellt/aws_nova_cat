@@ -187,14 +187,19 @@ def main() -> None:
         sys.exit(1)
 
     # ── Step 2: Build nova_id → primary_name mapping ─────────────────
+    #
+    # Directory names use hyphens instead of spaces to match the frontend's
+    # URL convention (CatalogTable links use "V1324-Sco", not "V1324 Sco").
     novae = catalog.get("novae", [])
     id_to_name: dict[str, str] = {}
     name_to_id: dict[str, str] = {}
+    name_to_dirname: dict[str, str] = {}
     for nova in novae:
         nova_id = nova["nova_id"]
         name = nova["primary_name"]
         id_to_name[nova_id] = name
         name_to_id[name] = nova_id
+        name_to_dirname[name] = name.replace(" ", "-")
 
     print(f"Catalog contains {len(novae)} novae.")
 
@@ -221,7 +226,7 @@ def main() -> None:
         print("\n── Dry run ──")
         print(f"Would write catalog.json to {_OUTPUT_DIR / 'catalog.json'}")
         for name in target_names:
-            nova_dir = _OUTPUT_DIR / "nova" / name
+            nova_dir = _OUTPUT_DIR / "nova" / name_to_dirname[name]
             for artifact in _NOVA_ARTIFACTS:
                 print(f"Would write {nova_dir / artifact}")
         print("\nDry run complete — nothing written.")
@@ -247,7 +252,8 @@ def main() -> None:
 
     for name in target_names:
         nova_id = name_to_id[name]
-        nova_dir = _OUTPUT_DIR / "nova" / name
+        dirname = name_to_dirname[name]
+        nova_dir = _OUTPUT_DIR / "nova" / dirname
         nova_dir.mkdir(parents=True, exist_ok=True)
 
         print(f"\n{name} ({nova_id}):")

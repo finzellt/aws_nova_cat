@@ -288,11 +288,16 @@ class TestDisplayWavelengthFields:
             rows.append(f"{wl_min + i * step:.2f},1.0")
         return "\n".join(rows)
 
-    def _make_product(self, dp_id: str) -> dict[str, Any]:
+    def _make_product(
+        self,
+        dp_id: str,
+        mjd: str = "59000",
+        instrument: str = "test",
+    ) -> dict[str, Any]:
         return {
             "data_product_id": dp_id,
-            "observation_date_mjd": Decimal("59000"),
-            "instrument": "test",
+            "observation_date_mjd": Decimal(mjd),
+            "instrument": instrument,
             "telescope": "test",
             "provider": "test",
             "flux_unit": "erg/s/cm2/A",
@@ -308,7 +313,12 @@ class TestDisplayWavelengthFields:
             "dp-2": self._make_csv(410, 920),
             "dp-3": self._make_csv(390, 910),
         }
-        products = [self._make_product(dp_id) for dp_id in csvs]
+        # Use different MJDs so spectra are not grouped as multi-arm.
+        products = [
+            self._make_product("dp-1", mjd="59000"),
+            self._make_product("dp-2", mjd="59001"),
+            self._make_product("dp-3", mjd="59002"),
+        ]
 
         class FakeBody:
             def __init__(self, content: str) -> None:
