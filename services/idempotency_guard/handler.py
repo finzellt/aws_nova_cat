@@ -35,7 +35,7 @@ Lock semantics:
   - Conditional put with attribute_not_exists(PK) — first writer wins
   - If lock already exists: raise RetryableError (Step Functions will retry
     with backoff; the concurrent execution should complete within the window)
-  - TTL set to 24 hours to prevent stale locks from blocking future runs
+  - TTL set to 15 minutes to prevent stale locks from blocking future runs
 
 Manual override:
   To release a stale lock during debugging, delete the DynamoDB item:
@@ -58,11 +58,12 @@ from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError
 from nova_common.logging import configure_logging, logger
+from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 
 _TABLE_NAME = os.environ["NOVA_CAT_TABLE_NAME"]
 _SCHEMA_VERSION = "1"
-_LOCK_TTL_HOURS = 24
+_LOCK_TTL_MINUTES = 15
 _TIME_BUCKET_FORMAT = "%Y-%m-%dT%H"  # 1-hour granularity
 
 _dynamodb = boto3.resource("dynamodb")
@@ -81,7 +82,10 @@ def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
     handler_fn = _TASK_HANDLERS.get(task_name)  # type: ignore[arg-type]
     if handler_fn is None:
         raise ValueError(f"Unknown task_name: {task_name!r}")
-    return handler_fn(event, context)
+    logger.info("Task started", extra={"task_name": task_name})
+    with log_duration(f"task:{task_name}"):
+        result = handler_fn(event, context)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -179,8 +183,8 @@ def _now() -> str:
 
 
 def _ttl_epoch() -> int:
-    """TTL for the lock item — 24 hours from now, as Unix epoch seconds."""
-    expiry = datetime.now(UTC) + timedelta(hours=_LOCK_TTL_HOURS)
+    """TTL for the lock item — 15 minutes from now, as Unix epoch seconds."""
+    expiry = datetime.now(UTC) + timedelta(minutes=_LOCK_TTL_MINUTES)
     return int(expiry.timestamp())
 
 

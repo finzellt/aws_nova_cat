@@ -47,11 +47,12 @@ from decimal import Decimal
 from typing import Any
 
 import boto3
-from adapters import _PROVIDER_ADAPTERS, SpectraDiscoveryAdapter  # type: ignore[import-not-found]
+from adapters import _PROVIDER_ADAPTERS, SpectraDiscoveryAdapter
 from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError
 from nova_common.logging import configure_logging, logger
+from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 
 _TABLE_NAME = os.environ["NOVA_CAT_TABLE_NAME"]
@@ -101,15 +102,10 @@ def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
     handler_fn = _TASK_HANDLERS.get(task_name)
     if handler_fn is None:
         raise ValueError(f"Unknown task_name: {task_name!r}. Known tasks: {list(_TASK_HANDLERS)}")
-    logger.info(
-        "Dispatching task",
-        extra={
-            "task_name": task_name,
-            "correlation_id": event.get("correlation_id"),
-            "nova_id": event.get("nova_id"),
-        },
-    )
-    return handler_fn(event, context)
+    logger.info("Task started", extra={"task_name": task_name})
+    with log_duration(f"task:{task_name}"):
+        result = handler_fn(event, context)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -152,16 +148,29 @@ def _handle_query_provider_for_products(event: dict[str, Any], context: object) 
     ra_deg = float(str(ra_deg_raw))
     dec_deg = float(str(dec_deg_raw))
 
+    primary_name: str = event.get("primary_name", "unknown")
+
     logger.info(
         "Querying provider for spectra products",
-        extra={"provider": provider, "nova_id": nova_id, "ra_deg": ra_deg, "dec_deg": dec_deg},
+        extra={
+            "provider": provider,
+            "nova_id": nova_id,
+            "primary_name": primary_name,
+            "ra_deg": ra_deg,
+            "dec_deg": dec_deg,
+        },
     )
 
     raw_products = adapter.query(nova_id=nova_id, ra_deg=ra_deg, dec_deg=dec_deg)
 
     logger.info(
         "Provider query complete",
-        extra={"provider": provider, "nova_id": nova_id, "raw_count": len(raw_products)},
+        extra={
+            "provider": provider,
+            "nova_id": nova_id,
+            "primary_name": primary_name,
+            "raw_count": len(raw_products),
+        },
     )
     return {"raw_products": raw_products}
 
@@ -198,16 +207,24 @@ def _handle_normalize_provider_products(event: dict[str, Any], context: object) 
         else:
             normalized.append(result)
 
+    primary_name: str = event.get("primary_name", "unknown")
+
     if skipped:
         logger.warning(
             "Skipped malformed provider records during normalization",
-            extra={"provider": provider, "nova_id": nova_id, "skipped": skipped},
+            extra={
+                "provider": provider,
+                "nova_id": nova_id,
+                "primary_name": primary_name,
+                "skipped": skipped,
+            },
         )
     logger.info(
         "Normalization complete",
         extra={
             "provider": provider,
             "nova_id": nova_id,
+            "primary_name": primary_name,
             "normalized": len(normalized),
             "skipped": skipped,
         },
@@ -412,6 +429,7 @@ def _handle_persist_data_product_metadata(event: dict[str, Any], context: object
         "PersistDataProductMetadata complete",
         extra={
             "nova_id": nova_id,
+            "primary_name": event.get("primary_name", "unknown"),
             "provider": provider,
             "eligible_for_acquisition": len(persisted_products),
         },
@@ -467,6 +485,7 @@ def _handle_discover_and_persist_products(event: dict[str, Any], context: object
         extra={
             "provider": provider,
             "nova_id": nova_id,
+            "primary_name": event.get("primary_name", "unknown"),
             "total_queried": len(raw_products),
             "total_normalized": len(normalized_products),
             "total_new": total_new,

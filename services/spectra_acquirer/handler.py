@@ -72,16 +72,10 @@ def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
     handler_fn = _TASK_HANDLERS.get(task_name)
     if handler_fn is None:
         raise ValueError(f"Unknown task_name: {task_name!r}. Known tasks: {list(_TASK_HANDLERS)}")
-    logger.info(
-        "Dispatching task",
-        extra={
-            "task_name": task_name,
-            "correlation_id": event.get("correlation_id"),
-            "nova_id": event.get("nova_id"),
-            "data_product_id": event.get("data_product_id"),
-        },
-    )
-    return handler_fn(event, context)
+    logger.info("Task started", extra={"task_name": task_name})
+    with log_duration(f"task:{task_name}"):
+        result = handler_fn(event, context)
+    return result
 
 
 # ---------------------------------------------------------------------------

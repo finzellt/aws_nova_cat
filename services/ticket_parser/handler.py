@@ -39,6 +39,7 @@ import boto3
 from nova_common.errors import QuarantineError, TerminalError
 from nova_common.file_io import resolve_file
 from nova_common.logging import configure_logging, logger
+from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 
 from ticket_parser.parser import TicketParseError, parse_ticket_file, validate_ticket
@@ -60,7 +61,10 @@ def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
     task_name = event.get("task_name")
     if task_name != "ParseTicket":
         raise TerminalError(f"Unknown task_name: {task_name!r}")
-    return _parse_ticket(event)
+    logger.info("Task started", extra={"task_name": task_name})
+    with log_duration("task:ParseTicket"):
+        result = _parse_ticket(event)
+    return result
 
 
 # ---------------------------------------------------------------------------

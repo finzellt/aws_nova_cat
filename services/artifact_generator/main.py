@@ -34,7 +34,6 @@ Environment variables:
 from __future__ import annotations
 
 import json
-import logging
 import os
 import sys
 import time
@@ -54,23 +53,21 @@ from generators.sparkline import generate_sparkline_svg
 from generators.spectra import generate_spectra_json
 from release_publisher import ReleasePublisher
 
+# ---------------------------------------------------------------------------
+# Logging — Fargate tasks don't use Powertools (no Lambda context), so we
+# configure stdlib logging with structured JSON output that matches the
+# Powertools field conventions (service, function_name, level, etc.).
+# ---------------------------------------------------------------------------
+from structured_logging import LogContext, configure_fargate_logging
+
 from contracts.models.regeneration import (
     GENERATION_ORDER,
     ArtifactType,
     NovaResult,
 )
 
-# ---------------------------------------------------------------------------
-# Logging — Fargate tasks don't use Powertools (no Lambda context), so we
-# configure stdlib logging with JSON-structured output.
-# ---------------------------------------------------------------------------
-
-logging.basicConfig(
-    format="%(message)s",
-    level=os.environ.get("LOG_LEVEL", "INFO"),
-    stream=sys.stdout,
-)
-_logger = logging.getLogger("artifact_generator")
+_log_context = LogContext()
+_logger = configure_fargate_logging(_log_context)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -163,7 +160,11 @@ def _load_nova_item(nova_id: str) -> dict[str, Any] | None:
     if status != "ACTIVE":
         _logger.warning(
             "Nova is not ACTIVE — skipping",
-            extra={"nova_id": nova_id, "status": status},
+            extra={
+                "nova_id": nova_id,
+                "primary_name": item.get("primary_name", "unknown"),
+                "status": status,
+            },
         )
         return None
 
@@ -255,7 +256,12 @@ def _generate_and_publish(
         if _photometry_table is None:
             _logger.error(
                 "Photometry table not configured — skipping photometry generator",
-                extra={"nova_id": nova_id},
+                extra={
+                    "nova_id": nova_id,
+                    "primary_name": nova_context.get("nova_item", {}).get(
+                        "primary_name", "unknown"
+                    ),
+                },
             )
             nova_context["photometry_count"] = 0
             nova_context["photometry_raw_items"] = []
@@ -358,6 +364,17 @@ def _process_nova(
             raise ValueError(f"Nova {nova_id} not found or not ACTIVE")
 
         nova_context["nova_item"] = nova_item
+        primary_name = nova_item.get("primary_name", "unknown")
+
+        _logger.info(
+            "Processing nova",
+            extra={
+                "nova_id": nova_id,
+                "primary_name": primary_name,
+                "artifacts": artifacts_to_generate,
+                "phase": "per_nova",
+            },
+        )
 
         # Pre-populate observation counts from the Nova DDB item.
         # The Finalize Lambda (§4.5) writes these after each successful
@@ -380,18 +397,26 @@ def _process_nova(
 
         # --- Generate and publish artifacts in dependency order ---
         generated_artifacts: set[str] = set()
+        failed_artifacts: list[str] = []
         for artifact_type in GENERATION_ORDER:
             if artifact_type.value in artifacts_to_generate:
-                _logger.info(
-                    "Generating artifact",
-                    extra={
-                        "nova_id": nova_id,
-                        "artifact": artifact_type.value,
-                        "phase": "generate",
-                    },
+                _log_context.set_context(
+                    artifact=artifact_type.value,
+                    phase="generate",
                 )
-                _generate_and_publish(nova_id, artifact_type, nova_context, publisher)
-                generated_artifacts.add(artifact_type.value)
+                try:
+                    _logger.info(
+                        "Generating artifact",
+                        extra={"primary_name": primary_name},
+                    )
+                    _generate_and_publish(nova_id, artifact_type, nova_context, publisher)
+                    generated_artifacts.add(artifact_type.value)
+                except Exception:
+                    _logger.exception(
+                        "Generator failed — continuing with remaining artifacts",
+                        extra={"primary_name": primary_name},
+                    )
+                    failed_artifacts.append(artifact_type.value)
 
         # --- Copy forward any artifacts from the previous release that
         #     were NOT in this nova's manifest (partial sweep). ---
@@ -399,7 +424,7 @@ def _process_nova(
         if copied:
             _logger.info(
                 "Copied forward missing artifacts for swept nova",
-                extra={"nova_id": nova_id, "copied": copied},
+                extra={"nova_id": nova_id, "primary_name": primary_name, "copied": copied},
             )
 
     except Exception as exc:
@@ -408,6 +433,7 @@ def _process_nova(
             "Nova processing failed",
             extra={
                 "nova_id": nova_id,
+                "primary_name": nova_context.get("nova_item", {}).get("primary_name", "unknown"),
                 "error": str(exc),
                 "duration_ms": duration_ms,
             },
@@ -419,10 +445,45 @@ def _process_nova(
         )
 
     duration_ms = int((time.monotonic() - start) * 1000)
-    _logger.info(
-        "Nova processing succeeded",
-        extra={"nova_id": nova_id, "duration_ms": duration_ms},
-    )
+
+    # Determine success: if ALL generators failed, the nova is failed.
+    all_failed = len(failed_artifacts) > 0 and len(generated_artifacts) == 0
+    if all_failed:
+        _logger.error(
+            "Nova processing failed — all generators failed",
+            extra={
+                "nova_id": nova_id,
+                "primary_name": primary_name,
+                "failed_artifacts": failed_artifacts,
+                "duration_ms": duration_ms,
+            },
+        )
+        return NovaResult(
+            nova_id=nova_id,
+            success=False,
+            error=f"All generators failed: {', '.join(failed_artifacts)}",
+        )
+
+    if failed_artifacts:
+        _logger.warning(
+            "Nova processing partially succeeded — some generators failed",
+            extra={
+                "nova_id": nova_id,
+                "primary_name": primary_name,
+                "failed_artifacts": failed_artifacts,
+                "generated_artifacts": sorted(generated_artifacts),
+                "duration_ms": duration_ms,
+            },
+        )
+    else:
+        _logger.info(
+            "Nova processing succeeded",
+            extra={
+                "nova_id": nova_id,
+                "primary_name": primary_name,
+                "duration_ms": duration_ms,
+            },
+        )
 
     return NovaResult(
         nova_id=nova_id,
@@ -465,10 +526,12 @@ def main() -> None:
     """Fargate task entry point."""
     global _band_registry  # noqa: PLW0603
 
-    _logger.info(
-        "Artifact generator started",
-        extra={"plan_id": _PLAN_ID, "workflow_name": "artifact_generator"},
+    _log_context.set_context(
+        plan_id=_PLAN_ID,
+        workflow_name="artifact_generator",
     )
+
+    _logger.info("Artifact generator started")
 
     # Load band registry once per Fargate execution (§8.2).
     _band_registry = _load_band_registry()
@@ -478,19 +541,17 @@ def main() -> None:
     nova_manifests: dict[str, Any] = plan.get("nova_manifests", {})
     nova_count = len(nova_manifests)
 
-    _logger.info(
-        "Batch plan loaded",
-        extra={"plan_id": _PLAN_ID, "nova_count": nova_count},
-    )
+    _logger.info("Batch plan loaded", extra={"nova_count": nova_count})
 
     # Step 2 — Initialize publication and read previous pointer (§12).
     publisher = ReleasePublisher(_s3, _PUBLIC_BUCKET)
     publisher.read_previous_pointer()
 
+    _log_context.set_context(release_id=publisher.release_id)
+
     _logger.info(
         "Release initialized",
         extra={
-            "release_id": publisher.release_id,
             "previous_release_id": publisher.previous_release_id,
             "phase": "publication",
         },
@@ -504,10 +565,10 @@ def main() -> None:
 
     for nova_id, manifest in nova_manifests.items():
         swept_nova_ids.add(nova_id)
+        _log_context.set_context(nova_id=nova_id)
         _logger.info(
             "Processing nova",
             extra={
-                "nova_id": nova_id,
                 "artifacts": manifest.get("artifacts", []),
                 "progress": f"{succeeded + failed + 1}/{nova_count}",
             },
@@ -518,6 +579,7 @@ def main() -> None:
             succeeded += 1
         else:
             failed += 1
+        _log_context.clear_nova_context()
 
     # Step 5 — Phase 2: copy forward unchanged ACTIVE novae (§12.5).
     #
@@ -528,7 +590,8 @@ def main() -> None:
     # Ordering: catalog generation produces the artifact dict but does
     # NOT write to S3 yet.  Phase 2 copies forward, then Phase 3 writes
     # catalog.json, then Phase 4 updates the pointer.
-    _logger.info("Generating catalog.json", extra={"phase": "catalog"})
+    _log_context.set_context(phase="catalog")
+    _logger.info("Generating catalog.json")
     catalog_data = generate_catalog_json(nova_results, _table)
 
     # Compute the set of ACTIVE novae to copy forward: all novae in the
@@ -549,7 +612,8 @@ def main() -> None:
 
     # Step 6 — Phase 3: write catalog.json to release prefix.
     if copy_ok:
-        _logger.info("Phase 3: writing catalog.json", extra={"phase": "publication"})
+        _log_context.set_context(phase="publication")
+        _logger.info("Phase 3: writing catalog.json")
         publisher.write_catalog(catalog_data)
     else:
         _logger.error(
@@ -561,7 +625,8 @@ def main() -> None:
     publication_ok = False
     if copy_ok:
         try:
-            _logger.info("Phase 4: updating pointer", extra={"phase": "publication"})
+            _log_context.set_context(phase="pointer")
+            _logger.info("Phase 4: updating pointer")
             publisher.update_pointer()
             publication_ok = True
         except Exception:

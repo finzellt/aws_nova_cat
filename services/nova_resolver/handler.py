@@ -35,6 +35,7 @@ import boto3
 from boto3.dynamodb.conditions import Attr, Key
 from nova_common.errors import TerminalError
 from nova_common.logging import configure_logging, logger
+from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 
 _TABLE_NAME = os.environ["NOVA_CAT_TABLE_NAME"]
@@ -60,7 +61,10 @@ def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
     handler_fn = _TASK_HANDLERS.get(task_name)  # type: ignore[arg-type]
     if handler_fn is None:
         raise ValueError(f"Unknown task_name: {task_name!r}")
-    return handler_fn(event, context)
+    logger.info("Task started", extra={"task_name": task_name})
+    with log_duration(f"task:{task_name}"):
+        result = handler_fn(event, context)
+    return result
 
 
 # ---------------------------------------------------------------------------
