@@ -268,64 +268,20 @@ def _run_provider_iteration(
 ) -> dict[str, Any]:
     """
     Run the full Map iterator for a single provider, mirroring the ASL:
-      QueryProviderForProducts → NormalizeProviderProducts →
-      DeduplicateAndAssignDataProductIds → PersistDataProductMetadata →
-      PublishAcquireAndValidateSpectraRequests
+      DiscoverAndPersistProducts → PublishAcquireAndValidateSpectraRequests
 
-    Returns the publish_result from the final task.
+    Returns the discover_result and publish_result.
     """
     correlation_id = state["job_run"]["correlation_id"]
 
-    query_result = cast(
+    discover_result = cast(
         dict[str, Any],
         h["spectra_discoverer"].handle(
             {
-                "task_name": "QueryProviderForProducts",
+                "task_name": "DiscoverAndPersistProducts",
                 "provider": provider,
                 "nova_id": _NOVA_ID,
                 "correlation_id": correlation_id,
-            },
-            None,
-        ),
-    )
-
-    normalize_result = cast(
-        dict[str, Any],
-        h["spectra_discoverer"].handle(
-            {
-                "task_name": "NormalizeProviderProducts",
-                "provider": provider,
-                "nova_id": _NOVA_ID,
-                "correlation_id": correlation_id,
-                "raw_products": query_result["raw_products"],
-            },
-            None,
-        ),
-    )
-
-    dedup_result = cast(
-        dict[str, Any],
-        h["spectra_discoverer"].handle(
-            {
-                "task_name": "DeduplicateAndAssignDataProductIds",
-                "provider": provider,
-                "nova_id": _NOVA_ID,
-                "correlation_id": correlation_id,
-                "normalized_products": normalize_result["normalized_products"],
-            },
-            None,
-        ),
-    )
-
-    persist_result = cast(
-        dict[str, Any],
-        h["spectra_discoverer"].handle(
-            {
-                "task_name": "PersistDataProductMetadata",
-                "provider": provider,
-                "nova_id": _NOVA_ID,
-                "correlation_id": correlation_id,
-                "products_with_ids": dedup_result["products_with_ids"],
             },
             None,
         ),
@@ -338,18 +294,15 @@ def _run_provider_iteration(
                 "task_name": "PublishAcquireAndValidateSpectraRequests",
                 "nova_id": _NOVA_ID,
                 "correlation_id": correlation_id,
+                "provider": provider,
                 "job_run": state["job_run"],
-                "persisted_products": persist_result["persisted_products"],
             },
             None,
         ),
     )
 
     return {
-        "query_result": query_result,
-        "normalize_result": normalize_result,
-        "dedup_result": dedup_result,
-        "persist_result": persist_result,
+        "discover_result": discover_result,
         "publish_result": publish_result,
     }
 
@@ -464,8 +417,8 @@ class TestHappyPath:
                 result = _run_provider_iteration(h, state)
                 _finalize_success(h, state)
 
-            # Two stubs written
-            assert len(result["persist_result"]["persisted_products"]) == 2
+            # Two stubs written — combined task returns summary counts
+            assert result["discover_result"]["total_new"] == 2
 
             dp_id_1 = str(uuid.uuid5(_ID_NAMESPACE, "ESO:eso:prod-001"))
             dp_id_2 = str(uuid.uuid5(_ID_NAMESPACE, "ESO:eso:prod-002"))
@@ -662,7 +615,7 @@ class TestEmptyResults:
 
             mock_sfn.start_execution.assert_not_called()
 
-        assert result["persist_result"]["persisted_products"] == []
+        assert result["discover_result"]["total_new"] == 0
         assert result["publish_result"]["total"] == 0
 
         job_run_item = _get_job_run(table, state)
@@ -683,7 +636,7 @@ class TestEmptyResults:
 
             mock_sfn.start_execution.assert_not_called()
 
-        assert result["normalize_result"]["normalized_products"] == []
+        assert result["discover_result"]["total_normalized"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -832,6 +785,8 @@ class TestAlreadyValidProduct:
                     "PK": _NOVA_ID,
                     "SK": f"PRODUCT#SPECTRA#{_PROVIDER}#{dp_id}",
                     "entity_type": "DataProduct",
+                    "data_product_id": dp_id,
+                    "provider": _PROVIDER,
                     "validation_status": "VALID",
                     "eligibility": "NONE",
                 }
@@ -854,7 +809,7 @@ class TestAlreadyValidProduct:
 
             # No acquisition event fired
             mock_sfn.start_execution.assert_not_called()
-            assert result["persist_result"]["persisted_products"] == []
+            assert result["discover_result"]["total_new"] == 0
 
             # Existing stub is unchanged (still VALID/NONE)
             stub = _get_data_product(table, dp_id)
@@ -898,6 +853,8 @@ class TestExistingNonValidProduct:
                     "PK": _NOVA_ID,
                     "SK": f"PRODUCT#SPECTRA#{_PROVIDER}#{dp_id}",
                     "entity_type": "DataProduct",
+                    "data_product_id": dp_id,
+                    "provider": _PROVIDER,
                     "validation_status": "UNVALIDATED",
                     "acquisition_status": "IN_PROGRESS",
                     "eligibility": "ACQUIRE",
@@ -923,8 +880,7 @@ class TestExistingNonValidProduct:
 
             # Acquisition IS triggered for the existing non-VALID product
             mock_sfn.start_execution.assert_called_once()
-            assert len(result["persist_result"]["persisted_products"]) == 1
-            assert result["persist_result"]["persisted_products"][0]["data_product_id"] == dp_id
+            assert result["discover_result"]["total_existing"] == 1
 
             # Existing stub's acquisition state is preserved (no re-write)
             stub = _get_data_product(table, dp_id)
@@ -934,3 +890,117 @@ class TestExistingNonValidProduct:
             # LocatorAlias still exists
             alias = _get_locator_alias(table, locator_identity, dp_id)
             assert alias is not None
+
+
+# ---------------------------------------------------------------------------
+# Path 7: DiscoverAndPersistProducts combined task — summary only
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoverAndPersistProductsCombined:
+    def test_returns_summary_without_product_arrays(self, table: Any) -> None:
+        """
+        The combined DiscoverAndPersistProducts task must return only a
+        lightweight summary dict — no product arrays in the response.
+        """
+        raw = [
+            _raw_record(creator_did="eso:prod-001", access_url="http://archive.eso.org/spec1"),
+            _raw_record(
+                creator_did="eso:prod-002",
+                access_url="http://archive.eso.org/spec2",
+                collection="HARPS",
+            ),
+        ]
+        with mock_aws():
+            h = _load_handlers(raw_products=raw)
+            state = _run_prefix(h)
+            correlation_id = state["job_run"]["correlation_id"]
+
+            result = cast(
+                dict[str, Any],
+                h["spectra_discoverer"].handle(
+                    {
+                        "task_name": "DiscoverAndPersistProducts",
+                        "provider": _PROVIDER,
+                        "nova_id": _NOVA_ID,
+                        "correlation_id": correlation_id,
+                    },
+                    None,
+                ),
+            )
+
+        # Summary fields present
+        assert result["provider"] == _PROVIDER
+        assert result["nova_id"] == _NOVA_ID
+        assert result["total_queried"] == 2
+        assert result["total_normalized"] == 2
+        assert result["total_new"] == 2
+        assert result["total_existing"] == 0
+
+        # No product arrays in the response
+        assert "raw_products" not in result
+        assert "normalized_products" not in result
+        assert "products_with_ids" not in result
+        assert "persisted_products" not in result
+
+    def test_products_persisted_to_ddb(self, table: Any) -> None:
+        """
+        The combined task persists DataProduct stubs to DDB with correct shape.
+        """
+        raw = [
+            _raw_record(creator_did="eso:prod-001", access_url="http://archive.eso.org/spec1"),
+        ]
+        with mock_aws():
+            h = _load_handlers(raw_products=raw)
+            state = _run_prefix(h)
+            correlation_id = state["job_run"]["correlation_id"]
+
+            h["spectra_discoverer"].handle(
+                {
+                    "task_name": "DiscoverAndPersistProducts",
+                    "provider": _PROVIDER,
+                    "nova_id": _NOVA_ID,
+                    "correlation_id": correlation_id,
+                },
+                None,
+            )
+
+        dp_id = str(uuid.uuid5(_ID_NAMESPACE, "ESO:eso:prod-001"))
+        stub = _get_data_product(table, dp_id)
+        assert stub is not None
+        assert stub["eligibility"] == "ACQUIRE"
+        assert stub["acquisition_status"] == "STUB"
+        assert stub["validation_status"] == "UNVALIDATED"
+
+    def test_summary_counts_correct(self, table: Any) -> None:
+        """
+        Counts in the summary match the actual processing:
+        total_queried >= total_normalized >= total_new + total_existing.
+        """
+        # One good record, one malformed (will normalize to None)
+        raw = [
+            _raw_record(creator_did="eso:prod-001", access_url="http://archive.eso.org/spec1"),
+            {"CREATORDID": None, "access_url": None},
+        ]
+        with mock_aws():
+            h = _load_handlers(raw_products=raw)
+            state = _run_prefix(h)
+            correlation_id = state["job_run"]["correlation_id"]
+
+            result = cast(
+                dict[str, Any],
+                h["spectra_discoverer"].handle(
+                    {
+                        "task_name": "DiscoverAndPersistProducts",
+                        "provider": _PROVIDER,
+                        "nova_id": _NOVA_ID,
+                        "correlation_id": correlation_id,
+                    },
+                    None,
+                ),
+            )
+
+        assert result["total_queried"] == 2
+        assert result["total_normalized"] == 1
+        assert result["total_new"] == 1
+        assert result["total_existing"] == 0

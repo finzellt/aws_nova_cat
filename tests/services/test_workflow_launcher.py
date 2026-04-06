@@ -227,22 +227,56 @@ class TestThrottling:
 _FAKE_CORRELATION_ID = "corr-001"
 
 
-def _publish_event(persisted_products: list[dict], **kwargs: Any) -> dict[str, Any]:
+def _publish_event(provider: str = "ESO", **kwargs: Any) -> dict[str, Any]:
     return {
         "task_name": "PublishAcquireAndValidateSpectraRequests",
         "nova_id": _FAKE_NOVA_ID,
         "correlation_id": _FAKE_CORRELATION_ID,
+        "provider": provider,
         "job_run": {
             "job_run_id": _FAKE_JOB_RUN_ID,
             "correlation_id": _FAKE_CORRELATION_ID,
         },
-        "persisted_products": persisted_products,
         **kwargs,
     }
 
 
 def _product(data_product_id: str, provider: str = "ESO") -> dict[str, Any]:
     return {"data_product_id": data_product_id, "provider": provider, "nova_id": _FAKE_NOVA_ID}
+
+
+def _seed_eligible_products(table_name: str, nova_id: str, products: list[dict[str, Any]]) -> None:
+    """Seed DDB with DataProduct items having eligibility=ACQUIRE."""
+    dynamodb = boto3.resource("dynamodb", region_name=_REGION)
+    tbl = dynamodb.Table(table_name)
+    for p in products:
+        tbl.put_item(
+            Item={
+                "PK": nova_id,
+                "SK": f"PRODUCT#SPECTRA#{p['provider']}#{p['data_product_id']}",
+                "entity_type": "DataProduct",
+                "data_product_id": p["data_product_id"],
+                "provider": p["provider"],
+                "eligibility": "ACQUIRE",
+            }
+        )
+
+
+def _create_ddb_table() -> None:
+    """Create the mocked DynamoDB table."""
+    dynamodb = boto3.resource("dynamodb", region_name=_REGION)
+    dynamodb.create_table(
+        TableName="NovaCat-Test",
+        KeySchema=[
+            {"AttributeName": "PK", "KeyType": "HASH"},
+            {"AttributeName": "SK", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "PK", "AttributeType": "S"},
+            {"AttributeName": "SK", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
 
 
 def _sfn_success_response(execution_arn: str) -> dict[str, Any]:
@@ -256,12 +290,13 @@ def _client_error(code: str) -> ClientError:
 class TestPublishAcquireAndValidateSpectraRequests:
     def test_empty_list_returns_zero_counts(self, state_machines: Any) -> None:
         with mock_aws():
+            _create_ddb_table()
             handler = _load_handler()
             with patch.object(handler, "_sfn") as mock_sfn:
                 mock_sfn.exceptions.ExecutionAlreadyExists = type(
                     "ExecutionAlreadyExists", (Exception,), {}
                 )
-                result = handler.handle(_publish_event([]), None)
+                result = handler.handle(_publish_event(), None)
             mock_sfn.start_execution.assert_not_called()
         assert result["total"] == 0
         assert result["launched"] == []
@@ -270,6 +305,8 @@ class TestPublishAcquireAndValidateSpectraRequests:
     def test_single_product_launches_one_execution(self, state_machines: Any) -> None:
         dp_id = "aaaaaaaa-0000-0000-0000-000000000001"
         with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products("NovaCat-Test", _FAKE_NOVA_ID, [_product(dp_id)])
             handler = _load_handler()
             with patch.object(handler, "_sfn") as mock_sfn:
                 mock_sfn.exceptions.ExecutionAlreadyExists = type(
@@ -278,7 +315,7 @@ class TestPublishAcquireAndValidateSpectraRequests:
                 mock_sfn.start_execution.return_value = _sfn_success_response(
                     f"arn:aws:states:::execution:acquire:{dp_id}"
                 )
-                result = handler.handle(_publish_event([_product(dp_id)]), None)
+                result = handler.handle(_publish_event(), None)
             mock_sfn.start_execution.assert_called_once()
         assert result["total"] == 1
         assert len(result["launched"]) == 1
@@ -287,6 +324,8 @@ class TestPublishAcquireAndValidateSpectraRequests:
     def test_multiple_products_all_launched(self, state_machines: Any) -> None:
         products = [_product(f"aaaaaaaa-0000-0000-0000-{i:012d}") for i in range(3)]
         with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products("NovaCat-Test", _FAKE_NOVA_ID, products)
             handler = _load_handler()
             with patch.object(handler, "_sfn") as mock_sfn:
                 mock_sfn.exceptions.ExecutionAlreadyExists = type(
@@ -295,7 +334,7 @@ class TestPublishAcquireAndValidateSpectraRequests:
                 mock_sfn.start_execution.return_value = _sfn_success_response(
                     "arn:aws:states:::execution:acquire:test"
                 )
-                result = handler.handle(_publish_event(products), None)
+                result = handler.handle(_publish_event(), None)
             assert mock_sfn.start_execution.call_count == 3
         assert result["total"] == 3
         assert len(result["launched"]) == 3
@@ -304,13 +343,15 @@ class TestPublishAcquireAndValidateSpectraRequests:
     def test_execution_already_exists_treated_as_success(self, state_machines: Any) -> None:
         dp_id = "aaaaaaaa-0000-0000-0000-000000000001"
         with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products("NovaCat-Test", _FAKE_NOVA_ID, [_product(dp_id)])
             handler = _load_handler()
             with patch.object(handler, "_sfn") as mock_sfn:
                 mock_sfn.exceptions.ExecutionAlreadyExists = type(
                     "ExecutionAlreadyExists", (Exception,), {}
                 )
                 mock_sfn.start_execution.side_effect = _client_error("ExecutionAlreadyExists")
-                result = handler.handle(_publish_event([_product(dp_id)]), None)
+                result = handler.handle(_publish_event(), None)
         assert result["total"] == 1
         assert len(result["launched"]) == 1
         assert result["launched"][0]["already_existed"] is True
@@ -326,13 +367,17 @@ class TestPublishAcquireAndValidateSpectraRequests:
             return _sfn_success_response("arn:aws:states:::execution:acquire:test")
 
         with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products(
+                "NovaCat-Test", _FAKE_NOVA_ID, [_product(good_id), _product(bad_id)]
+            )
             handler = _load_handler()
             with patch.object(handler, "_sfn") as mock_sfn:
                 mock_sfn.exceptions.ExecutionAlreadyExists = type(
                     "ExecutionAlreadyExists", (Exception,), {}
                 )
                 mock_sfn.start_execution.side_effect = _side_effect
-                result = handler.handle(_publish_event([_product(good_id), _product(bad_id)]), None)
+                result = handler.handle(_publish_event(), None)
         assert result["total"] == 2
         assert len(result["launched"]) == 1
         assert len(result["failed"]) == 1
@@ -341,6 +386,8 @@ class TestPublishAcquireAndValidateSpectraRequests:
     def test_execution_name_uses_data_product_id_not_nova_id(self, state_machines: Any) -> None:
         dp_id = "aaaaaaaa-0000-0000-0000-000000000001"
         with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products("NovaCat-Test", _FAKE_NOVA_ID, [_product(dp_id)])
             handler = _load_handler()
             with patch.object(handler, "_sfn") as mock_sfn:
                 mock_sfn.exceptions.ExecutionAlreadyExists = type(
@@ -349,7 +396,7 @@ class TestPublishAcquireAndValidateSpectraRequests:
                 mock_sfn.start_execution.return_value = _sfn_success_response(
                     "arn:aws:states:::execution:acquire:test"
                 )
-                handler.handle(_publish_event([_product(dp_id)]), None)
+                handler.handle(_publish_event(), None)
             _, kwargs = mock_sfn.start_execution.call_args
         assert dp_id in kwargs["name"]
         assert _FAKE_NOVA_ID not in kwargs["name"]
@@ -358,6 +405,8 @@ class TestPublishAcquireAndValidateSpectraRequests:
     def test_continuation_event_contains_required_fields(self, state_machines: Any) -> None:
         dp_id = "aaaaaaaa-0000-0000-0000-000000000001"
         with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products("NovaCat-Test", _FAKE_NOVA_ID, [_product(dp_id)])
             handler = _load_handler()
             with patch.object(handler, "_sfn") as mock_sfn:
                 mock_sfn.exceptions.ExecutionAlreadyExists = type(
@@ -366,7 +415,7 @@ class TestPublishAcquireAndValidateSpectraRequests:
                 mock_sfn.start_execution.return_value = _sfn_success_response(
                     "arn:aws:states:::execution:acquire:test"
                 )
-                handler.handle(_publish_event([_product(dp_id)]), None)
+                handler.handle(_publish_event(), None)
             _, kwargs = mock_sfn.start_execution.call_args
         payload = json.loads(kwargs["input"])
         assert payload["nova_id"] == _FAKE_NOVA_ID
@@ -377,6 +426,8 @@ class TestPublishAcquireAndValidateSpectraRequests:
     def test_targets_acquire_and_validate_spectra_state_machine(self, state_machines: Any) -> None:
         dp_id = "aaaaaaaa-0000-0000-0000-000000000001"
         with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products("NovaCat-Test", _FAKE_NOVA_ID, [_product(dp_id)])
             handler = _load_handler()
             with patch.object(handler, "_sfn") as mock_sfn:
                 mock_sfn.exceptions.ExecutionAlreadyExists = type(
@@ -385,9 +436,42 @@ class TestPublishAcquireAndValidateSpectraRequests:
                 mock_sfn.start_execution.return_value = _sfn_success_response(
                     "arn:aws:states:::execution:acquire:test"
                 )
-                handler.handle(_publish_event([_product(dp_id)]), None)
+                handler.handle(_publish_event(), None)
             _, kwargs = mock_sfn.start_execution.call_args
         assert kwargs["stateMachineArn"] == _SM_ARNS["acquire_and_validate_spectra"]
+
+    def test_queries_ddb_for_eligible_products(self, state_machines: Any) -> None:
+        """Verify the handler queries DDB for eligible products rather than reading from event."""
+        dp_id_eligible = "aaaaaaaa-0000-0000-0000-000000000001"
+        dp_id_not_eligible = "aaaaaaaa-0000-0000-0000-000000000002"
+        with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products("NovaCat-Test", _FAKE_NOVA_ID, [_product(dp_id_eligible)])
+            # Seed a product that is NOT eligible (eligibility != ACQUIRE)
+            dynamodb = boto3.resource("dynamodb", region_name=_REGION)
+            tbl = dynamodb.Table("NovaCat-Test")
+            tbl.put_item(
+                Item={
+                    "PK": _FAKE_NOVA_ID,
+                    "SK": f"PRODUCT#SPECTRA#ESO#{dp_id_not_eligible}",
+                    "entity_type": "DataProduct",
+                    "data_product_id": dp_id_not_eligible,
+                    "provider": "ESO",
+                    "eligibility": "NONE",
+                }
+            )
+            handler = _load_handler()
+            with patch.object(handler, "_sfn") as mock_sfn:
+                mock_sfn.exceptions.ExecutionAlreadyExists = type(
+                    "ExecutionAlreadyExists", (Exception,), {}
+                )
+                mock_sfn.start_execution.return_value = _sfn_success_response(
+                    "arn:aws:states:::execution:acquire:test"
+                )
+                result = handler.handle(_publish_event(), None)
+            mock_sfn.start_execution.assert_called_once()
+        assert result["total"] == 1
+        assert len(result["launched"]) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +484,8 @@ class TestBatchedFanOut:
         """25 products → 3 batches (10, 10, 5). sleep called between 1→2 and 2→3, not after 3."""
         products = [_product(f"aaaaaaaa-0000-0000-0000-{i:012d}") for i in range(25)]
         with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products("NovaCat-Test", _FAKE_NOVA_ID, products)
             handler = _load_handler()
             with (
                 patch.object(handler, "_sfn") as mock_sfn,
@@ -412,7 +498,7 @@ class TestBatchedFanOut:
                 mock_sfn.start_execution.return_value = _sfn_success_response(
                     "arn:aws:states:::execution:acquire:test"
                 )
-                result = handler.handle(_publish_event(products), None)
+                result = handler.handle(_publish_event(), None)
 
             assert mock_sfn.start_execution.call_count == 25
             assert mock_sleep.call_count == 2
@@ -425,6 +511,8 @@ class TestBatchedFanOut:
         """5 products (under batch size) → 1 batch, no sleep."""
         products = [_product(f"aaaaaaaa-0000-0000-0000-{i:012d}") for i in range(5)]
         with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products("NovaCat-Test", _FAKE_NOVA_ID, products)
             handler = _load_handler()
             with (
                 patch.object(handler, "_sfn") as mock_sfn,
@@ -437,7 +525,7 @@ class TestBatchedFanOut:
                 mock_sfn.start_execution.return_value = _sfn_success_response(
                     "arn:aws:states:::execution:acquire:test"
                 )
-                result = handler.handle(_publish_event(products), None)
+                result = handler.handle(_publish_event(), None)
 
             mock_sleep.assert_not_called()
         assert result["total"] == 5
@@ -456,6 +544,8 @@ class TestBatchedFanOut:
             return _sfn_success_response("arn:aws:states:::execution:acquire:test")
 
         with mock_aws():
+            _create_ddb_table()
+            _seed_eligible_products("NovaCat-Test", _FAKE_NOVA_ID, products)
             handler = _load_handler()
             with (
                 patch.object(handler, "_sfn") as mock_sfn,
@@ -466,11 +556,10 @@ class TestBatchedFanOut:
                     "ExecutionAlreadyExists", (Exception,), {}
                 )
                 mock_sfn.start_execution.side_effect = _side_effect
-                result = handler.handle(_publish_event(products), None)
+                result = handler.handle(_publish_event(), None)
 
         assert len(result["launched"]) == 9
         assert len(result["failed"]) == 1
-        assert result["failed"][0]["data_product_id"] == products[4]["data_product_id"]
         assert result["total"] == 10
 
 

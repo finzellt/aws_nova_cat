@@ -50,6 +50,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import boto3
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError
 from nova_common.logging import configure_logging, logger
@@ -171,25 +172,27 @@ def _publish_acquire_and_validate_spectra_requests(
     """
     nova_id: str = event["nova_id"]
     correlation_id: str = event["correlation_id"]
-    job_run_id: str = event["job_run"]["job_run_id"]
-    # NOTE: "persisted_products" includes both newly-stubbed products (is_new=True)
-    # and existing UNVALIDATED products re-queued for acquisition (is_new=False).
-    # The name is historical; treat it as "eligible_for_acquisition".
-    persisted_products: list[dict[str, Any]] = event["persisted_products"]
+    provider: str = event["provider"]
+    # Support both the new ASL shape (job_run_id as top-level field) and the
+    # legacy shape (nested under job_run.job_run_id) for backward compatibility.
+    job_run_id: str = event.get("job_run_id") or event["job_run"]["job_run_id"]
+
+    # Query DDB for eligible products instead of reading from the event payload.
+    eligible_products = _query_eligible_products(nova_id=nova_id, provider=provider)
 
     launched: list[dict[str, Any]] = []
     failed: list[dict[str, Any]] = []
 
     # Split products into batches to avoid overwhelming Lambda concurrency.
     total_batches = (
-        (len(persisted_products) + _FANOUT_BATCH_SIZE - 1) // _FANOUT_BATCH_SIZE
-        if persisted_products
+        (len(eligible_products) + _FANOUT_BATCH_SIZE - 1) // _FANOUT_BATCH_SIZE
+        if eligible_products
         else 0
     )
 
     for batch_idx in range(total_batches):
         start = batch_idx * _FANOUT_BATCH_SIZE
-        batch = persisted_products[start : start + _FANOUT_BATCH_SIZE]
+        batch = eligible_products[start : start + _FANOUT_BATCH_SIZE]
 
         logger.info(
             "Launching fan-out batch",
@@ -197,13 +200,12 @@ def _publish_acquire_and_validate_spectra_requests(
                 "batch_number": batch_idx + 1,
                 "batch_size": len(batch),
                 "total_batches": total_batches,
-                "total_products": len(persisted_products),
+                "total_products": len(eligible_products),
             },
         )
 
         for product in batch:
             data_product_id: str = product["data_product_id"]
-            provider: str = product["provider"]
 
             try:
                 result = _start_execution(
@@ -255,20 +257,65 @@ def _publish_acquire_and_validate_spectra_requests(
             "nova_id": nova_id,
             "launched": len(launched),
             "failed": len(failed),
-            "total": len(persisted_products),
+            "total": len(eligible_products),
         },
     )
 
     return {
         "launched": launched,
         "failed": failed,
-        "total": len(persisted_products),
+        "total": len(eligible_products),
     }
 
 
 # ---------------------------------------------------------------------------
 # Shared SFN helper
 # ---------------------------------------------------------------------------
+
+
+def _query_eligible_products(*, nova_id: str, provider: str) -> list[dict[str, Any]]:
+    """
+    Query DDB for DataProduct items with eligibility=ACQUIRE for the given
+    nova_id and provider.
+
+    Uses a query on PK=nova_id with SK begins_with("PRODUCT#SPECTRA#{provider}#")
+    and filters for eligibility=ACQUIRE.
+
+    Paginates to collect all matching items. Raises RetryableError on
+    DynamoDB transient failures.
+    """
+    sk_prefix = f"PRODUCT#SPECTRA#{provider}#"
+    products: list[dict[str, Any]] = []
+
+    try:
+        kwargs: dict[str, Any] = {
+            "KeyConditionExpression": Key("PK").eq(nova_id) & Key("SK").begins_with(sk_prefix),
+            "FilterExpression": "eligibility = :elig",
+            "ExpressionAttributeValues": {":elig": "ACQUIRE"},
+            "ProjectionExpression": "data_product_id, provider",
+        }
+        while True:
+            response = _table.query(**kwargs)
+            products.extend(response.get("Items", []))
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            kwargs["ExclusiveStartKey"] = last_key
+    except ClientError as exc:
+        raise RetryableError(
+            f"DynamoDB query failed fetching eligible products "
+            f"for nova_id={nova_id!r} provider={provider!r}: {exc}"
+        ) from exc
+
+    logger.info(
+        "Queried eligible products from DDB",
+        extra={
+            "nova_id": nova_id,
+            "provider": provider,
+            "eligible_count": len(products),
+        },
+    )
+    return products
 
 
 def _record_execution_arn(
