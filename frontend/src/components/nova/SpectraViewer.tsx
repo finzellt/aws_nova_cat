@@ -36,6 +36,7 @@ export interface SpectraViewerProps {
 }
 
 type EpochFormat = 'dpo' | 'mjd' | 'calendar';
+type FluxScale = 'sqrt' | 'linear';
 /** The three spectral feature groups from ADR-013. */
 type FeatureGroup = 'fe2' | 'hen' | 'nebular';
 
@@ -155,13 +156,52 @@ function assignColor(sortIndex: number, totalCount: number, isDense: boolean): s
 
 // ── Helpers: temporal ─────────────────────────────────────────────────────────
 
+/**
+ * Pick the best spectrum from a same-day group.
+ * Priority: wavelength range > 100nm, then point count ≥ 2000, then broadest range.
+ */
+function pickBestInGroup(group: SpectrumRecord[]): SpectrumRecord {
+  if (group.length === 1) return group[0];
+  return group.reduce((best, cur) => {
+    const bestRange = best.wavelength_max - best.wavelength_min;
+    const curRange = cur.wavelength_max - cur.wavelength_min;
+    const bestWide = bestRange > 100 ? 1 : 0;
+    const curWide = curRange > 100 ? 1 : 0;
+    if (curWide !== bestWide) return curWide > bestWide ? cur : best;
+    const bestDense = best.wavelengths.length >= 2000 ? 1 : 0;
+    const curDense = cur.wavelengths.length >= 2000 ? 1 : 0;
+    if (curDense !== bestDense) return curDense > bestDense ? cur : best;
+    return curRange > bestRange ? cur : best;
+  });
+}
+
+/** Collapse same-day spectra (epochKey within 0.5) to one per day. */
+function deduplicateByDay(
+  spectra: SpectrumRecord[],
+  epochKey: (s: SpectrumRecord) => number,
+): SpectrumRecord[] {
+  if (spectra.length <= 1) return spectra;
+  const sorted = [...spectra].sort((a, b) => epochKey(a) - epochKey(b));
+  const groups: SpectrumRecord[][] = [[sorted[0]]];
+  for (let i = 1; i < sorted.length; i++) {
+    const groupStart = epochKey(groups[groups.length - 1][0]);
+    if (epochKey(sorted[i]) - groupStart <= 0.5) {
+      groups[groups.length - 1].push(sorted[i]);
+    } else {
+      groups.push([sorted[i]]);
+    }
+  }
+  return groups.map(pickBestInGroup);
+}
+
 function selectRepresentativeSubset(
   spectra: SpectrumRecord[],
   epochKey: (s: SpectrumRecord) => number,
-  targetCount: number = 10,
+  targetCount: number = 8,
 ): SpectrumRecord[] {
-  if (spectra.length <= targetCount) return spectra;
-  const sorted = [...spectra].sort((a, b) => epochKey(a) - epochKey(b));
+  const deduped = deduplicateByDay(spectra, epochKey);
+  if (deduped.length <= targetCount) return deduped;
+  const sorted = [...deduped].sort((a, b) => epochKey(a) - epochKey(b));
   const minEpoch = epochKey(sorted[0]);
   const maxEpoch = epochKey(sorted[sorted.length - 1]);
   const logMin = Math.log10(1);
@@ -214,6 +254,108 @@ function getEpochValue(spectrum: SpectrumRecord, format: EpochFormat): number {
     return spectrum.days_since_outburst;
   }
   return spectrum.epoch_mjd;
+}
+
+// ── Helpers: collision-aware waterfall packing ───────────────────────────────
+
+/** Linear interpolation of (wavelengths, flux) onto a common grid. */
+function interpolateToGrid(
+  wavelengths: number[],
+  flux: number[],
+  grid: number[],
+): number[] {
+  const result = new Array<number>(grid.length);
+  let j = 0; // pointer into wavelengths
+  for (let g = 0; g < grid.length; g++) {
+    const gw = grid[g];
+    // Outside spectrum range → 0
+    if (gw <= wavelengths[0] || gw >= wavelengths[wavelengths.length - 1]) {
+      result[g] = 0;
+      continue;
+    }
+    // Advance j so wavelengths[j] <= gw < wavelengths[j+1]
+    while (j < wavelengths.length - 2 && wavelengths[j + 1] < gw) j++;
+    const w0 = wavelengths[j], w1 = wavelengths[j + 1];
+    const t = (gw - w0) / (w1 - w0);
+    result[g] = flux[j] + t * (flux[j + 1] - flux[j]);
+  }
+  return result;
+}
+
+const PACKING_PADDING = 0.08;
+const PACKING_MIN_GAP = 0.05;
+const GRID_POINTS = 500;
+
+interface PackingResult {
+  baselines: number[];
+  globalScale: number;
+  yMin: number;
+  yMax: number;
+}
+
+/**
+ * Collision-aware baseline computation for waterfall mode.
+ * Places spectra as close together as possible without trace overlap.
+ */
+function computeWaterfallPacking(
+  preparedSpectra: PreparedSpectrum[],
+  compressed: boolean,
+  globalWlMin: number,
+  globalWlMax: number,
+): PackingResult {
+  const N = preparedSpectra.length;
+  if (N === 0) return { baselines: [], globalScale: 1, yMin: 0, yMax: 1 };
+
+  // Build common wavelength grid
+  const grid = Array.from(
+    { length: GRID_POINTS },
+    (_, i) => globalWlMin + (i / (GRID_POINTS - 1)) * (globalWlMax - globalWlMin),
+  );
+
+  // Compute display flux (optionally sqrt-compressed) interpolated onto grid
+  const gridFlux: number[][] = [];
+  const peakHeights: number[] = [];
+  for (const ps of preparedSpectra) {
+    const spec = ps.record;
+    const displayFlux = compressed
+      ? spec.flux_normalized.map((f) => Math.sqrt(Math.max(f, 0)))
+      : spec.flux_normalized;
+    const interpolated = interpolateToGrid(spec.wavelengths, displayFlux, grid);
+    gridFlux.push(interpolated);
+    peakHeights.push(Math.max(...interpolated));
+  }
+
+  const avgPeak = peakHeights.reduce((a, b) => a + b, 0) / N;
+  const padding = PACKING_PADDING * avgPeak;
+
+  // Place baselines
+  const baselines = new Array<number>(N);
+  baselines[0] = 0;
+  for (let i = 1; i < N; i++) {
+    const prev = gridFlux[i - 1];
+    const cur = gridFlux[i];
+    let maxSep = -Infinity;
+    for (let w = 0; w < GRID_POINTS; w++) {
+      // How much the previous trace extends above versus how much the current
+      // trace dips below its own baseline (cur values are relative to baseline=0,
+      // so a negative cur[w] would extend downward, but flux is non-negative)
+      const sep = prev[w] - cur[w];
+      if (sep > maxSep) maxSep = sep;
+    }
+    const rawGap = maxSep + padding;
+    baselines[i] = baselines[i - 1] + Math.max(rawGap, PACKING_MIN_GAP);
+  }
+
+  // Rescale to fill plot: total extent is top baseline + top peak
+  const totalExtent = baselines[N - 1] + peakHeights[N - 1];
+  // We want to fill ~N units of vertical space (similar visual density to before)
+  const targetExtent = N;
+  const globalScale = totalExtent > 0 ? targetExtent / totalExtent : 1;
+
+  const yMin = -padding * globalScale;
+  const yMax = (baselines[N - 1] + peakHeights[N - 1] + padding) * globalScale;
+
+  return { baselines, globalScale, yMin, yMax };
 }
 
 // ── Presentational sub-components ─────────────────────────────────────────────
@@ -443,6 +585,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
   const [epochFormat, setEpochFormat] = useState<EpochFormat>(hasDpo ? 'dpo' : 'mjd');
   const [selectedSpectrumId, setSelectedSpectrumId] = useState<string | null>(null);
   const [logFluxY, setLogFluxY] = useState(false);
+  const [fluxScale, setFluxScale] = useState<FluxScale>('sqrt');
 
   // ── Feature marker state ──────────────────────────────────────────────────
   //
@@ -482,13 +625,13 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
     try {
       return buildPlotData(
         data, epochFormat,
-        selectedSpectrumId, logFluxY, activeFeatureGroups,
+        selectedSpectrumId, logFluxY, fluxScale, activeFeatureGroups,
       );
     } catch {
       setRenderError(true);
       return null;
     }
-  }, [data, epochFormat, selectedSpectrumId, logFluxY, activeFeatureGroups]);
+  }, [data, epochFormat, selectedSpectrumId, logFluxY, fluxScale, activeFeatureGroups]);
 
   if (renderError || plotData === null) {
     return <ErrorState onRetry={onRetry} />;
@@ -542,6 +685,22 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
           </div>
         )}
 
+        {/* Flux scale toggle — waterfall mode only */}
+        {!isSingleMode && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Flux Scale</span>
+            <ToggleGroup<FluxScale>
+              ariaLabel="Flux scale"
+              value={fluxScale}
+              onChange={setFluxScale}
+              options={[
+                { value: 'sqrt', label: '√f' },
+                { value: 'linear', label: 'Linear' },
+              ]}
+            />
+          </div>
+        )}
+
         {/* ── Feature marker toggles ──────────────────────────────────── */}
         <FeatureToggles
           activeGroups={activeFeatureGroups}
@@ -575,6 +734,7 @@ function buildPlotData(
   epochFormat: EpochFormat,
   selectedSpectrumId: string | null,
   logFluxY: boolean,
+  fluxScale: FluxScale,
   activeFeatureGroups: Set<FeatureGroup>,
 ) {
   const { spectra, outburst_mjd } = data;
@@ -709,19 +869,23 @@ function buildPlotData(
     return { traces, layout, config, preparedSpectra };
   }
 
-  // ── Waterfall mode ──────────────────────────────────────────────────────
+  // ── Waterfall mode — collision-aware packing ────────────────────────────
 
-  // Evenly-spaced baselines — oldest at bottom (index 0), newest at top.
-  const baselines = preparedSpectra.map((_, idx) => idx);
-  const amp = 0.78; // Each lane is 1 unit; features fill 78% of it
+  const compressed = fluxScale === 'sqrt';
+  const { baselines, globalScale, yMin: waterfallYMin, yMax: waterfallYMax } =
+    computeWaterfallPacking(preparedSpectra, compressed, globalWlMin, globalWlMax);
 
   preparedSpectra.forEach((ps) => {
     const spectrum = ps.record;
     const baseline = baselines[ps.displayIndex];
-    const maxFlux = Math.max(...spectrum.flux_normalized);
-    const scale = maxFlux > 0 ? amp / maxFlux : amp;
-    const yValues = spectrum.flux_normalized.map((f) => baseline + f * scale);
+    const yValues = spectrum.wavelengths.map((_, j) => {
+      const f = compressed
+        ? Math.sqrt(Math.max(spectrum.flux_normalized[j], 0))
+        : spectrum.flux_normalized[j];
+      return (baseline + f) * globalScale;
+    });
 
+    // Hover shows original (uncompressed) flux
     const customdata = spectrum.wavelengths.map((_, i) => [
       spectrum.flux_normalized[i].toFixed(3),
       ps.epochLabel,
@@ -746,7 +910,7 @@ function buildPlotData(
     });
 
     allAnnotations.push({
-      x: 1.0, y: baseline,
+      x: 1.0, y: baseline * globalScale,
       text: ps.epochLabel,
       xanchor: 'left', yanchor: 'middle',
       showarrow: false,
@@ -756,8 +920,6 @@ function buildPlotData(
   });
 
   // ── Feature markers (waterfall mode) ──────────────────────────────────
-  const waterfallYMin = -0.5;
-  const waterfallYMax = preparedSpectra.length - 0.5 + amp;
   addFeatureMarkers(
     activeFeatureGroups, traces, shapes,
     globalWlMin, globalWlMax,
@@ -779,7 +941,7 @@ function buildPlotData(
       showticklabels: false,
       gridcolor: 'var(--color-border-subtle)',
       zerolinecolor: 'var(--color-border-subtle)',
-      range: [-0.5, preparedSpectra.length - 0.5],
+      range: [waterfallYMin, waterfallYMax],
     },
     annotations: allAnnotations,
     shapes,

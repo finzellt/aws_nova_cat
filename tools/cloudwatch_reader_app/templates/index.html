@@ -260,6 +260,21 @@
   tr.row-ERROR   { border-left: 3px solid var(--error); }
   tr.row-WARNING { border-left: 3px solid var(--warning); }
 
+  /* Source badges */
+  .source-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+
+  .source-lambda  { background: rgba(96,165,250,0.12); color: var(--accent); }
+  .source-fargate { background: rgba(52,211,153,0.12); color: #34d399; }
+  .source-sfn     { background: rgba(251,191,36,0.10); color: var(--warning); }
+  .source-other   { background: rgba(107,114,128,0.15); color: var(--text-muted); }
+
   /* ── Detail panel (shared style) ─────────────────────────── */
 
   .detail-panel {
@@ -537,6 +552,11 @@
   </div>
 
   <div class="control-group">
+    <label for="source-filter">Source</label>
+    <select id="source-filter"><option value="">All</option></select>
+  </div>
+
+  <div class="control-group">
     <label for="search-input">Search</label>
     <input type="text" id="search-input" placeholder="Filter by text...">
   </div>
@@ -634,6 +654,7 @@ let selectedRowIndex = -1;
 const COLUMNS = [
   { key: '@timestamp',            label: 'Timestamp',   width: '170px' },
   { key: 'level',                 label: 'Level',       width: '70px'  },
+  { key: 'source',                label: 'Source',      width: '130px' },
   { key: 'workflow_name',         label: 'Workflow',    width: '140px' },
   { key: 'function_name',        label: 'Function',    width: '160px' },
   { key: 'state_name',           label: 'State',       width: '140px' },
@@ -645,10 +666,12 @@ const COLUMNS = [
 
 // All fields shown in the detail panel (superset of table columns).
 const DETAIL_FIELDS = [
-  '@timestamp', 'level', 'workflow_name', 'function_name', 'state_name',
-  'nova_id', 'candidate_name', 'correlation_id', 'job_run_id',
+  '@timestamp', 'level', 'source', 'workflow_name', 'function_name',
+  'state_name', 'nova_id', 'candidate_name', 'correlation_id', 'job_run_id',
   'error_classification', 'error_fingerprint', 'attempt_number',
-  'duration_ms', '@logStream', '@log',
+  'duration_ms', 'plan_id', 'phase', 'artifact', 'release_id',
+  'report_duration_ms', 'report_memory_used_mb', 'report_memory_size_mb',
+  'cold_start', '@logStream', '@log',
 ];
 
 
@@ -728,6 +751,7 @@ async function fetchLogs() {
 function populateDynamicFilters() {
   populateSelect('workflow-filter', uniqueVals('workflow_name'));
   populateSelect('function-filter', uniqueVals('function_name'));
+  populateSelect('source-filter', uniqueVals('source'));
 }
 
 function uniqueVals(key) {
@@ -759,12 +783,14 @@ function applyFiltersAndRender() {
   const levelFilter    = document.getElementById('level-filter').value;
   const workflowFilter = document.getElementById('workflow-filter').value;
   const functionFilter = document.getElementById('function-filter').value;
+  const sourceFilter   = document.getElementById('source-filter').value;
   const searchText     = document.getElementById('search-input').value.toLowerCase().trim();
 
   filteredRows = allRows.filter(row => {
     if (levelFilter && (row.level || '').toUpperCase() !== levelFilter) return false;
     if (workflowFilter && row.workflow_name !== workflowFilter) return false;
     if (functionFilter && row.function_name !== functionFilter) return false;
+    if (sourceFilter && row.source !== sourceFilter) return false;
     if (searchText) {
       const haystack = Object.values(row).join(' ').toLowerCase();
       if (!haystack.includes(searchText)) return false;
@@ -823,6 +849,11 @@ function renderTable() {
         const badge = level
           ? `<span class="level-badge level-${level}">${esc(level)}</span>` : '';
         cells += `<td>${badge}</td>`;
+      } else if (col.key === 'source') {
+        const srcType = val.startsWith('lambda:') ? 'lambda'
+          : val.startsWith('fargate:') ? 'fargate'
+          : val.startsWith('sfn:') ? 'sfn' : 'other';
+        cells += `<td><span class="source-badge source-${srcType}">${esc(val)}</span></td>`;
       } else if (col.key === '@timestamp') {
         cells += `<td>${esc(formatTimestamp(val))}</td>`;
       } else {
@@ -1066,7 +1097,7 @@ function showToast(msg) {
 // ── Control bindings ────────────────────────────────────────
 
 function bindControls() {
-  for (const id of ['level-filter', 'workflow-filter', 'function-filter']) {
+  for (const id of ['level-filter', 'workflow-filter', 'function-filter', 'source-filter']) {
     document.getElementById(id).addEventListener('change', applyFiltersAndRender);
   }
   document.getElementById('search-input').addEventListener('input', applyFiltersAndRender);
