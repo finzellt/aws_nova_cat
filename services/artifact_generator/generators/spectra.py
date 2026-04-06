@@ -340,6 +340,11 @@ def _process_spectrum_stage2(
         )
         return None
 
+    # --- Strip NaN sentinels (used for segment-aware LTTB, invalid in JSON) ---
+    clean = [(w, f) for w, f in zip(wavelengths, flux_normalized, strict=True) if not math.isnan(f)]
+    wavelengths = [p[0] for p in clean]
+    flux_normalized = [p[1] for p in clean]
+
     # --- Metadata ---
     epoch_mjd = _to_float(product.get("observation_date_mjd", 0))
 
