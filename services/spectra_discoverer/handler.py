@@ -420,6 +420,72 @@ def _handle_persist_data_product_metadata(event: dict[str, Any], context: object
 
 
 # ---------------------------------------------------------------------------
+# Task: DiscoverAndPersistProducts (combined)
+# ---------------------------------------------------------------------------
+
+
+@tracer.capture_method
+def _handle_discover_and_persist_products(event: dict[str, Any], context: object) -> dict[str, Any]:
+    """
+    Combined task that runs query → normalize → deduplicate → persist
+    entirely within a single Lambda invocation.
+
+    This avoids passing large product lists through the Step Functions
+    state payload (which has a 256KB limit). Only a lightweight summary
+    is returned.
+
+    Returns:
+        provider, nova_id, total_queried, total_normalized, total_new, total_existing
+    """
+    provider: str = event["provider"]
+    nova_id: str = event["nova_id"]
+
+    # Step 1: Query
+    query_result = _handle_query_provider_for_products(event, context)
+    raw_products: list[dict[str, Any]] = query_result["raw_products"]
+
+    # Step 2: Normalize
+    normalize_event = {**event, "raw_products": raw_products}
+    normalize_result = _handle_normalize_provider_products(normalize_event, context)
+    normalized_products: list[dict[str, Any]] = normalize_result["normalized_products"]
+
+    # Step 3: Deduplicate and assign IDs
+    dedup_event = {**event, "normalized_products": normalized_products}
+    dedup_result = _handle_deduplicate_and_assign_data_product_ids(dedup_event, context)
+    products_with_ids: list[dict[str, Any]] = dedup_result["products_with_ids"]
+
+    # Step 4: Persist
+    persist_event = {**event, "products_with_ids": products_with_ids}
+    persist_result = _handle_persist_data_product_metadata(persist_event, context)
+    persisted_products: list[dict[str, Any]] = persist_result["persisted_products"]
+
+    total_new = sum(1 for p in products_with_ids if p["is_new"])
+    total_existing = len(products_with_ids) - total_new
+
+    logger.info(
+        "DiscoverAndPersistProducts complete",
+        extra={
+            "provider": provider,
+            "nova_id": nova_id,
+            "total_queried": len(raw_products),
+            "total_normalized": len(normalized_products),
+            "total_new": total_new,
+            "total_existing": total_existing,
+            "eligible_for_acquisition": len(persisted_products),
+        },
+    )
+
+    return {
+        "provider": provider,
+        "nova_id": nova_id,
+        "total_queried": len(raw_products),
+        "total_normalized": len(normalized_products),
+        "total_new": total_new,
+        "total_existing": total_existing,
+    }
+
+
+# ---------------------------------------------------------------------------
 # DynamoDB helpers
 # ---------------------------------------------------------------------------
 
@@ -623,4 +689,5 @@ _TASK_HANDLERS: dict[str, Callable[[dict[str, Any], object], dict[str, Any]]] = 
     "NormalizeProviderProducts": _handle_normalize_provider_products,
     "DeduplicateAndAssignDataProductIds": _handle_deduplicate_and_assign_data_product_ids,
     "PersistDataProductMetadata": _handle_persist_data_product_metadata,
+    "DiscoverAndPersistProducts": _handle_discover_and_persist_products,
 }
