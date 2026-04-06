@@ -413,6 +413,20 @@ class TestDisplayWavelengthFields:
         assert "display_wavelength_max" in artifact
         assert isinstance(artifact["display_wavelength_min"], float)
         assert isinstance(artifact["display_wavelength_max"], float)
+        assert "total_data_products" in artifact
+        assert artifact["total_data_products"] == 3
+        assert "observations" in artifact
+        assert isinstance(artifact["observations"], list)
+        assert len(artifact["observations"]) == 3
+        # Each observation has the expected fields
+        for obs in artifact["observations"]:
+            assert "data_product_id" in obs
+            assert "instrument" in obs
+            assert "telescope" in obs
+            assert "epoch_mjd" in obs
+            assert "wavelength_min" in obs
+            assert "wavelength_max" in obs
+            assert "provider" in obs
 
     def test_display_min_trims_blue_outlier(self) -> None:
         """End-to-end: blue outlier at 200nm trimmed to near median min (~400)."""
@@ -479,3 +493,51 @@ class TestDisplayWavelengthFields:
 
         assert "display_wavelength_min" not in artifact
         assert "display_wavelength_max" not in artifact
+
+    def test_spectra_count_reflects_total_products(self) -> None:
+        """spectra_count equals total DataProducts, not merged display spectra."""
+        # 3 products: dp-a and dp-b share the same MJD+instrument (will merge),
+        # dp-c is on a different night.
+        csvs = {
+            "dp-a": self._make_csv(400, 600),
+            "dp-b": self._make_csv(600, 900),
+            "dp-c": self._make_csv(400, 900),
+        }
+        products = [
+            self._make_product("dp-a", mjd="59000", instrument="FLOYDS"),
+            self._make_product("dp-b", mjd="59000", instrument="FLOYDS"),
+            self._make_product("dp-c", mjd="59010", instrument="FLOYDS"),
+        ]
+
+        class FakeBody:
+            def __init__(self, content: str) -> None:
+                self._content = content
+
+            def read(self) -> bytes:
+                return self._content.encode()
+
+        class FakeS3:
+            def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:  # noqa: N803
+                dp_id = Key.split("/")[-2]
+                return {"Body": FakeBody(csvs[dp_id])}
+
+            def put_object(self, **kwargs: Any) -> None:  # noqa: ARG002
+                pass  # merged CSV persistence — no-op in tests
+
+        class FakeTable:
+            def query(self, **kwargs: Any) -> dict[str, Any]:
+                return {"Items": products}
+
+        ctx: dict[str, Any] = {"outburst_mjd": 58000.0, "outburst_mjd_is_estimated": False}
+        artifact = generate_spectra_json("nova-test", FakeTable(), FakeS3(), "bucket", ctx)
+
+        # dp-a and dp-b merge into 1 display spectrum → 2 total display spectra
+        assert len(artifact["spectra"]) == 2
+        # But spectra_count reflects total DataProducts (3), not display count
+        assert ctx["spectra_count"] == 3
+        # total_data_products in artifact also equals 3
+        assert artifact["total_data_products"] == 3
+        # observations list has one entry per raw DataProduct
+        assert len(artifact["observations"]) == 3
+        obs_ids = {o["data_product_id"] for o in artifact["observations"]}
+        assert obs_ids == {"dp-a", "dp-b", "dp-c"}

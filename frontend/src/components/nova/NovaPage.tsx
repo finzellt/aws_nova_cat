@@ -22,6 +22,7 @@ import Link from 'next/link';
 import { ChevronLeft, CircleAlert } from 'lucide-react';
 import type {
   NovaMetadata,
+  ObservationRecord,
   ReferencesArtifact,
   SpectraArtifact,
 } from '@/types/nova';
@@ -308,12 +309,20 @@ export default function NovaPage({ identifier }: NovaPageProps) {
               id="observations-heading"
               className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-3"
             >
-              Observations
+              Spectral Observations
             </h2>
             <ObservationsTable
-              spectra={
+              observations={
                 spectraState.status === 'success'
-                  ? spectraState.data.spectra
+                  ? (spectraState.data.observations ?? spectraState.data.spectra.map((s): ObservationRecord => ({
+                      data_product_id: s.spectrum_id,
+                      instrument: s.instrument,
+                      telescope: s.telescope,
+                      epoch_mjd: s.epoch_mjd,
+                      wavelength_min: s.wavelength_min,
+                      wavelength_max: s.wavelength_max,
+                      provider: s.provider,
+                    })))
                   : []
               }
               loading={spectraState.status === 'loading'}
