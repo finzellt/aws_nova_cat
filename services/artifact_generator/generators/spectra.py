@@ -42,7 +42,7 @@ _SCHEMA_VERSION = "1.1"  # §7.8: outburst_mjd_is_estimated addition
 _WAVELENGTH_UNIT = "nm"
 
 _FLUX_FLOOR = 1e-4  # minimum normalized flux; prevents log(0) in frontend
-_ZERO_THRESHOLD = 1e-10  # absolute threshold for "effectively zero" flux
+_RELATIVE_ZERO_FRACTION = 1e-6  # fraction of peak flux below which values are "dead"
 
 _LTTB_THRESHOLD = 2000  # max points per spectrum (DESIGN-003 §7.9, P-4)
 _LTTB_SEGMENT_MIN = 50  # minimum LTTB budget per NaN-separated segment
@@ -132,10 +132,28 @@ def generate_spectra_json(
                 },
             )
 
+        # Warn if blue-side trim would affect >50% of spectra (bimodal data).
+        trim_count_min = sum(
+            1 for wmin in wl_mins if wmin < display_wavelength_min / _TRIM_TOLERANCE
+        )
+        if trim_count_min > len(parsed) / 2:
+            _logger.warning(
+                "Blue-side wavelength trim affects >50%% of spectra — data may be bimodal",
+                extra={
+                    "nova_id": nova_id,
+                    "trim_count": trim_count_min,
+                    "total": len(parsed),
+                },
+            )
+
         # Trim outlier spectra to the display range.
         for rec in parsed:
             if rec["wavelengths"][-1] > display_wavelength_max * _TRIM_TOLERANCE:
                 _trim_wavelength_range(rec, display_wavelength_max)
+
+        for rec in parsed:
+            if rec["wavelengths"][0] < display_wavelength_min / _TRIM_TOLERANCE:
+                _trim_wavelength_range_min(rec, display_wavelength_min)
 
     # Step 2c — Second pass: LTTB downsampling + normalization.
     spectra: list[dict[str, Any]] = []
@@ -314,6 +332,41 @@ def _trim_wavelength_range(
     rec["fluxes"] = trimmed_fx
 
 
+def _trim_wavelength_range_min(
+    rec: dict[str, Any],
+    display_wavelength_min: float,
+) -> None:
+    """Trim the blue side of a stage-1 record to the display minimum (in place).
+
+    NaN sentinel rows (gap markers from multi-arm merge) are preserved
+    if the surrounding wavelength falls within the display range.
+    """
+    wavelengths: list[float] = rec["wavelengths"]
+    fluxes: list[float] = rec["fluxes"]
+    data_product_id: str = rec["product"]["data_product_id"]
+    original_min = wavelengths[0]
+
+    trimmed_wl: list[float] = []
+    trimmed_fx: list[float] = []
+    for wl, fx in zip(wavelengths, fluxes, strict=True):
+        if wl >= display_wavelength_min:
+            trimmed_wl.append(wl)
+            trimmed_fx.append(fx)
+
+    _logger.debug(
+        "Trimmed spectrum blue-side wavelength range to display bounds",
+        extra={
+            "data_product_id": data_product_id,
+            "original_wavelength_min": original_min,
+            "trimmed_wavelength_min": trimmed_wl[0] if trimmed_wl else 0.0,
+            "display_wavelength_min": display_wavelength_min,
+        },
+    )
+
+    rec["wavelengths"] = trimmed_wl
+    rec["fluxes"] = trimmed_fx
+
+
 def _process_spectrum_stage2(
     rec: dict[str, Any],
     outburst_mjd: float | None,
@@ -419,10 +472,16 @@ def _trim_dead_edges(
     if n == 0:
         return wavelengths, fluxes
 
+    peak = max(abs(f) for f in fluxes)
+    if peak == 0.0:
+        return [], []
+
+    threshold = peak * _RELATIVE_ZERO_FRACTION
+
     # --- blue (low-wavelength) edge ---
     blue_zeros = 0
     for f in fluxes:
-        if abs(f) < _ZERO_THRESHOLD:
+        if abs(f) < threshold:
             blue_zeros += 1
         else:
             break
@@ -431,7 +490,7 @@ def _trim_dead_edges(
     # --- red (high-wavelength) edge ---
     red_zeros = 0
     for f in reversed(fluxes):
-        if abs(f) < _ZERO_THRESHOLD:
+        if abs(f) < threshold:
             red_zeros += 1
         else:
             break

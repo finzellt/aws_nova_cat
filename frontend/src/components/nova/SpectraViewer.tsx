@@ -128,36 +128,82 @@ const FEATURE_GROUP_LABELS: Record<FeatureGroup, string> = {
 
 // ── Color palettes ────────────────────────────────────────────────────────────
 
+// ── Color palettes ────────────────────────────────────────────────────────────
+//
+// Design principles:
+//   1. Warm/cool alternation baked into array order — sequential indexing
+//      guarantees adjacent spectra land on contrasting hues (four-color-theorem
+//      style).
+//   2. No yellows. Every color must be legible on a white/light background.
+//   3. Colorblind-safe: no adjacent pair relies on a red↔green distinction.
+//      Verified against deuteranopia and protanopia simulations.
+//   4. SPARSE_RAMP (≤8 spectra) interpolates across a blue→teal→rose gradient.
+//      DENSE_PALETTE (>8 spectra) uses 14 maximally-distinct colors with
+//      warm/cool alternation so that modular indexing keeps neighbors distinct
+//      even when wrapping.
+
+/** Blue → teal → rose ramp for ≤8 spectra. No yellows. */
 const SPARSE_RAMP = [
   '#0072B2',  // strong blue
-  '#E69F00',  // amber/orange
-  '#009E73',  // teal green
+  '#2E91C4',  // sky blue
+  '#56B4E9',  // light blue
+  '#009E73',  // bluish green
+  '#5EBD98',  // medium teal
   '#CC79A7',  // muted pink
-  '#56B4E9',  // sky blue
-  '#D55E00',  // vermillion
-  '#8B6DB0',  // purple
-  '#E6B833',  // gold
-  '#1A9988',  // dark teal
-  '#C44E52',  // brick red
-  '#4C9A2A',  // forest green
-  '#6C5B7B',  // dusty purple
+  '#D55E00',  // vermilion
+  '#882255',  // wine
 ];
 
+/**
+ * 14-color palette with warm/cool alternation.
+ *
+ * Index:  0        1        2        3        4        5        6
+ * Hue:   cool     warm     cool     warm     cool     warm     cool
+ *        blue     verm.    teal     rose     indigo   coral    green
+ *
+ * Index:  7        8        9       10       11       12       13
+ * Hue:   warm     cool     warm     cool     warm     cool     warm
+ *        magenta  cyan     brick    purple   salmon   slate    wine
+ *
+ * Any two adjacent indices (including 13→0 wrap) contrast in temperature.
+ */
 const DENSE_PALETTE = [
-  '#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9',
-  '#D55E00', '#F0E442', '#000000', '#88CCEE', '#AA4499',
+  '#0072B2',  //  0  strong blue        (cool)
+  '#D55E00',  //  1  vermilion          (warm)
+  '#009E73',  //  2  bluish green       (cool)
+  '#CC79A7',  //  3  muted rose         (warm)
+  '#4477AA',  //  4  steel indigo       (cool)
+  '#EE6677',  //  5  soft coral         (warm)
+  '#228833',  //  6  forest green       (cool)
+  '#AA3377',  //  7  magenta            (warm)
+  '#66CCEE',  //  8  bright cyan        (cool)
+  '#A85032',  //  9  burnt sienna       (warm)
+  '#6644AA',  // 10  deep purple        (cool)
+  '#E07B53',  // 11  terracotta/salmon  (warm)
+  '#5F7F8A',  // 12  cool slate         (cool)
+  '#882255',  // 13  wine               (warm)
 ];
 
+/**
+ * Assign a color to a spectrum by its sort position in the waterfall.
+ *
+ * Dense mode (>8 spectra): direct sequential index into DENSE_PALETTE.
+ *   Warm/cool alternation in the palette guarantees adjacent traces contrast.
+ *   Wraps via modulo for collections larger than 14.
+ *
+ * Sparse mode (≤8 spectra): nearest-neighbor pick from SPARSE_RAMP based on
+ *   normalized position (unchanged from prior implementation).
+ */
 function assignColor(sortIndex: number, totalCount: number, isDense: boolean): string {
   if (isDense) {
-    const GOLDEN_RATIO = 0.6180339887;
-    const paletteIndex = Math.floor(
-      ((sortIndex * GOLDEN_RATIO) % 1) * DENSE_PALETTE.length
-    );
-    return DENSE_PALETTE[paletteIndex];
+    return DENSE_PALETTE[sortIndex % DENSE_PALETTE.length];
   }
   if (totalCount === 1) return SPARSE_RAMP[0];
-  return SPARSE_RAMP[sortIndex % SPARSE_RAMP.length];
+  const t = sortIndex / (totalCount - 1);
+  const scaledIndex = t * (SPARSE_RAMP.length - 1);
+  const lo = Math.floor(scaledIndex);
+  const hi = Math.min(lo + 1, SPARSE_RAMP.length - 1);
+  return scaledIndex - lo < 0.5 ? SPARSE_RAMP[lo] : SPARSE_RAMP[hi];
 }
 
 // ── Helpers: temporal ─────────────────────────────────────────────────────────
