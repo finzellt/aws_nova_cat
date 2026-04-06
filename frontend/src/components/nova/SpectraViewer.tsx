@@ -71,46 +71,64 @@ interface SpectralLine {
   label: string;
   /** Which toggle group this line belongs to. */
   group: FeatureGroup;
+  /** When true, line is shown whenever ANY feature group is active. */
+  universal?: boolean;
 }
 
 const SPECTRAL_LINES: SpectralLine[] = [
   // ── Fe II group ─────────────────────────────────────────────────────────
-  // Multiplet 42 — the strongest Fe II features in nova spectra
-  { wavelength_nm: 492.4, label: 'Fe II 4924',      group: 'fe2' },
-  { wavelength_nm: 501.8, label: 'Fe II 5018',      group: 'fe2' },
-  { wavelength_nm: 516.9, label: 'Fe II 5169',      group: 'fe2' },
-  // Multiplet 49
-  { wavelength_nm: 527.6, label: 'Fe II 5276',      group: 'fe2' },
-  { wavelength_nm: 531.6, label: 'Fe II 5316',      group: 'fe2' },
-  // Multiplet 27
-  { wavelength_nm: 423.3, label: 'Fe II 4233',      group: 'fe2' },
+  { wavelength_nm: 393.4, label: 'Ca II 3934',      group: 'fe2' },
+  { wavelength_nm: 396.8, label: 'Ca II 3968',      group: 'fe2' },
+  { wavelength_nm: 449.1, label: 'Fe II 4491',      group: 'fe2' },
+  { wavelength_nm: 450.8, label: 'Fe II 4508',      group: 'fe2' },
+  { wavelength_nm: 531.7, label: 'Fe II 5317',      group: 'fe2' },
+  { wavelength_nm: 536.3, label: 'Fe II 5363',      group: 'fe2' },
+  { wavelength_nm: 589.2, label: 'Na D 5892',       group: 'fe2' },
+  { wavelength_nm: 614.8, label: 'Fe II 6148',      group: 'fe2' },
+  { wavelength_nm: 634.7, label: 'Si II 6347',      group: 'fe2' },
+  { wavelength_nm: 637.1, label: 'Si II 6371',      group: 'fe2' },
+  { wavelength_nm: 777.3, label: 'O I 7773',        group: 'fe2' },
+  { wavelength_nm: 822.7, label: 'O I 8227',        group: 'fe2' },
+  { wavelength_nm: 844.6, label: 'O I 8446',        group: 'fe2' },
 
   // ── He/N group ──────────────────────────────────────────────────────────
-  // Balmer series
-  { wavelength_nm: 656.3, label: 'Hα',              group: 'hen' },
-  { wavelength_nm: 486.1, label: 'Hβ',              group: 'hen' },
-  { wavelength_nm: 434.0, label: 'Hγ',              group: 'hen' },
-  // Helium
+  { wavelength_nm: 463.8, label: 'N III 4638',      group: 'hen' },
+  { wavelength_nm: 468.6, label: 'He II 4686',      group: 'hen' },
+  { wavelength_nm: 567.9, label: 'N II 5679',       group: 'hen' },
   { wavelength_nm: 587.6, label: 'He I 5876',       group: 'hen' },
   { wavelength_nm: 706.5, label: 'He I 7065',       group: 'hen' },
-  { wavelength_nm: 468.6, label: 'He II 4686',      group: 'hen' },
-  // Nitrogen — Bowen blend (N III 4634/4641/4642 → mean 4639 Å)
-  { wavelength_nm: 463.9, label: 'N III 4634–42 (blend)', group: 'hen' },
-  // Nitrogen — N II blend (5676/5680)
-  { wavelength_nm: 567.8, label: 'N II 5676/80 (blend)',  group: 'hen' },
+  { wavelength_nm: 823.7, label: 'He II 8237',      group: 'hen' },
 
   // ── Nebular group ───────────────────────────────────────────────────────
-  // Forbidden oxygen
-  { wavelength_nm: 500.7, label: '[O III] 5007',    group: 'nebular' },
-  { wavelength_nm: 495.9, label: '[O III] 4959',    group: 'nebular' },
+  { wavelength_nm: 515.8, label: '[Fe VII] 5158',   group: 'nebular' },
+  { wavelength_nm: 572.1, label: '[Fe VII] 5721',   group: 'nebular' },
+  { wavelength_nm: 608.6, label: '[Fe VII] 6086',   group: 'nebular' },
   { wavelength_nm: 630.0, label: '[O I] 6300',      group: 'nebular' },
-  // Forbidden nitrogen
-  { wavelength_nm: 658.3, label: '[N II] 6583',     group: 'nebular' },
-  { wavelength_nm: 654.8, label: '[N II] 6548',     group: 'nebular' },
-  // Neon
-  { wavelength_nm: 386.9, label: '[Ne III] 3869',   group: 'nebular' },
-  // Coronal iron
-  { wavelength_nm: 608.7, label: '[Fe VII] 6087',   group: 'nebular' },
+  { wavelength_nm: 700.6, label: '[Ar V] 7006',     group: 'nebular' },
+  { wavelength_nm: 732.0, label: '[O II] 7320',     group: 'nebular' },
+  { wavelength_nm: 772.5, label: '[S I] 7725',      group: 'nebular' },
+  { wavelength_nm: 906.9, label: '[S III] 9069',    group: 'nebular' },
+  { wavelength_nm: 953.1, label: '[S III] 9531',    group: 'nebular' },
+
+  // ── Balmer series (universal) ───────────────────────────────────────────
+  { wavelength_nm: 656.279, label: 'Hα',            group: 'hen', universal: true },
+  { wavelength_nm: 486.135, label: 'Hβ',            group: 'hen', universal: true },
+  { wavelength_nm: 434.072, label: 'Hγ',            group: 'hen', universal: true },
+  { wavelength_nm: 410.173, label: 'Hδ',            group: 'hen', universal: true },
+  { wavelength_nm: 397.007, label: 'Hε',            group: 'hen', universal: true },
+  { wavelength_nm: 388.906, label: 'Hζ',            group: 'hen', universal: true },
+
+  // ── Paschen series (universal) ──────────────────────────────────────────
+  { wavelength_nm: 954.86,  label: 'Pa 8',          group: 'hen', universal: true },
+  { wavelength_nm: 923.15,  label: 'Pa 9',          group: 'hen', universal: true },
+  { wavelength_nm: 901.74,  label: 'Pa 10',         group: 'hen', universal: true },
+  { wavelength_nm: 886.52,  label: 'Pa 11',         group: 'hen', universal: true },
+  { wavelength_nm: 875.29,  label: 'Pa 12',         group: 'hen', universal: true },
+  { wavelength_nm: 866.74,  label: 'Pa 13',         group: 'hen', universal: true },
+  { wavelength_nm: 860.08,  label: 'Pa 14',         group: 'hen', universal: true },
+  { wavelength_nm: 854.77,  label: 'Pa 15',         group: 'hen', universal: true },
+  { wavelength_nm: 850.48,  label: 'Pa 16',         group: 'hen', universal: true },
+  { wavelength_nm: 846.96,  label: 'Pa 17',         group: 'hen', universal: true },
 ];
 
 /** Colors for each feature group. Muted so they don't compete with spectra. */
@@ -793,6 +811,13 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
         />
       </div>
 
+      {/* ── Merge info note ──────────────────────────────────────────── */}
+      {data.total_data_products != null && data.total_data_products > data.spectra.length && (
+        <p className="px-4 pt-2 text-xs text-[var(--color-text-tertiary)] italic">
+          {data.spectra.length} spectra from {data.total_data_products} files — same-night, same-instrument observations are merged for display.
+        </p>
+      )}
+
       {/* ── Plot ──────────────────────────────────────────────────────── */}
       <Plot
         data={traces}
@@ -1078,10 +1103,11 @@ function addFeatureMarkers(
 ) {
   if (activeGroups.size === 0) return;
 
-  // Filter to active groups and visible wavelength range
+  // Filter to active groups (plus universal lines when any group is active)
+  // and visible wavelength range
   const activeLines = SPECTRAL_LINES.filter(
     (line) =>
-      activeGroups.has(line.group) &&
+      (activeGroups.has(line.group) || (line.universal && activeGroups.size > 0)) &&
       line.wavelength_nm >= wlMin &&
       line.wavelength_nm <= wlMax
   );

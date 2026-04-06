@@ -165,8 +165,25 @@ def generate_spectra_json(
     # Step 3 — Sort by epoch ascending (oldest at bottom of waterfall).
     spectra.sort(key=lambda s: s["epoch_mjd"])
 
-    # Step 4 — Update context.
-    nova_context["spectra_count"] = len(spectra)
+    # Step 4 — Build observations list from raw products.
+    observations_list: list[dict[str, Any]] = []
+    for product in products:
+        obs: dict[str, Any] = {
+            "data_product_id": product["data_product_id"],
+            "instrument": product.get("instrument") or "Unknown",
+            "telescope": product.get("telescope") or "Unknown",
+            "epoch_mjd": float(Decimal(str(product.get("observation_date_mjd", 0)))),
+            "wavelength_min": float(Decimal(str(product.get("wavelength_min", 0)))),
+            "wavelength_max": float(Decimal(str(product.get("wavelength_max", 0)))),
+            "provider": product.get("provider", "Unknown"),
+        }
+        observations_list.append(obs)
+
+    # Sort by epoch ascending
+    observations_list.sort(key=lambda o: o["epoch_mjd"])
+
+    # Step 5 — Update context.
+    nova_context["spectra_count"] = len(products)
 
     _logger.info(
         "Generated spectra.json",
@@ -185,6 +202,8 @@ def generate_spectra_json(
         "outburst_mjd": outburst_mjd,
         "outburst_mjd_is_estimated": outburst_mjd_is_estimated,
         "wavelength_unit": _WAVELENGTH_UNIT,
+        "total_data_products": len(products),
+        "observations": observations_list,
         "spectra": spectra,
     }
     if display_wavelength_min is not None:

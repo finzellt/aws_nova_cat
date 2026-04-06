@@ -50,6 +50,19 @@ export interface ReferencesArtifact {
   references: Reference[];
 }
 
+// ── Observation record (per-DataProduct row for the observations table) ──────
+
+/** One raw DataProduct file's metadata, before multi-arm merging. */
+export interface ObservationRecord {
+  data_product_id: string;
+  instrument: string;
+  telescope: string;
+  epoch_mjd: number;
+  wavelength_min: number;
+  wavelength_max: number;
+  provider: string;
+}
+
 // ── Spectra artifact (spectra.json) ───────────────────────────────────────────
 
 /** One spectrum's data and metadata, as pre-processed by the backend. */
@@ -82,5 +95,9 @@ export interface SpectraArtifact {
   outburst_mjd: number | null;
   /** Wavelength unit for all spectra in this artifact (always "nm"). */
   wavelength_unit: string;
+  /** Total number of raw DataProduct files (may exceed spectra.length after merging). */
+  total_data_products?: number;
+  /** Per-DataProduct observation records (pre-merge), for the observations table. */
+  observations?: ObservationRecord[];
   spectra: SpectrumRecord[];
 }

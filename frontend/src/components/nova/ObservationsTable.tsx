@@ -11,13 +11,13 @@
 
 import { useState } from 'react';
 import { Telescope } from 'lucide-react';
-import type { SpectrumRecord } from '@/types/nova';
+import type { ObservationRecord } from '@/types/nova';
 
 const COLLAPSED_ROW_COUNT = 4;
 
 interface ObservationsTableProps {
-  /** Spectrum records from spectra.json. Empty array while loading or on error. */
-  spectra: SpectrumRecord[];
+  /** Observation records from spectra.json. Empty array while loading or on error. */
+  observations: ObservationRecord[];
   loading: boolean;
   error: boolean;
 }
@@ -71,26 +71,26 @@ const COLUMNS = [
 ] as const;
 
 export default function ObservationsTable({
-  spectra,
+  observations,
   loading,
   error,
 }: ObservationsTableProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (loading) return <LoadingSkeleton />;
-  if (error || spectra.length === 0) return <EmptyState error={error} />;
+  if (error || observations.length === 0) return <EmptyState error={error} />;
 
-  const canCollapse = spectra.length > COLLAPSED_ROW_COUNT;
+  const canCollapse = observations.length > COLLAPSED_ROW_COUNT;
   const visibleRows = canCollapse && !isExpanded
-    ? spectra.slice(0, COLLAPSED_ROW_COUNT)
-    : spectra;
+    ? observations.slice(0, COLLAPSED_ROW_COUNT)
+    : observations;
 
   return (
     <div>
       <div className="overflow-x-auto rounded-md border border-[var(--color-border-subtle)]">
         <table
           className="w-full border-collapse text-sm"
-          aria-label="Spectra observations"
+          aria-label="Spectral observations"
         >
           <thead>
             <tr className="bg-[var(--color-surface-secondary)] border-b border-[var(--color-border-subtle)]">
@@ -109,7 +109,7 @@ export default function ObservationsTable({
           <tbody>
             {visibleRows.map((row, idx) => (
               <tr
-                key={row.spectrum_id}
+                key={row.data_product_id}
                 className={[
                   'border-b border-[var(--color-border-subtle)] last:border-0',
                   idx % 2 === 0
@@ -155,7 +155,7 @@ export default function ObservationsTable({
         >
           {isExpanded
             ? 'Show less \u25B4'
-            : `Show all ${spectra.length} items \u25BE`}
+            : `Show all ${observations.length} observations \u25BE`}
         </button>
       )}
     </div>
