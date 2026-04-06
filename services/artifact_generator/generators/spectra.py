@@ -48,7 +48,7 @@ _LTTB_THRESHOLD = 2000  # max points per spectrum (DESIGN-003 §7.9, P-4)
 _LTTB_SEGMENT_MIN = 50  # minimum LTTB budget per NaN-separated segment
 _TRIM_TOLERANCE = 1.1  # 10% beyond median before wavelength trim kicks in
 
-_ARM_MJD_TOLERANCE = 0.02  # days (~29 min) — grouping tolerance for arms
+_ARM_MJD_TOLERANCE = 0.333  # days (~8 hr) — grouping tolerance for arms
 _ARM_OVERLAP_MAX_NM = 100.0  # nm — max overlap before we reject a merge
 _GAP_SPACING_FACTOR = 3.0  # gap detection: jump > N × local median spacing
 
@@ -547,6 +547,30 @@ def _merge_multi_arm_spectra(
     return result
 
 
+def _pick_arm_to_keep(
+    rec_a: dict[str, Any],
+    rec_b: dict[str, Any],
+) -> dict[str, Any]:
+    """Choose the better arm from a pair with excessive overlap.
+
+    Tiebreaker priority:
+    1. Wavelength range > 100nm preferred over ≤ 100nm.
+    2. Point count ≥ 2000 preferred.
+    3. Broadest wavelength coverage wins.
+    """
+
+    def _score(rec: dict[str, Any]) -> tuple[bool, bool, float]:
+        wl = rec["wavelengths"]
+        wl_range = wl[-1] - wl[0] if wl else 0.0
+        return (
+            wl_range > 100.0,
+            len(wl) >= 2000,
+            wl_range,
+        )
+
+    return rec_a if _score(rec_a) >= _score(rec_b) else rec_b
+
+
 def _merge_arm_group(
     group: list[dict[str, Any]],
     nova_id: str,
@@ -559,29 +583,47 @@ def _merge_arm_group(
     in which case the caller should keep the arms separate.
     """
     # Sort arms by wavelength_min ascending.
-    group.sort(key=lambda rec: rec["wavelengths"][0])
+    arms = list(group)
+    arms.sort(key=lambda rec: rec["wavelengths"][0])
 
-    instrument = group[0]["product"].get("instrument", "unknown")
-    arm_ids = [rec["product"]["data_product_id"] for rec in group]
+    instrument = arms[0]["product"].get("instrument", "unknown")
 
-    # --- Validate overlaps ---
-    for k in range(len(group) - 1):
-        overlap_nm = group[k]["wavelengths"][-1] - group[k + 1]["wavelengths"][0]
-        if overlap_nm > _ARM_OVERLAP_MAX_NM:
-            _logger.warning(
-                "Arm overlap exceeds %.0fnm — skipping merge",
-                _ARM_OVERLAP_MAX_NM,
-                extra={
-                    "nova_id": nova_id,
-                    "instrument": instrument,
-                    "arm_ids": arm_ids,
-                    "overlap_nm": round(overlap_nm, 2),
-                },
-            )
-            return None
+    # --- Per-pair overlap rejection ---
+    # Drop one arm from any adjacent pair with >100nm overlap, then re-check.
+    changed = True
+    while changed and len(arms) >= 2:
+        changed = False
+        for k in range(len(arms) - 1):
+            overlap_nm = arms[k]["wavelengths"][-1] - arms[k + 1]["wavelengths"][0]
+            if overlap_nm > _ARM_OVERLAP_MAX_NM:
+                keep = _pick_arm_to_keep(arms[k], arms[k + 1])
+                drop = arms[k + 1] if keep is arms[k] else arms[k]
+                drop_id = drop["product"]["data_product_id"]
+                _logger.info(
+                    "Dropping arm due to excessive overlap (%.0fnm)",
+                    overlap_nm,
+                    extra={
+                        "nova_id": nova_id,
+                        "instrument": instrument,
+                        "dropped_data_product_id": drop_id,
+                        "overlap_nm": round(overlap_nm, 2),
+                        "reason": f"adjacent pair overlap > {_ARM_OVERLAP_MAX_NM:.0f}nm",
+                    },
+                )
+                arms.remove(drop)
+                # Re-sort and restart validation after removal.
+                arms.sort(key=lambda rec: rec["wavelengths"][0])
+                changed = True
+                break
+
+    if len(arms) < 2:
+        # Only one arm survived — no merge needed, pass through as-is.
+        return arms[0] if arms else None
+
+    arm_ids = [rec["product"]["data_product_id"] for rec in arms]
 
     # --- Check flux_unit consistency ---
-    flux_units = {rec["product"].get("flux_unit", "unknown") for rec in group}
+    flux_units = {rec["product"].get("flux_unit", "unknown") for rec in arms}
     if len(flux_units) > 1:
         _logger.warning(
             "Arms have different flux_unit values — merging anyway",
@@ -593,14 +635,14 @@ def _merge_arm_group(
         )
 
     # --- Merge adjacent arms ---
-    merged_wl: list[float] = list(group[0]["wavelengths"])
-    merged_fx: list[float] = list(group[0]["fluxes"])
+    merged_wl: list[float] = list(arms[0]["wavelengths"])
+    merged_fx: list[float] = list(arms[0]["fluxes"])
     blend_applied = False
     gap_applied = False
 
-    for k in range(1, len(group)):
-        arm_wl = group[k]["wavelengths"]
-        arm_fx = group[k]["fluxes"]
+    for k in range(1, len(arms)):
+        arm_wl = arms[k]["wavelengths"]
+        arm_fx = arms[k]["fluxes"]
         overlap_nm = merged_wl[-1] - arm_wl[0]
 
         if overlap_nm > 0:
@@ -626,7 +668,7 @@ def _merge_arm_group(
     _persist_merged_csv(nova_id, composite_id, merged_wl, merged_fx, s3_client, private_bucket)
 
     # --- Build merged record ---
-    first = group[0]["product"]
+    first = arms[0]["product"]
     valid_wl = [w for w, f in zip(merged_wl, merged_fx, strict=True) if not math.isnan(f)]
 
     merged_product: dict[str, Any] = {
@@ -645,7 +687,7 @@ def _merge_arm_group(
         extra={
             "nova_id": nova_id,
             "instrument": instrument,
-            "arm_count": len(group),
+            "arm_count": len(arms),
             "arm_ids": arm_ids,
             "composite_id": composite_id,
             "wavelength_min": merged_product["wavelength_min"],

@@ -129,8 +129,18 @@ const FEATURE_GROUP_LABELS: Record<FeatureGroup, string> = {
 // ── Color palettes ────────────────────────────────────────────────────────────
 
 const SPARSE_RAMP = [
-  '#0072B2', '#2E91C4', '#56B4E9', '#5EBD98',
-  '#009E73', '#8DB535', '#E69F00', '#D55E00',
+  '#0072B2',  // strong blue
+  '#E69F00',  // amber/orange
+  '#009E73',  // teal green
+  '#CC79A7',  // muted pink
+  '#56B4E9',  // sky blue
+  '#D55E00',  // vermillion
+  '#8B6DB0',  // purple
+  '#E6B833',  // gold
+  '#1A9988',  // dark teal
+  '#C44E52',  // brick red
+  '#4C9A2A',  // forest green
+  '#6C5B7B',  // dusty purple
 ];
 
 const DENSE_PALETTE = [
@@ -147,11 +157,7 @@ function assignColor(sortIndex: number, totalCount: number, isDense: boolean): s
     return DENSE_PALETTE[paletteIndex];
   }
   if (totalCount === 1) return SPARSE_RAMP[0];
-  const t = sortIndex / (totalCount - 1);
-  const scaledIndex = t * (SPARSE_RAMP.length - 1);
-  const lo = Math.floor(scaledIndex);
-  const hi = Math.min(lo + 1, SPARSE_RAMP.length - 1);
-  return scaledIndex - lo < 0.5 ? SPARSE_RAMP[lo] : SPARSE_RAMP[hi];
+  return SPARSE_RAMP[sortIndex % SPARSE_RAMP.length];
 }
 
 // ── Helpers: temporal ─────────────────────────────────────────────────────────
@@ -194,6 +200,33 @@ function deduplicateByDay(
   return groups.map(pickBestInGroup);
 }
 
+/**
+ * Drop spectra that are too close together on a logarithmic DPO scale.
+ * Always keeps the first and last spectrum. For positive epoch values,
+ * requires at least `minRatio` multiplicative separation between adjacent
+ * kept spectra. Non-positive epochs (pre-outburst / unknown) are always kept.
+ */
+function enforceMinLogSeparation(
+  spectra: SpectrumRecord[],
+  epochKey: (s: SpectrumRecord) => number,
+  minRatio: number = 1.25,
+): SpectrumRecord[] {
+  if (spectra.length <= 2) return spectra;
+  const sorted = [...spectra].sort((a, b) => epochKey(a) - epochKey(b));
+  const kept: SpectrumRecord[] = [sorted[0]];
+  for (let i = 1; i < sorted.length - 1; i++) {
+    const lastKeptEpoch = epochKey(kept[kept.length - 1]);
+    const thisEpoch = epochKey(sorted[i]);
+    if (lastKeptEpoch > 0 && thisEpoch > 0 && thisEpoch / lastKeptEpoch >= minRatio) {
+      kept.push(sorted[i]);
+    } else if (lastKeptEpoch <= 0 || thisEpoch <= 0) {
+      kept.push(sorted[i]);
+    }
+  }
+  kept.push(sorted[sorted.length - 1]);
+  return kept;
+}
+
 function selectRepresentativeSubset(
   spectra: SpectrumRecord[],
   epochKey: (s: SpectrumRecord) => number,
@@ -224,7 +257,8 @@ function selectRepresentativeSubset(
   }
   selected.add(0);
   selected.add(sorted.length - 1);
-  return [...selected].sort((a, b) => a - b).map((i) => sorted[i]);
+  const logSpaced = [...selected].sort((a, b) => a - b).map((i) => sorted[i]);
+  return enforceMinLogSeparation(logSpaced, epochKey);
 }
 
 // ── Helpers: epoch formatting ─────────────────────────────────────────────────
@@ -268,9 +302,9 @@ function interpolateToGrid(
   let j = 0; // pointer into wavelengths
   for (let g = 0; g < grid.length; g++) {
     const gw = grid[g];
-    // Outside spectrum range → 0
-    if (gw <= wavelengths[0] || gw >= wavelengths[wavelengths.length - 1]) {
-      result[g] = 0;
+    // Outside spectrum range → NaN (no coverage)
+    if (gw < wavelengths[0] || gw > wavelengths[wavelengths.length - 1]) {
+      result[g] = NaN;
       continue;
     }
     // Advance j so wavelengths[j] <= gw < wavelengths[j+1]
@@ -282,7 +316,7 @@ function interpolateToGrid(
   return result;
 }
 
-const PACKING_PADDING = 0.08;
+const PACKING_PADDING = 0.096;
 const PACKING_MIN_GAP = 0.05;
 const GRID_POINTS = 500;
 
@@ -322,7 +356,11 @@ function computeWaterfallPacking(
       : spec.flux_normalized;
     const interpolated = interpolateToGrid(spec.wavelengths, displayFlux, grid);
     gridFlux.push(interpolated);
-    peakHeights.push(Math.max(...interpolated));
+    let peak = 0;
+    for (const f of interpolated) {
+      if (!isNaN(f) && f > peak) peak = f;
+    }
+    peakHeights.push(peak);
   }
 
   const avgPeak = peakHeights.reduce((a, b) => a + b, 0) / N;
@@ -336,12 +374,13 @@ function computeWaterfallPacking(
     const cur = gridFlux[i];
     let maxSep = -Infinity;
     for (let w = 0; w < GRID_POINTS; w++) {
-      // How much the previous trace extends above versus how much the current
-      // trace dips below its own baseline (cur values are relative to baseline=0,
-      // so a negative cur[w] would extend downward, but flux is non-negative)
+      // Skip wavelengths where either spectrum has no coverage
+      if (isNaN(prev[w]) || isNaN(cur[w])) continue;
       const sep = prev[w] - cur[w];
       if (sep > maxSep) maxSep = sep;
     }
+    // No overlapping wavelengths at all → use minimum gap only
+    if (maxSep === -Infinity) maxSep = 0;
     const rawGap = maxSep + padding;
     baselines[i] = baselines[i - 1] + Math.max(rawGap, PACKING_MIN_GAP);
   }
@@ -909,8 +948,14 @@ function buildPlotData(
       showlegend: false,
     });
 
+    const displayFluxValues = spectrum.flux_normalized
+      .map(f => compressed ? Math.sqrt(Math.max(f, 0)) : f)
+      .filter(f => !isNaN(f) && isFinite(f));
+    const sortedFlux = [...displayFluxValues].sort((a, b) => a - b);
+    const medianFlux = sortedFlux[Math.floor(sortedFlux.length / 2)] ?? 0;
+
     allAnnotations.push({
-      x: 1.0, y: baseline * globalScale,
+      x: 1.0, y: (baseline + medianFlux) * globalScale,
       text: ps.epochLabel,
       xanchor: 'left', yanchor: 'middle',
       showarrow: false,
