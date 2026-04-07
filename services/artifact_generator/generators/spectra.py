@@ -146,14 +146,43 @@ def generate_spectra_json(
                 },
             )
 
-        # Trim outlier spectra to the display range.
+        # Trim outlier spectra to the display range (red side).
         for rec in parsed:
+            if not rec["wavelengths"]:
+                continue
             if rec["wavelengths"][-1] > display_wavelength_max * _TRIM_TOLERANCE:
                 _trim_wavelength_range(rec, display_wavelength_max)
 
+        # Drop records that became empty after red-side trim.
         for rec in parsed:
+            if not rec["wavelengths"]:
+                _logger.warning(
+                    "Spectrum empty after red-side wavelength trim — dropping",
+                    extra={
+                        "nova_id": nova_id,
+                        "data_product_id": rec["product"]["data_product_id"],
+                    },
+                )
+        parsed = [rec for rec in parsed if rec["wavelengths"]]
+
+        # Trim outlier spectra to the display range (blue side).
+        for rec in parsed:
+            if not rec["wavelengths"]:
+                continue
             if rec["wavelengths"][0] < display_wavelength_min / _TRIM_TOLERANCE:
                 _trim_wavelength_range_min(rec, display_wavelength_min)
+
+        # Drop records that became empty after blue-side trim.
+        for rec in parsed:
+            if not rec["wavelengths"]:
+                _logger.warning(
+                    "Spectrum empty after blue-side wavelength trim — dropping",
+                    extra={
+                        "nova_id": nova_id,
+                        "data_product_id": rec["product"]["data_product_id"],
+                    },
+                )
+        parsed = [rec for rec in parsed if rec["wavelengths"]]
 
     # Step 2c — Second pass: LTTB downsampling + normalization.
     spectra: list[dict[str, Any]] = []

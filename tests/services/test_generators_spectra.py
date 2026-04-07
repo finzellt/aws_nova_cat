@@ -541,3 +541,119 @@ class TestDisplayWavelengthFields:
         assert len(artifact["observations"]) == 3
         obs_ids = {o["data_product_id"] for o in artifact["observations"]}
         assert obs_ids == {"dp-a", "dp-b", "dp-c"}
+
+    def test_red_side_trim_empty_wavelengths_no_crash(self) -> None:
+        """Spectrum entirely above display max is dropped, not IndexError."""
+        # 3 normal spectra (400–900) + 1 entirely above the median max (~900).
+        csvs = {
+            "dp-1": self._make_csv(400, 900),
+            "dp-2": self._make_csv(400, 910),
+            "dp-3": self._make_csv(400, 920),
+            "dp-bad": self._make_csv(5000, 6000),
+        }
+        products = [
+            self._make_product("dp-1", mjd="59000"),
+            self._make_product("dp-2", mjd="59001"),
+            self._make_product("dp-3", mjd="59002"),
+            self._make_product("dp-bad", mjd="59003"),
+        ]
+
+        class FakeBody:
+            def __init__(self, content: str) -> None:
+                self._content = content
+
+            def read(self) -> bytes:
+                return self._content.encode()
+
+        class FakeS3:
+            def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:  # noqa: N803
+                dp_id = Key.split("/")[-2]
+                return {"Body": FakeBody(csvs[dp_id])}
+
+        class FakeTable:
+            def query(self, **kwargs: Any) -> dict[str, Any]:
+                return {"Items": products}
+
+        ctx: dict[str, Any] = {"outburst_mjd": 58000.0, "outburst_mjd_is_estimated": False}
+        artifact = generate_spectra_json("nova-test", FakeTable(), FakeS3(), "bucket", ctx)
+
+        # dp-bad should be excluded — its entire range is above display max.
+        spectrum_ids = [s["spectrum_id"] for s in artifact["spectra"]]
+        assert "dp-bad" not in spectrum_ids
+
+    def test_blue_side_trim_empty_wavelengths_no_crash(self) -> None:
+        """Spectrum entirely below display min is dropped, not IndexError."""
+        # 3 normal spectra (400–900) + 1 entirely below the median min (~400).
+        csvs = {
+            "dp-1": self._make_csv(400, 900),
+            "dp-2": self._make_csv(410, 900),
+            "dp-3": self._make_csv(390, 900),
+            "dp-bad": self._make_csv(100, 200),
+        }
+        products = [
+            self._make_product("dp-1", mjd="59000"),
+            self._make_product("dp-2", mjd="59001"),
+            self._make_product("dp-3", mjd="59002"),
+            self._make_product("dp-bad", mjd="59003"),
+        ]
+
+        class FakeBody:
+            def __init__(self, content: str) -> None:
+                self._content = content
+
+            def read(self) -> bytes:
+                return self._content.encode()
+
+        class FakeS3:
+            def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:  # noqa: N803
+                dp_id = Key.split("/")[-2]
+                return {"Body": FakeBody(csvs[dp_id])}
+
+        class FakeTable:
+            def query(self, **kwargs: Any) -> dict[str, Any]:
+                return {"Items": products}
+
+        ctx: dict[str, Any] = {"outburst_mjd": 58000.0, "outburst_mjd_is_estimated": False}
+        artifact = generate_spectra_json("nova-test", FakeTable(), FakeS3(), "bucket", ctx)
+
+        # dp-bad should be excluded — its entire range is below display min.
+        spectrum_ids = [s["spectrum_id"] for s in artifact["spectra"]]
+        assert "dp-bad" not in spectrum_ids
+
+    def test_single_bad_spectrum_does_not_block_others(self) -> None:
+        """One fully-trimmed spectrum doesn't prevent other spectra from appearing."""
+        csvs = {
+            "dp-good-1": self._make_csv(400, 900),
+            "dp-good-2": self._make_csv(410, 920),
+            "dp-bad": self._make_csv(5000, 6000),
+        }
+        products = [
+            self._make_product("dp-good-1", mjd="59000"),
+            self._make_product("dp-good-2", mjd="59001"),
+            self._make_product("dp-bad", mjd="59002"),
+        ]
+
+        class FakeBody:
+            def __init__(self, content: str) -> None:
+                self._content = content
+
+            def read(self) -> bytes:
+                return self._content.encode()
+
+        class FakeS3:
+            def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:  # noqa: N803
+                dp_id = Key.split("/")[-2]
+                return {"Body": FakeBody(csvs[dp_id])}
+
+        class FakeTable:
+            def query(self, **kwargs: Any) -> dict[str, Any]:
+                return {"Items": products}
+
+        ctx: dict[str, Any] = {"outburst_mjd": 58000.0, "outburst_mjd_is_estimated": False}
+        artifact = generate_spectra_json("nova-test", FakeTable(), FakeS3(), "bucket", ctx)
+
+        spectrum_ids = {s["spectrum_id"] for s in artifact["spectra"]}
+        assert "dp-good-1" in spectrum_ids
+        assert "dp-good-2" in spectrum_ids
+        assert "dp-bad" not in spectrum_ids
+        assert len(artifact["spectra"]) == 2
