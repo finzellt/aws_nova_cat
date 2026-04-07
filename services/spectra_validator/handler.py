@@ -68,6 +68,7 @@ from decimal import Decimal
 from typing import Any
 
 import boto3
+import numpy as np
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError
@@ -398,6 +399,30 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
     raw_flux_unit: str | None = spectrum.flux_units if spectrum else None
     flux_unit: str | None = raw_flux_unit if raw_flux_unit else None
 
+    # Wavelength range in nm (canonical unit)
+    wavelength_min_nm: float | None = None
+    wavelength_max_nm: float | None = None
+    snr_median: float | None = None
+
+    if spectrum:
+        axis = spectrum.spectral_axis
+        units = spectrum.spectral_units.lower()
+        finite_wl = axis[np.isfinite(axis)]
+        if len(finite_wl) > 0:
+            wl_min = float(np.min(finite_wl))
+            wl_max = float(np.max(finite_wl))
+            # Convert to nm
+            if units in ("angstrom", "aa", "å"):
+                wl_min /= 10.0
+                wl_max /= 10.0
+            elif units in ("um", "micron"):
+                wl_min *= 1000.0
+                wl_max *= 1000.0
+            # else: assume already nm
+            wavelength_min_nm = round(wl_min, 4)
+            wavelength_max_nm = round(wl_max, 4)
+        snr_median = spectrum.snr
+
     # --- Write web-ready CSV (ADR-031 P-4) ---
     # Best-effort: a failed write logs a warning but does not fail the
     # validation.  The CSV is a derived artifact that can be regenerated
@@ -456,6 +481,9 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
         "telescope": telescope,
         "observation_date_mjd": observation_date_mjd,
         "flux_unit": flux_unit,
+        "wavelength_min_nm": wavelength_min_nm,
+        "wavelength_max_nm": wavelength_max_nm,
+        "snr": snr_median,
     }
 
 
@@ -587,6 +615,18 @@ def _handle_record_validation_result(event: dict[str, Any], context: object) -> 
     if validation.get("flux_unit") is not None:
         set_expr_parts.append("flux_unit = :flux_unit")
         values[":flux_unit"] = validation["flux_unit"]
+
+    if validation.get("wavelength_min_nm") is not None:
+        set_expr_parts.append("wavelength_min_nm = :wl_min")
+        values[":wl_min"] = Decimal(str(validation["wavelength_min_nm"]))
+
+    if validation.get("wavelength_max_nm") is not None:
+        set_expr_parts.append("wavelength_max_nm = :wl_max")
+        values[":wl_max"] = Decimal(str(validation["wavelength_max_nm"]))
+
+    if validation.get("snr") is not None:
+        set_expr_parts.append("snr = :snr")
+        values[":snr"] = Decimal(str(validation["snr"]))
 
     update_expression = "SET " + ", ".join(set_expr_parts) + " REMOVE GSI1PK, GSI1SK"
 

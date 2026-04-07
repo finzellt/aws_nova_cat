@@ -1,4 +1,6 @@
 .venv/
+.envrc
+.direnv/
 __pycache__/
 *.pyc
 .mypy_cache/

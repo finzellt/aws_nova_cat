@@ -1028,3 +1028,28 @@ class TestDispatch:
             # Confirm the ADS query was still made (using primary_name)
             url = mock_requests.get.call_args[0][0]
             assert "V1324" in url
+
+
+# ===========================================================================
+# TestADSCollectionFilter
+# ===========================================================================
+
+
+class TestADSCollectionFilter:
+    def test_ads_request_includes_collection_filter(self, table: Any) -> None:
+        with mock_aws():
+            _seed_nova(table)
+            _create_ads_secret()
+            h = _load_handler()
+            with patch.object(h, "requests") as mock_requests:
+                mock_requests.get.return_value = _mock_ads_response([_RAW_DOC_A])
+                mock_requests.exceptions.Timeout = Exception
+                mock_requests.exceptions.RequestException = Exception
+                h.handle(_base_event(), None)
+            url = mock_requests.get.call_args[0][0]
+            assert "fq=collection" in url
+
+    def test_ads_collection_filter_constant_value(self) -> None:
+        with mock_aws():
+            h = _load_handler()
+            assert h._ADS_COLLECTION_FILTER == "collection:(astronomy OR physics)"

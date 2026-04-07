@@ -822,6 +822,21 @@ class DataProduct(PersistentBase):
 
     provenance: Provenance | None = None
 
+    # --- enrichment fields (spectra; written during validation) ---
+    wavelength_min_nm: float | None = Field(
+        default=None,
+        description="Minimum wavelength in nm, derived from spectral axis during validation.",
+    )
+    wavelength_max_nm: float | None = Field(
+        default=None,
+        description="Maximum wavelength in nm, derived from spectral axis during validation.",
+    )
+    snr: float | None = Field(
+        default=None,
+        ge=0,
+        description="Median signal-to-noise ratio per pixel, from FITS SNR column when available.",
+    )
+
     @model_validator(mode="after")
     def validate_by_product_type(self) -> DataProduct:
         if self.product_type == ProductType.spectra:

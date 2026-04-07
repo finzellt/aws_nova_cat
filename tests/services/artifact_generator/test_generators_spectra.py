@@ -657,3 +657,131 @@ class TestDisplayWavelengthFields:
         assert "dp-good-2" in spectrum_ids
         assert "dp-bad" not in spectrum_ids
         assert len(artifact["spectra"]) == 2
+
+
+# # ---------------------------------------------------------------------------
+# # Observation list helpers
+# # ---------------------------------------------------------------------------
+
+# _MODULE = "generators.spectra"
+
+
+# def _make_product(
+#     *,
+#     data_product_id: str = "dp-001",
+#     observation_date_mjd: float = 59000.0,
+#     instrument: str = "UVES",
+#     telescope: str = "VLT-UT2",
+#     provider: str = "ESO",
+#     wavelength_min_nm: float | None = None,
+#     wavelength_max_nm: float | None = None,
+#     wavelength_min: float | None = None,
+#     wavelength_max: float | None = None,
+#     snr: float | None = None,
+# ) -> dict[str, Any]:
+#     """Build a minimal DataProduct dict for observation-list testing."""
+#     product: dict[str, Any] = {
+#         "data_product_id": data_product_id,
+#         "observation_date_mjd": Decimal(str(observation_date_mjd)),
+#         "instrument": instrument,
+#         "telescope": telescope,
+#         "provider": provider,
+#     }
+#     if wavelength_min_nm is not None:
+#         product["wavelength_min_nm"] = Decimal(str(wavelength_min_nm))
+#     if wavelength_max_nm is not None:
+#         product["wavelength_max_nm"] = Decimal(str(wavelength_max_nm))
+#     if wavelength_min is not None:
+#         product["wavelength_min"] = Decimal(str(wavelength_min))
+#     if wavelength_max is not None:
+#         product["wavelength_max"] = Decimal(str(wavelength_max))
+#     if snr is not None:
+#         product["snr"] = Decimal(str(snr))
+#     return product
+
+
+# def _run_generator(products: list[dict[str, Any]]) -> dict[str, Any]:
+#     """Run generate_spectra_json with mocked DDB query and S3 I/O.
+
+#     Returns the full artifact dict.  Stage-1 processing and multi-arm
+#     merging are bypassed — we only care about the observations list.
+#     """
+#     mock_table = MagicMock()
+#     mock_s3 = MagicMock()
+#     nova_context: dict[str, Any] = {
+#         "outburst_mjd": 59000.0,
+#         "outburst_mjd_is_estimated": False,
+#     }
+
+#     with (
+#         patch(f"{_MODULE}._query_valid_spectra", return_value=products),
+#         patch(f"{_MODULE}._process_spectrum_stage1", return_value=None),
+#         patch(f"{_MODULE}._merge_multi_arm_spectra", return_value=[]),
+#     ):
+#         return generate_spectra_json(
+#             nova_id="nova-001",
+#             table=mock_table,
+#             s3_client=mock_s3,
+#             private_bucket="test-bucket",
+#             nova_context=nova_context,
+#         )
+
+
+# # ---------------------------------------------------------------------------
+# # Observation list: wavelength field migration
+# # ---------------------------------------------------------------------------
+
+
+# class TestObservationsWavelengthFields:
+#     def test_observations_list_reads_wavelength_min_nm(self) -> None:
+#         """New-style DDB fields (wavelength_min_nm / wavelength_max_nm)."""
+#         products = [
+#             _make_product(
+#                 wavelength_min_nm=350.0,
+#                 wavelength_max_nm=950.0,
+#             ),
+#         ]
+#         artifact = _run_generator(products)
+#         obs = artifact["observations"]
+#         assert len(obs) == 1
+#         assert obs[0]["wavelength_min"] == pytest.approx(350.0)
+#         assert obs[0]["wavelength_max"] == pytest.approx(950.0)
+
+#     def test_observations_list_falls_back_to_old_wavelength_fields(self) -> None:
+#         """Old-style DDB fields (wavelength_min / wavelength_max) still work."""
+#         products = [
+#             _make_product(
+#                 wavelength_min=300.0,
+#                 wavelength_max=900.0,
+#             ),
+#         ]
+#         artifact = _run_generator(products)
+#         obs = artifact["observations"]
+#         assert len(obs) == 1
+#         assert obs[0]["wavelength_min"] == pytest.approx(300.0)
+#         assert obs[0]["wavelength_max"] == pytest.approx(900.0)
+
+
+# # ---------------------------------------------------------------------------
+# # Observation list: SNR
+# # ---------------------------------------------------------------------------
+
+
+# class TestObservationsSnr:
+#     def test_observations_list_includes_snr_when_present(self) -> None:
+#         products = [
+#             _make_product(snr=42.5, wavelength_min_nm=350.0, wavelength_max_nm=950.0),
+#         ]
+#         artifact = _run_generator(products)
+#         obs = artifact["observations"]
+#         assert len(obs) == 1
+#         assert obs[0]["snr"] == pytest.approx(42.5)
+
+#     def test_observations_list_omits_snr_when_absent(self) -> None:
+#         products = [
+#             _make_product(wavelength_min_nm=350.0, wavelength_max_nm=950.0),
+#         ]
+#         artifact = _run_generator(products)
+#         obs = artifact["observations"]
+#         assert len(obs) == 1
+#         assert "snr" not in obs[0]

@@ -49,6 +49,7 @@ _TABLE_NAME = os.environ["NOVA_CAT_TABLE_NAME"]
 _ADS_SECRET_NAME = os.environ.get("ADS_SECRET_NAME", "ADSQueryToken")
 _ADS_API_URL = "https://api.adsabs.harvard.edu/v1/search/query"
 _ADS_FIELDS = ["bibcode", "doctype", "title", "date", "author", "doi", "identifier"]
+_ADS_COLLECTION_FILTER = "collection:(astronomy OR physics)"
 
 _dynamodb = boto3.resource("dynamodb")
 _table = _dynamodb.Table(_TABLE_NAME)
@@ -106,8 +107,20 @@ def _build_ads_query(names: list[str]) -> str:
 
 
 def _ads_request(query: str, token: str) -> list[dict]:
-    """Execute ADS search query and return raw doc list."""
-    encoded = urlencode({"q": query, "fl": ",".join(_ADS_FIELDS), "rows": 2000, "sort": "date asc"})
+    """Execute ADS search query and return raw doc list.
+
+    Results are restricted to the astronomy and physics collections via ``fq``
+    to match the ADS web-portal default and avoid spurious non-astronomical hits.
+    """
+    encoded = urlencode(
+        {
+            "q": query,
+            "fq": _ADS_COLLECTION_FILTER,
+            "fl": ",".join(_ADS_FIELDS),
+            "rows": 2000,
+            "sort": "date asc",
+        }
+    )
     url = f"{_ADS_API_URL}?{encoded}"
     headers = {"Authorization": f"Bearer {token}"}
     try:

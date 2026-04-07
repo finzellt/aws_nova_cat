@@ -66,8 +66,14 @@ _ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN = os.environ[
     "ACQUIRE_AND_VALIDATE_SPECTRA_STATE_MACHINE_ARN"
 ]
 
-_FANOUT_BATCH_SIZE = 10  # executions per batch
-_FANOUT_BATCH_DELAY_S = 2.0  # seconds between batches
+# Fan-out pacing: tuned to avoid Docker Lambda cold-start throttling.
+# The spectra_validator Lambda uses a Docker image (astropy/astroquery C
+# extensions). AWS needs time to pull and start each container. Launching
+# too many concurrently causes TooManyRequestsException, and retries eat
+# into the parent workflow's execution budget. 5 per batch with 8s delay
+# gives AWS enough headroom to warm containers incrementally.
+_FANOUT_BATCH_SIZE = 5  # executions per batch
+_FANOUT_BATCH_DELAY_S = 8.0  # seconds between batches
 
 _sfn = boto3.client("stepfunctions")
 _dynamodb = boto3.resource("dynamodb")

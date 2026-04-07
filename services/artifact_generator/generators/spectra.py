@@ -202,10 +202,17 @@ def generate_spectra_json(
             "instrument": product.get("instrument") or "Unknown",
             "telescope": product.get("telescope") or "Unknown",
             "epoch_mjd": float(Decimal(str(product.get("observation_date_mjd", 0)))),
-            "wavelength_min": float(Decimal(str(product.get("wavelength_min", 0)))),
-            "wavelength_max": float(Decimal(str(product.get("wavelength_max", 0)))),
+            "wavelength_min": float(
+                Decimal(str(product.get("wavelength_min_nm") or product.get("wavelength_min") or 0))
+            ),
+            "wavelength_max": float(
+                Decimal(str(product.get("wavelength_max_nm") or product.get("wavelength_max") or 0))
+            ),
             "provider": product.get("provider", "Unknown"),
         }
+        _snr = product.get("snr")
+        if _snr is not None:
+            obs["snr"] = float(Decimal(str(_snr)))
         observations_list.append(obs)
 
     # Sort by epoch ascending

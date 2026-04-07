@@ -67,6 +67,7 @@ const COLUMNS = [
   'Telescope',
   'Epoch (MJD)',
   'λ Range (nm)',
+  'SNR',
   'Provider',
 ] as const;
 
@@ -135,6 +136,11 @@ export default function ObservationsTable({
                 {/* Wavelength range */}
                 <td className="px-3 py-2 font-mono tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap">
                   {parseFloat(row.wavelength_min.toPrecision(4))}–{parseFloat(row.wavelength_max.toPrecision(4))}
+                </td>
+
+                {/* SNR */}
+                <td className="px-3 py-2 font-mono tabular-nums text-[var(--color-text-secondary)]">
+                  {row.snr != null ? row.snr.toFixed(1) : '\u2014'}
                 </td>
 
                 {/* Provider */}

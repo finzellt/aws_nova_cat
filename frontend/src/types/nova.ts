@@ -61,6 +61,8 @@ export interface ObservationRecord {
   wavelength_min: number;
   wavelength_max: number;
   provider: string;
+  /** Median signal-to-noise ratio per pixel; undefined when not available. */
+  snr?: number;
 }
 
 // ── Spectra artifact (spectra.json) ───────────────────────────────────────────
