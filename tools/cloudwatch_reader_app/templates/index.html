@@ -159,27 +159,6 @@
     background: transparent;
   }
 
-  button.quick-btn {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    padding: 4px 8px;
-    font-size: 12px;
-    min-width: 36px;
-  }
-
-  button.quick-btn:hover {
-    border-color: var(--text-muted);
-    color: var(--text);
-    background: transparent;
-  }
-
-  button.quick-btn.active {
-    border-color: var(--accent-dim);
-    color: var(--accent);
-    background: rgba(37,99,235,0.1);
-  }
-
   .spacer { flex: 1; }
 
   /* ── Status bar ──────────────────────────────────────────── */
@@ -285,21 +264,6 @@
 
   tr.row-ERROR   { border-left: 3px solid var(--error); }
   tr.row-WARNING { border-left: 3px solid var(--warning); }
-
-  /* Source badges */
-  .source-badge {
-    display: inline-block;
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-  }
-
-  .source-lambda  { background: rgba(96,165,250,0.12); color: var(--accent); }
-  .source-fargate { background: rgba(52,211,153,0.12); color: #34d399; }
-  .source-sfn     { background: rgba(251,191,36,0.10); color: var(--warning); }
-  .source-other   { background: rgba(107,114,128,0.15); color: var(--text-muted); }
 
   /* ── Detail panel (shared style) ─────────────────────────── */
 
@@ -550,23 +514,23 @@
 <!-- ── Controls (hidden in trace view) ─────────────────────── -->
 
 <div class="controls" id="controls-bar">
-  <!-- Row 1: Time range + limit -->
   <div class="control-group">
+    <label for="time-preset">Range</label>
+    <select id="time-preset" onchange="onPresetChange()">
+      <option value="15">Last 15 min</option>
+      <option value="30" selected>Last 30 min</option>
+      <option value="60">Last 1 hour</option>
+      <option value="120">Last 2 hours</option>
+      <option value="240">Last 4 hours</option>
+      <option value="custom">Custom range…</option>
+    </select>
+  </div>
+
+  <div class="control-group custom-range-fields" id="custom-range-fields" style="display:none">
     <label for="time-from">From</label>
     <input type="datetime-local" id="time-from" step="1">
-  </div>
-
-  <div class="control-group">
     <label for="time-to">To</label>
     <input type="datetime-local" id="time-to" step="1">
-  </div>
-
-  <div class="control-group">
-    <label>Quick</label>
-    <button class="quick-btn" onclick="quickSet(15)">15m</button>
-    <button class="quick-btn active" onclick="quickSet(30)">30m</button>
-    <button class="quick-btn" onclick="quickSet(60)">1h</button>
-    <button class="quick-btn" onclick="quickSet(240)">4h</button>
   </div>
 
   <div class="control-group">
@@ -586,7 +550,6 @@
 
   <div class="spacer"></div>
 
-  <!-- Row 1 right: filters -->
   <div class="control-group">
     <label for="level-filter">Level</label>
     <select id="level-filter">
@@ -601,16 +564,6 @@
   <div class="control-group">
     <label for="workflow-filter">Workflow</label>
     <select id="workflow-filter"><option value="">All</option></select>
-  </div>
-
-  <div class="control-group">
-    <label for="function-filter">Function</label>
-    <select id="function-filter"><option value="">All</option></select>
-  </div>
-
-  <div class="control-group">
-    <label for="source-filter">Source</label>
-    <select id="source-filter"><option value="">All</option></select>
   </div>
 
   <div class="control-group">
@@ -709,9 +662,7 @@ let selectedRowIndex = -1;
 const COLUMNS = [
   { key: '@timestamp',            label: 'Timestamp',   width: '170px' },
   { key: 'level',                 label: 'Level',       width: '70px'  },
-  { key: 'source',                label: 'Source',      width: '130px' },
   { key: 'workflow_name',         label: 'Workflow',    width: '140px' },
-  { key: 'function_name',        label: 'Function',    width: '160px' },
   { key: 'state_name',           label: 'State',       width: '140px' },
   { key: 'candidate_name',        label: 'Nova',        width: '120px' },
   { key: 'correlation_id',       label: 'Correlation', width: '120px' },
@@ -775,16 +726,12 @@ async function fetchLogs() {
   btn.textContent = 'Fetching...';
   statusEl.innerHTML = '<span class="loading">Querying CloudWatch Logs Insights\u2026</span>';
 
-  const fromEl = document.getElementById('time-from');
-  const toEl = document.getElementById('time-to');
   const limit = document.getElementById('limit-select').value;
-
-  const startEpoch = Math.floor(new Date(fromEl.value).getTime() / 1000);
-  const endEpoch = Math.floor(new Date(toEl.value).getTime() / 1000);
+  const range = getEffectiveRange();
 
   const params = new URLSearchParams({
-    start_epoch: startEpoch,
-    end_epoch: endEpoch,
+    start_epoch: range.start,
+    end_epoch: range.end,
     limit: limit,
   });
 
@@ -800,12 +747,12 @@ async function fetchLogs() {
     closeDetail();
 
     const groupCount = (data.log_groups || []).length;
-    const durationMin = Math.round((endEpoch - startEpoch) / 60);
-    const fromStr = fromEl.value.replace('T', ' ');
-    const toStr = toEl.value.replace('T', ' ');
+    const durationMin = Math.round((range.end - range.start) / 60);
+    const fromStr = new Date(range.start * 1000).toLocaleTimeString();
+    const toStr = new Date(range.end * 1000).toLocaleTimeString();
     statusEl.textContent =
       `Loaded ${allRows.length} rows from ${groupCount} groups `
-      + `(${fromStr} \u2192 ${toStr}, ${durationMin} min window, limit ${limit})`;
+      + `(${fromStr} \u2192 ${toStr}, ${durationMin} min, limit ${limit})`;
   } catch (err) {
     statusEl.innerHTML = `<span class="error-msg">Error: ${esc(err.message)}</span>`;
     allRows = [];
@@ -820,68 +767,78 @@ async function fetchLogs() {
 // ── Time range controls ─────────────────────────────────────
 
 function toLocalISOString(date) {
-  // Format a Date as YYYY-MM-DDTHH:MM:SS in local time (for datetime-local inputs).
   const pad = (n, d=2) => String(n).padStart(d, '0');
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`
     + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-function quickSet(minutes) {
-  const now = new Date();
-  const from = new Date(now.getTime() - minutes * 60 * 1000);
-  document.getElementById('time-from').value = toLocalISOString(from);
-  document.getElementById('time-to').value = toLocalISOString(now);
+function onPresetChange() {
+  const preset = document.getElementById('time-preset').value;
+  const customFields = document.getElementById('custom-range-fields');
 
-  // Highlight active quick button
-  for (const btn of document.querySelectorAll('.quick-btn')) {
-    btn.classList.toggle('active', parseInt(btn.textContent) === minutes
-      || btn.textContent === `${minutes}m`
-      || (btn.textContent === '1h' && minutes === 60)
-      || (btn.textContent === '4h' && minutes === 240));
+  if (preset === 'custom') {
+    customFields.style.display = 'flex';
+    // Pre-fill with the current effective range so it's not empty.
+    const range = getEffectiveRange();
+    document.getElementById('time-from').value = toLocalISOString(new Date(range.start * 1000));
+    document.getElementById('time-to').value = toLocalISOString(new Date(range.end * 1000));
+  } else {
+    customFields.style.display = 'none';
+    fetchLogs();
+  }
+}
+
+function getEffectiveRange() {
+  // Returns { start, end } as epoch seconds.
+  const preset = document.getElementById('time-preset').value;
+
+  if (preset === 'custom') {
+    const fromVal = document.getElementById('time-from').value;
+    const toVal = document.getElementById('time-to').value;
+    if (fromVal && toVal) {
+      return {
+        start: Math.floor(new Date(fromVal).getTime() / 1000),
+        end: Math.floor(new Date(toVal).getTime() / 1000),
+      };
+    }
   }
 
-  fetchLogs();
+  // Preset: "last N minutes" ending now.
+  const minutes = parseInt(preset) || 30;
+  const endEpoch = Math.floor(Date.now() / 1000);
+  return { start: endEpoch - minutes * 60, end: endEpoch };
 }
 
 function shiftWindow(direction) {
   // direction: -1 = older, +1 = newer
-  const fromEl = document.getElementById('time-from');
-  const toEl = document.getElementById('time-to');
+  const range = getEffectiveRange();
+  const windowSec = range.end - range.start;
+  if (windowSec <= 0) return;
 
-  const fromTime = new Date(fromEl.value).getTime();
-  const toTime = new Date(toEl.value).getTime();
-  const windowMs = toTime - fromTime;
+  const shiftSec = windowSec * direction;
+  let newStart = range.start + shiftSec;
+  let newEnd = range.end + shiftSec;
 
-  if (isNaN(windowMs) || windowMs <= 0) return;
-
-  const shiftMs = windowMs * direction;
-  const newFrom = new Date(fromTime + shiftMs);
-  const newTo = new Date(toTime + shiftMs);
-
-  // Don't shift into the future
-  const now = new Date();
-  if (newTo > now) {
-    fromEl.value = toLocalISOString(new Date(now.getTime() - windowMs));
-    toEl.value = toLocalISOString(now);
-  } else {
-    fromEl.value = toLocalISOString(newFrom);
-    toEl.value = toLocalISOString(newTo);
+  // Don't shift into the future.
+  const nowEpoch = Math.floor(Date.now() / 1000);
+  if (newEnd > nowEpoch) {
+    newEnd = nowEpoch;
+    newStart = nowEpoch - windowSec;
   }
 
-  // Clear quick button highlight since we're in a custom range now
-  for (const btn of document.querySelectorAll('.quick-btn')) {
-    btn.classList.remove('active');
-  }
+  // Switch to custom mode so the user sees the shifted range.
+  document.getElementById('time-preset').value = 'custom';
+  document.getElementById('custom-range-fields').style.display = 'flex';
+  document.getElementById('time-from').value = toLocalISOString(new Date(newStart * 1000));
+  document.getElementById('time-to').value = toLocalISOString(new Date(newEnd * 1000));
 
   fetchLogs();
 }
 
 function initTimeRange() {
-  // Default to last 30 minutes
-  const now = new Date();
-  const from = new Date(now.getTime() - 30 * 60 * 1000);
-  document.getElementById('time-from').value = toLocalISOString(from);
-  document.getElementById('time-to').value = toLocalISOString(now);
+  // Default: "Last 30 min" preset selected, custom fields hidden.
+  document.getElementById('time-preset').value = '30';
+  document.getElementById('custom-range-fields').style.display = 'none';
 }
 
 
@@ -889,8 +846,6 @@ function initTimeRange() {
 
 function populateDynamicFilters() {
   populateSelect('workflow-filter', uniqueVals('workflow_name'));
-  populateSelect('function-filter', uniqueVals('function_name'));
-  populateSelect('source-filter', uniqueVals('source'));
 }
 
 function uniqueVals(key) {
@@ -921,15 +876,11 @@ function populateSelect(id, values) {
 function applyFiltersAndRender() {
   const levelFilter    = document.getElementById('level-filter').value;
   const workflowFilter = document.getElementById('workflow-filter').value;
-  const functionFilter = document.getElementById('function-filter').value;
-  const sourceFilter   = document.getElementById('source-filter').value;
   const searchText     = document.getElementById('search-input').value.toLowerCase().trim();
 
   filteredRows = allRows.filter(row => {
     if (levelFilter && (row.level || '').toUpperCase() !== levelFilter) return false;
     if (workflowFilter && row.workflow_name !== workflowFilter) return false;
-    if (functionFilter && row.function_name !== functionFilter) return false;
-    if (sourceFilter && row.source !== sourceFilter) return false;
     if (searchText) {
       const haystack = Object.values(row).join(' ').toLowerCase();
       if (!haystack.includes(searchText)) return false;
@@ -988,11 +939,6 @@ function renderTable() {
         const badge = level
           ? `<span class="level-badge level-${level}">${esc(level)}</span>` : '';
         cells += `<td>${badge}</td>`;
-      } else if (col.key === 'source') {
-        const srcType = val.startsWith('lambda:') ? 'lambda'
-          : val.startsWith('fargate:') ? 'fargate'
-          : val.startsWith('sfn:') ? 'sfn' : 'other';
-        cells += `<td><span class="source-badge source-${srcType}">${esc(val)}</span></td>`;
       } else if (col.key === '@timestamp') {
         cells += `<td>${esc(formatTimestamp(val))}</td>`;
       } else {
@@ -1236,7 +1182,7 @@ function showToast(msg) {
 // ── Control bindings ────────────────────────────────────────
 
 function bindControls() {
-  for (const id of ['level-filter', 'workflow-filter', 'function-filter', 'source-filter']) {
+  for (const id of ['level-filter', 'workflow-filter']) {
     document.getElementById(id).addEventListener('change', applyFiltersAndRender);
   }
   document.getElementById('search-input').addEventListener('input', applyFiltersAndRender);

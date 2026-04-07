@@ -93,9 +93,22 @@ def generate_bundle_zip(
             # 2. Spectra FITS files
             for dp in data_products:
                 dp_id: str = dp["data_product_id"]
-                s3_key = f"raw/spectra/{nova_id}/{dp_id}/primary.fits"
+                fits_bucket = dp.get("raw_s3_bucket")
+                fits_key = dp.get("raw_s3_key")
+
+                if not fits_bucket or not fits_key:
+                    _logger.warning(
+                        "DataProduct missing raw_s3_bucket/raw_s3_key, skipping",
+                        extra={
+                            "nova_id": nova_id,
+                            "data_product_id": dp_id,
+                        },
+                    )
+                    spectra_skipped += 1
+                    continue
+
                 try:
-                    resp = s3_client.get_object(Bucket=private_bucket, Key=s3_key)
+                    resp = s3_client.get_object(Bucket=fits_bucket, Key=fits_key)
                     fits_bytes: bytes = resp["Body"].read()
                 except ClientError as exc:
                     _logger.warning(
@@ -103,7 +116,8 @@ def generate_bundle_zip(
                         extra={
                             "nova_id": nova_id,
                             "data_product_id": dp_id,
-                            "s3_key": s3_key,
+                            "fits_bucket": fits_bucket,
+                            "fits_key": fits_key,
                             "error": str(exc),
                         },
                     )

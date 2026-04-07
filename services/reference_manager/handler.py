@@ -61,6 +61,19 @@ _secretsmanager = boto3.client("secretsmanager")
 
 _ARXIV_RE = re.compile(r"^arXiv:(.+)$", re.IGNORECASE)
 
+
+def _date_sort_key(date_str: str) -> tuple[str, str]:
+    """Extract ``(YYYY, MM)`` for month-granularity comparison.
+
+    ADS publication dates use the ``00`` convention for unknown day
+    precision.  When *any* date in a comparison has day ``00``, the day
+    component is meaningless — only year and month distinguish dates.
+    Ignoring the day entirely is the simplest correct strategy.
+    """
+    parts = date_str.split("-")
+    return (parts[0], parts[1])
+
+
 _DOCTYPE_TO_REFERENCE_TYPE: dict[str, str] = {
     "article": "journal_article",
     "eprint": "arxiv_preprint",
@@ -472,8 +485,8 @@ def _handle_computeDiscoveryDate(event: dict, context: object) -> dict:
             "earliest_publication_date": None,
         }
 
-    # min by (publication_date, bibcode) — lex order is correct for YYYY-MM-00
-    earliest_bibcode, earliest_date = min(dated, key=lambda x: (x[1], x[0]))
+    # min by (year-month, bibcode) — month granularity avoids day-00 artefacts
+    earliest_bibcode, earliest_date = min(dated, key=lambda x: (_date_sort_key(x[1]), x[0]))
 
     logger.info(
         "Computed discovery date",
@@ -536,8 +549,10 @@ def _handle_upsertDiscoveryDateMetadata(event: dict, context: object) -> dict:
     raw_date = nova_item.get("discovery_date")
     current_date: str | None = str(raw_date) if raw_date is not None else None
 
-    # Monotonically earlier invariant: only overwrite with a strictly earlier date
-    if current_date is not None and new_date >= current_date:
+    # Monotonically earlier invariant: only overwrite with a strictly earlier
+    # month.  Day-00 (month-only precision) dates are treated as equal to any
+    # day-precise date in the same month — no overwrite.
+    if current_date is not None and _date_sort_key(new_date) >= _date_sort_key(current_date):
         logger.info(
             "Discovery date not earlier — no-op",
             extra={

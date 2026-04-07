@@ -141,8 +141,12 @@ def _seed_data_product(
     instrument: str = "FAST",
     epoch_mjd: Decimal | None = Decimal("46134.4471"),
     bibcode: str | None = "1992AJ....104..725W",
+    raw_s3_bucket: str = _PRIVATE_BUCKET,
+    raw_s3_key: str | None = None,
 ) -> None:
     """Write a VALID SPECTRA DataProduct item to DDB."""
+    if raw_s3_key is None:
+        raw_s3_key = f"raw/{nova_id}/{provider}/{dp_id}.fits"
     table.put_item(
         Item={
             "PK": nova_id,
@@ -155,15 +159,28 @@ def _seed_data_product(
             "instrument": instrument,
             "observation_date_mjd": epoch_mjd,
             "bibcode": bibcode,
+            "raw_s3_bucket": raw_s3_bucket,
+            "raw_s3_key": raw_s3_key,
         }
     )
 
 
-def _upload_fits(s3: Any, nova_id: str, dp_id: str, body: bytes = _FAKE_FITS) -> None:
+def _upload_fits(
+    s3: Any,
+    nova_id: str,
+    dp_id: str,
+    body: bytes = _FAKE_FITS,
+    *,
+    bucket: str = _PRIVATE_BUCKET,
+    provider: str = "CfA",
+    s3_key: str | None = None,
+) -> None:
     """Upload a fake FITS file to the expected raw spectra S3 path."""
+    if s3_key is None:
+        s3_key = f"raw/{nova_id}/{provider}/{dp_id}.fits"
     s3.put_object(
-        Bucket=_PRIVATE_BUCKET,
-        Key=f"raw/spectra/{nova_id}/{dp_id}/primary.fits",
+        Bucket=bucket,
+        Key=s3_key,
         Body=body,
     )
 
@@ -423,9 +440,11 @@ class TestGenerateBundleZip:
                 "data_product_id": _DP_B_ID,
                 "validation_status": "INVALID",
                 "provider": "BadData",
+                "raw_s3_bucket": _PRIVATE_BUCKET,
+                "raw_s3_key": f"raw/{_NOVA_ID}/BadData/{_DP_B_ID}.fits",
             }
         )
-        _upload_fits(s3, _NOVA_ID, _DP_B_ID)
+        _upload_fits(s3, _NOVA_ID, _DP_B_ID, provider="BadData")
 
         ctx = _base_nova_context()
         result = generate_bundle_zip(
@@ -466,6 +485,93 @@ class TestGenerateBundleZip:
             # Bundle counts: 1 spectrum included, 1 photometry row
             assert meta["spectra_count"] == 1
             assert meta["photometry_count"] == 1
+
+    def test_missing_s3_fields_skips_spectrum(self, aws: tuple[Any, Any]) -> None:
+        """DataProduct without raw_s3_bucket/raw_s3_key is skipped gracefully."""
+        table, s3 = aws
+        # Seed a DataProduct missing S3 location fields
+        table.put_item(
+            Item={
+                "PK": _NOVA_ID,
+                "SK": f"PRODUCT#SPECTRA#{_DP_A_ID}",
+                "entity_type": "DataProduct",
+                "data_product_id": _DP_A_ID,
+                "validation_status": "VALID",
+                "provider": "CfA",
+                "telescope": "FLWO15m",
+                "instrument": "FAST",
+            }
+        )
+        ctx = _base_nova_context()
+
+        result = generate_bundle_zip(
+            nova_id=_NOVA_ID,
+            table=table,
+            s3_client=s3,
+            private_bucket=_PRIVATE_BUCKET,
+            public_bucket=_PUBLIC_BUCKET,
+            nova_context=ctx,
+        )
+
+        assert result["spectra_included"] == 0
+        assert result["spectra_skipped"] == 1
+
+    def test_mixed_buckets_both_included(self, aws: tuple[Any, Any]) -> None:
+        """DataProducts from different buckets (private + public) both end up in the bundle."""
+        table, s3 = aws
+        # DP A in private bucket (ESO-style)
+        _seed_data_product(
+            table,
+            _NOVA_ID,
+            _DP_A_ID,
+            raw_s3_bucket=_PRIVATE_BUCKET,
+            raw_s3_key=f"raw/{_NOVA_ID}/ESO/{_DP_A_ID}.fits",
+            provider="ESO",
+            epoch_mjd=Decimal("46134.4471"),
+        )
+        _upload_fits(
+            s3,
+            _NOVA_ID,
+            _DP_A_ID,
+            bucket=_PRIVATE_BUCKET,
+            s3_key=f"raw/{_NOVA_ID}/ESO/{_DP_A_ID}.fits",
+        )
+        # DP B in public bucket (ticket-ingested)
+        _seed_data_product(
+            table,
+            _NOVA_ID,
+            _DP_B_ID,
+            raw_s3_bucket=_PUBLIC_BUCKET,
+            raw_s3_key=f"raw/{_NOVA_ID}/ticket_ingestion/{_DP_B_ID}.fits",
+            provider="ticket_ingestion",
+            epoch_mjd=Decimal("46135.6832"),
+        )
+        _upload_fits(
+            s3,
+            _NOVA_ID,
+            _DP_B_ID,
+            bucket=_PUBLIC_BUCKET,
+            s3_key=f"raw/{_NOVA_ID}/ticket_ingestion/{_DP_B_ID}.fits",
+        )
+
+        ctx = _base_nova_context()
+        result = generate_bundle_zip(
+            nova_id=_NOVA_ID,
+            table=table,
+            s3_client=s3,
+            private_bucket=_PRIVATE_BUCKET,
+            public_bucket=_PUBLIC_BUCKET,
+            nova_context=ctx,
+        )
+
+        assert result["spectra_included"] == 2
+        assert result["spectra_skipped"] == 0
+
+        # Verify both spectra are in the ZIP
+        obj = s3.get_object(Bucket=_PUBLIC_BUCKET, Key=result["s3_key"])
+        with zipfile.ZipFile(io.BytesIO(obj["Body"].read())) as zf:
+            spectra_files = [n for n in zf.namelist() if n.startswith("spectra/")]
+            assert len(spectra_files) == 2
 
     def test_tmp_file_cleaned_up(self, aws: tuple[Any, Any]) -> None:
         """Temp ZIP file should not persist after generation."""
