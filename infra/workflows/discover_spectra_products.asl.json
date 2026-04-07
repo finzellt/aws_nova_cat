@@ -176,7 +176,7 @@
                             "provider.$": "$.provider",
                             "nova_id.$": "$.nova_id",
                             "correlation_id.$": "$.correlation_id",
-                            "job_run_id.$": "$$.Execution.Input.job_run.job_run_id"
+                            "job_run_id.$": "$.job_run.job_run_id"
                         },
                         "ResultPath": null,
                         "TimeoutSeconds": 60,
@@ -198,7 +198,7 @@
                     },
                     "SuppressDownstreamCheck": {
                         "Type": "Choice",
-                        "Comment": "Skip downstream launch if suppress_downstream=true (smoke tests / dry-runs) or if DiscoverAndPersistProducts found zero new products to acquire.",
+                        "Comment": "Skip downstream launch only if suppress_downstream=true (smoke tests / dry-runs). Otherwise always proceed — the launcher queries DDB for eligible products and handles the empty case gracefully.",
                         "Choices": [
                             {
                                 "And": [
@@ -212,14 +212,9 @@
                                     }
                                 ],
                                 "Next": "DownstreamSuppressed"
-                            },
-                            {
-                                "Variable": "$.discover_result.total_new",
-                                "NumericGreaterThan": 0,
-                                "Next": "PublishAcquireAndValidateSpectraRequests"
                             }
                         ],
-                        "Default": "DownstreamSuppressed"
+                        "Default": "PublishAcquireAndValidateSpectraRequests"
                     },
                     "DownstreamSuppressed": {
                         "Type": "Pass",

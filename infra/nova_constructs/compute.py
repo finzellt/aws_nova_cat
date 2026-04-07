@@ -475,7 +475,7 @@ class NovaCatCompute(Construct):
                 handler="handler.handle",
                 code=lambda_.Code.from_asset(
                     service_path,
-                    asset_hash_type=cdk.AssetHashType.OUTPUT,
+                    asset_hash_type=cdk.AssetHashType.SOURCE,
                     bundling=cdk.BundlingOptions(
                         image=_PYTHON_RUNTIME.bundling_image,
                         command=["bash", "-c", docker_cmd],
