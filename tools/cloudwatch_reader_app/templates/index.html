@@ -126,6 +126,11 @@
 
   input[type="number"] { width: 70px; }
   input[type="text"]   { width: 220px; }
+  input[type="datetime-local"] {
+    width: 195px;
+    font-size: 12px;
+    color-scheme: dark;
+  }
 
   button {
     background: var(--accent-dim);
@@ -152,6 +157,27 @@
     border-color: var(--text-muted);
     color: var(--text);
     background: transparent;
+  }
+
+  button.quick-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 4px 8px;
+    font-size: 12px;
+    min-width: 36px;
+  }
+
+  button.quick-btn:hover {
+    border-color: var(--text-muted);
+    color: var(--text);
+    background: transparent;
+  }
+
+  button.quick-btn.active {
+    border-color: var(--accent-dim);
+    color: var(--accent);
+    background: rgba(37,99,235,0.1);
   }
 
   .spacer { flex: 1; }
@@ -524,12 +550,43 @@
 <!-- ── Controls (hidden in trace view) ─────────────────────── -->
 
 <div class="controls" id="controls-bar">
+  <!-- Row 1: Time range + limit -->
   <div class="control-group">
-    <label for="minutes">Last</label>
-    <input type="number" id="minutes" value="30" min="1" max="1440">
-    <label>min</label>
+    <label for="time-from">From</label>
+    <input type="datetime-local" id="time-from" step="1">
   </div>
 
+  <div class="control-group">
+    <label for="time-to">To</label>
+    <input type="datetime-local" id="time-to" step="1">
+  </div>
+
+  <div class="control-group">
+    <label>Quick</label>
+    <button class="quick-btn" onclick="quickSet(15)">15m</button>
+    <button class="quick-btn active" onclick="quickSet(30)">30m</button>
+    <button class="quick-btn" onclick="quickSet(60)">1h</button>
+    <button class="quick-btn" onclick="quickSet(240)">4h</button>
+  </div>
+
+  <div class="control-group">
+    <label for="limit-select">Limit</label>
+    <select id="limit-select">
+      <option value="500">500</option>
+      <option value="1000">1000</option>
+      <option value="2000" selected>2000</option>
+      <option value="5000">5000</option>
+    </select>
+  </div>
+
+  <button class="secondary" onclick="shiftWindow(-1)" title="Shift window to older logs">&#9664; Older</button>
+  <button class="secondary" onclick="shiftWindow(1)" title="Shift window to newer logs">Newer &#9654;</button>
+
+  <button id="fetch-btn" onclick="fetchLogs()">Fetch Logs</button>
+
+  <div class="spacer"></div>
+
+  <!-- Row 1 right: filters -->
   <div class="control-group">
     <label for="level-filter">Level</label>
     <select id="level-filter">
@@ -560,8 +617,6 @@
     <label for="search-input">Search</label>
     <input type="text" id="search-input" placeholder="Filter by text...">
   </div>
-
-  <button id="fetch-btn" onclick="fetchLogs()">Fetch Logs</button>
 
   <div class="spacer"></div>
 
@@ -680,6 +735,7 @@ const DETAIL_FIELDS = [
 document.addEventListener('DOMContentLoaded', () => {
   buildTableHead();
   bindControls();
+  initTimeRange();
   fetchLogs();
 });
 
@@ -719,10 +775,21 @@ async function fetchLogs() {
   btn.textContent = 'Fetching...';
   statusEl.innerHTML = '<span class="loading">Querying CloudWatch Logs Insights\u2026</span>';
 
-  const minutes = document.getElementById('minutes').value || '30';
+  const fromEl = document.getElementById('time-from');
+  const toEl = document.getElementById('time-to');
+  const limit = document.getElementById('limit-select').value;
+
+  const startEpoch = Math.floor(new Date(fromEl.value).getTime() / 1000);
+  const endEpoch = Math.floor(new Date(toEl.value).getTime() / 1000);
+
+  const params = new URLSearchParams({
+    start_epoch: startEpoch,
+    end_epoch: endEpoch,
+    limit: limit,
+  });
 
   try {
-    const resp = await fetch(`/api/logs?minutes=${encodeURIComponent(minutes)}`);
+    const resp = await fetch(`/api/logs?${params}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
@@ -733,8 +800,12 @@ async function fetchLogs() {
     closeDetail();
 
     const groupCount = (data.log_groups || []).length;
+    const durationMin = Math.round((endEpoch - startEpoch) / 60);
+    const fromStr = fromEl.value.replace('T', ' ');
+    const toStr = toEl.value.replace('T', ' ');
     statusEl.textContent =
-      `Loaded ${allRows.length} rows from ${groupCount} log groups (last ${data.minutes} min)`;
+      `Loaded ${allRows.length} rows from ${groupCount} groups `
+      + `(${fromStr} \u2192 ${toStr}, ${durationMin} min window, limit ${limit})`;
   } catch (err) {
     statusEl.innerHTML = `<span class="error-msg">Error: ${esc(err.message)}</span>`;
     allRows = [];
@@ -743,6 +814,74 @@ async function fetchLogs() {
     btn.disabled = false;
     btn.textContent = 'Fetch Logs';
   }
+}
+
+
+// ── Time range controls ─────────────────────────────────────
+
+function toLocalISOString(date) {
+  // Format a Date as YYYY-MM-DDTHH:MM:SS in local time (for datetime-local inputs).
+  const pad = (n, d=2) => String(n).padStart(d, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`
+    + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function quickSet(minutes) {
+  const now = new Date();
+  const from = new Date(now.getTime() - minutes * 60 * 1000);
+  document.getElementById('time-from').value = toLocalISOString(from);
+  document.getElementById('time-to').value = toLocalISOString(now);
+
+  // Highlight active quick button
+  for (const btn of document.querySelectorAll('.quick-btn')) {
+    btn.classList.toggle('active', parseInt(btn.textContent) === minutes
+      || btn.textContent === `${minutes}m`
+      || (btn.textContent === '1h' && minutes === 60)
+      || (btn.textContent === '4h' && minutes === 240));
+  }
+
+  fetchLogs();
+}
+
+function shiftWindow(direction) {
+  // direction: -1 = older, +1 = newer
+  const fromEl = document.getElementById('time-from');
+  const toEl = document.getElementById('time-to');
+
+  const fromTime = new Date(fromEl.value).getTime();
+  const toTime = new Date(toEl.value).getTime();
+  const windowMs = toTime - fromTime;
+
+  if (isNaN(windowMs) || windowMs <= 0) return;
+
+  const shiftMs = windowMs * direction;
+  const newFrom = new Date(fromTime + shiftMs);
+  const newTo = new Date(toTime + shiftMs);
+
+  // Don't shift into the future
+  const now = new Date();
+  if (newTo > now) {
+    fromEl.value = toLocalISOString(new Date(now.getTime() - windowMs));
+    toEl.value = toLocalISOString(now);
+  } else {
+    fromEl.value = toLocalISOString(newFrom);
+    toEl.value = toLocalISOString(newTo);
+  }
+
+  // Clear quick button highlight since we're in a custom range now
+  for (const btn of document.querySelectorAll('.quick-btn')) {
+    btn.classList.remove('active');
+  }
+
+  fetchLogs();
+}
+
+function initTimeRange() {
+  // Default to last 30 minutes
+  const now = new Date();
+  const from = new Date(now.getTime() - 30 * 60 * 1000);
+  document.getElementById('time-from').value = toLocalISOString(from);
+  document.getElementById('time-to').value = toLocalISOString(now);
 }
 
 
@@ -1101,7 +1240,10 @@ function bindControls() {
     document.getElementById(id).addEventListener('change', applyFiltersAndRender);
   }
   document.getElementById('search-input').addEventListener('input', applyFiltersAndRender);
-  document.getElementById('minutes').addEventListener('keydown', (e) => {
+  document.getElementById('time-from').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') fetchLogs();
+  });
+  document.getElementById('time-to').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') fetchLogs();
   });
   document.getElementById('auto-refresh').addEventListener('change', (e) => {
