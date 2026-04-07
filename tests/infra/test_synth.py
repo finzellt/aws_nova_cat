@@ -256,7 +256,7 @@ _ZIP_FUNCTIONS: dict[str, dict[str, int]] = {
     "nova-cat-nova-resolver": {"memory": 256, "timeout": 30},
     "nova-cat-job-run-manager": {"memory": 256, "timeout": 30},
     "nova-cat-idempotency-guard": {"memory": 256, "timeout": 30},
-    "nova-cat-workflow-launcher": {"memory": 256, "timeout": 30},
+    "nova-cat-workflow-launcher": {"memory": 256, "timeout": 300},
     "nova-cat-reference-manager": {"memory": 256, "timeout": 90},
     "nova-cat-spectra-acquirer": {"memory": 512, "timeout": 900},
     "nova-cat-photometry-ingestor": {"memory": 512, "timeout": 300},
@@ -270,7 +270,7 @@ _ZIP_FUNCTIONS: dict[str, dict[str, int]] = {
 # astropy/astroquery have compiled C extensions that exceed the zip size limit.
 _DOCKER_FUNCTIONS: dict[str, dict[str, int]] = {
     "nova-cat-archive-resolver": {"memory": 256, "timeout": 90},
-    "nova-cat-spectra-discoverer": {"memory": 256, "timeout": 60},
+    "nova-cat-spectra-discoverer": {"memory": 256, "timeout": 120},
     "nova-cat-spectra-validator": {"memory": 512, "timeout": 300},
     "nova-cat-ticket-ingestor": {"memory": 512, "timeout": 600},
 }
@@ -474,6 +474,70 @@ class TestStepFunctions:
                 "StateMachineType": "EXPRESS",
             },
         )
+
+    def test_logging_log_group_arns_have_wildcard_suffix(
+        self, template: assertions.Template
+    ) -> None:
+        """Step Functions LoggingConfiguration requires log group ARNs ending in ':*'."""
+        state_machines = template.find_resources("AWS::StepFunctions::StateMachine")
+        for logical_id, sm in state_machines.items():
+            logging_config = sm.get("Properties", {}).get("LoggingConfiguration")
+            if logging_config is None:
+                continue
+            for dest in logging_config.get("Destinations", []):
+                cw = dest.get("CloudWatchLogsLogGroup", {})
+                arn = cw.get("LogGroupArn")
+                if arn is None:
+                    continue
+                # CDK tokens produce Fn::Join ARNs — the last element must be ":*"
+                if isinstance(arn, dict) and "Fn::Join" in arn:
+                    parts = arn["Fn::Join"][1]
+                    last = parts[-1] if parts else ""
+                    assert isinstance(last, str) and last.endswith(":*"), (
+                        f"{logical_id}: LogGroupArn Fn::Join must end with ':*', "
+                        f"got last segment {last!r}"
+                    )
+                elif isinstance(arn, str):
+                    assert arn.endswith(":*"), (
+                        f"{logical_id}: LogGroupArn must end with ':*', got {arn!r}"
+                    )
+
+    def test_logging_log_group_arns_no_double_wildcard(self, template: assertions.Template) -> None:
+        """Log group ARNs must not have a doubled ':*:*' suffix (CDK already appends ':*')."""
+        state_machines = template.find_resources("AWS::StepFunctions::StateMachine")
+        for logical_id, sm in state_machines.items():
+            logging_config = sm.get("Properties", {}).get("LoggingConfiguration")
+            if logging_config is None:
+                continue
+            for dest in logging_config.get("Destinations", []):
+                cw = dest.get("CloudWatchLogsLogGroup", {})
+                arn = cw.get("LogGroupArn")
+                if arn is None:
+                    continue
+                if isinstance(arn, dict) and "Fn::Join" in arn:
+                    joined = "".join(str(p) for p in arn["Fn::Join"][1] if isinstance(p, str))
+                    assert ":*:*" not in joined, (
+                        f"{logical_id}: LogGroupArn has doubled ':*:*' suffix"
+                    )
+                elif isinstance(arn, str):
+                    assert ":*:*" not in arn, f"{logical_id}: LogGroupArn has doubled ':*:*' suffix"
+
+    def test_state_machines_depend_on_execution_role(self, template: assertions.Template) -> None:
+        """State machines created by _create_state_machine must DependsOn their IAM role."""
+        state_machines = template.find_resources("AWS::StepFunctions::StateMachine")
+        roles = template.find_resources("AWS::IAM::Role")
+        for logical_id, sm in state_machines.items():
+            sm_name = sm.get("Properties", {}).get("StateMachineName", "")
+            if sm_name not in _EXPECTED_STATE_MACHINES:
+                continue
+            depends_on = sm.get("DependsOn", [])
+            if isinstance(depends_on, str):
+                depends_on = [depends_on]
+            role_deps = [d for d in depends_on if d in roles]
+            assert len(role_deps) >= 1, (
+                f"{logical_id} ({sm_name}): must DependsOn its IAM execution role "
+                f"to avoid race conditions on fresh stack creates"
+            )
 
     def test_workflow_launcher_can_start_executions(self, template: assertions.Template) -> None:
         """workflow_launcher must have states:StartExecution on nova-cat-* state machines."""
