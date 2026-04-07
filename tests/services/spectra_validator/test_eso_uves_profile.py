@@ -542,3 +542,46 @@ class TestValidateSpectrumEntryPoint:
         assert result.success is True
         assert result.spectrum is not None
         assert result.spectrum.data_product_id == dpid
+
+
+# ---------------------------------------------------------------------------
+# TestEsoUvesProfileSnrExtraction
+# ---------------------------------------------------------------------------
+
+
+class TestEsoUvesProfileSnrExtraction:
+    def test_snr_extracted_when_present(self, profile: EsoUvesProfile) -> None:
+        """SNR column in BinTable → NormalizedSpectrum.snr is the median."""
+        wave = _make_wave()
+        flux = _make_flux()
+        n = len(wave)
+        snr_data = np.linspace(10.0, 50.0, n)
+        expected_median = float(np.median(snr_data))
+
+        cols = [
+            fits.Column(name="WAVE", format=f"{n}D", unit="angstrom", array=wave.reshape(1, n)),
+            fits.Column(
+                name="FLUX",
+                format=f"{n}D",
+                unit="10**(-16)erg.cm**(-2).s**(-1).angstrom**(-1)",
+                array=flux.reshape(1, n),
+            ),
+            fits.Column(name="ERR", format=f"{n}D", unit="", array=(flux * 0.05).reshape(1, n)),
+            fits.Column(name="SNR", format=f"{n}D", unit="", array=snr_data.reshape(1, n)),
+        ]
+        hdu = fits.BinTableHDU.from_columns(cols)
+        hdu.name = "SPECTRUM"
+        hdulist = _make_hdulist(spectrum_hdu=hdu)
+        result = profile.validate(hdulist, _product_metadata())
+        assert result.success is True
+        assert result.spectrum is not None
+        assert result.spectrum.snr is not None
+        assert abs(result.spectrum.snr - expected_median) < 0.01
+
+    def test_snr_none_when_absent(self, profile: EsoUvesProfile) -> None:
+        """No SNR column → NormalizedSpectrum.snr is None."""
+        hdulist = _make_hdulist()
+        result = profile.validate(hdulist, _product_metadata())
+        assert result.success is True
+        assert result.spectrum is not None
+        assert result.spectrum.snr is None

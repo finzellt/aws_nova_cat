@@ -99,10 +99,12 @@ def _load_module() -> types.ModuleType:
     boto3 clients are re-initialised inside the active ``mock_aws()``
     context.
     """
-    to_clear = [key for key in sys.modules if key.startswith(("artifact_generator", "generators"))]
+    to_clear = [
+        key for key in sys.modules if key.startswith(("main", "generators", "release_publisher"))
+    ]
     for mod_name in to_clear:
         del sys.modules[mod_name]
-    return importlib.import_module("artifact_generator.main")
+    return importlib.import_module("main")
 
 
 # ---------------------------------------------------------------------------

@@ -481,7 +481,7 @@ class TestPublishAcquireAndValidateSpectraRequests:
 
 class TestBatchedFanOut:
     def test_25_products_batched_with_correct_sleep_calls(self, state_machines: Any) -> None:
-        """25 products → 3 batches (10, 10, 5). sleep called between 1→2 and 2→3, not after 3."""
+        """25 products → 5 batches (5×5). sleep called between batches, not after the last."""
         products = [_product(f"aaaaaaaa-0000-0000-0000-{i:012d}") for i in range(25)]
         with mock_aws():
             _create_ddb_table()
@@ -501,14 +501,14 @@ class TestBatchedFanOut:
                 result = handler.handle(_publish_event(), None)
 
             assert mock_sfn.start_execution.call_count == 25
-            assert mock_sleep.call_count == 2
+            assert mock_sleep.call_count == 4
             for call in mock_sleep.call_args_list:
-                assert call.args[0] == 2.0
+                assert call.args[0] == 8.0
         assert result["total"] == 25
         assert len(result["launched"]) == 25
 
     def test_small_batch_no_sleep(self, state_machines: Any) -> None:
-        """5 products (under batch size) → 1 batch, no sleep."""
+        """5 products (exactly one batch) → 1 batch, no sleep."""
         products = [_product(f"aaaaaaaa-0000-0000-0000-{i:012d}") for i in range(5)]
         with mock_aws():
             _create_ddb_table()
@@ -566,6 +566,20 @@ class TestBatchedFanOut:
 # ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
+
+
+class TestFanoutConstants:
+    def test_fanout_batch_size(self, state_machines: Any) -> None:
+        """Guard against accidental changes to batch size tuning."""
+        with mock_aws():
+            handler = _load_handler()
+            assert handler._FANOUT_BATCH_SIZE == 5
+
+    def test_fanout_batch_delay(self, state_machines: Any) -> None:
+        """Guard against accidental changes to batch delay tuning."""
+        with mock_aws():
+            handler = _load_handler()
+            assert handler._FANOUT_BATCH_DELAY_S == 8.0
 
 
 class TestDispatch:

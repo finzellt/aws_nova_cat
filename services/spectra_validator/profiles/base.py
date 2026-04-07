@@ -51,6 +51,7 @@ class NormalizedSpectrum:
     telescope: str | None = None  # from TELESCOP
     exposure_time_s: float | None = None  # from EXPTIME
     spectral_resolution: float | None = None  # R = λ/Δλ; from SPECRP if available
+    snr: float | None = None  # median signal-to-noise per pixel; from SNR column if available
 
     # ---- Provenance ----
     raw_header: dict[str, Any] = field(default_factory=dict)

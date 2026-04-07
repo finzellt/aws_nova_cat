@@ -8,10 +8,11 @@ with ${FunctionArn} tokens substituted at synth time using CDK's
 CfnStateMachine and definition_substitutions.
 
 Design decisions:
-  - Standard Workflows (not Express): Nova Cat operates at low throughput
-    with operator-triggered executions. Standard Workflows provide exact-once
-    semantics, unlimited duration, and full execution history — appropriate
-    for a scientific data pipeline where auditability matters.
+  - Express Workflows by default, Standard where needed: most workflows use
+    Express (low-latency, cost-effective for short-lived executions). Two
+    exceptions use Standard: discover_spectra_products (fan-out pacing can
+    exceed the 5-minute Express ceiling) and regenerate_artifacts (ECS .sync
+    integration can wait for hours).
   - ASL files are kept as plain JSON rather than CDK's higher-level
     StepFunctions constructs (Chain, Task, etc.) — the ASL is the spec
     artifact and keeping it as readable JSON makes it easier to validate
@@ -128,6 +129,7 @@ class NovaCatWorkflows(Construct):
                 compute.workflow_launcher,
             ],
             removal_policy=self._removal_policy,
+            workflow_type="STANDARD",
         )
 
         # ------------------------------------------------------------------
@@ -639,9 +641,10 @@ class NovaCatWorkflows(Construct):
         substitutions: dict[str, str],
         invokable_functions: list[lambda_.Function],
         removal_policy: cdk.RemovalPolicy = cdk.RemovalPolicy.DESTROY,
+        workflow_type: str = "EXPRESS",
     ) -> sfn.CfnStateMachine:
         """
-        Create a Standard Workflow state machine from an ASL file.
+        Create a Step Functions state machine from an ASL file.
 
         Loads the ASL JSON, substitutes ${Token} placeholders with Lambda ARNs
         via CloudFormation Fn::Sub, and provisions the state machine with a
@@ -653,6 +656,7 @@ class NovaCatWorkflows(Construct):
             substitutions:       Mapping of token name → Lambda ARN (CDK token)
             invokable_functions: Lambda functions this state machine may invoke
             removal_policy:      CDK removal policy for the log group
+            workflow_type:       "EXPRESS" (default) or "STANDARD"
         """
         asl_path = os.path.join(self._workflows_dir, asl_file)
         with open(asl_path) as f:
@@ -688,7 +692,7 @@ class NovaCatWorkflows(Construct):
             )
         )
 
-        # CloudWatch log group for Express Workflow execution logging
+        # CloudWatch log group for Step Functions execution logging
         log_group = logs.LogGroup(
             self,
             f"{_to_pascal(name)}LogGroup",
@@ -705,7 +709,7 @@ class NovaCatWorkflows(Construct):
             self,
             _to_pascal(name),
             state_machine_name=f"{self._env_prefix}-{name}",
-            state_machine_type="EXPRESS",
+            state_machine_type=workflow_type,
             role_arn=role.role_arn,
             definition_substitutions=substitutions if substitutions else None,
             definition_string=cdk.Fn.sub(

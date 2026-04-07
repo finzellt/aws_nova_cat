@@ -455,6 +455,26 @@ class TestStepFunctions:
             "Expected at least one IAM policy granting lambda:InvokeFunction"
         )
 
+    def test_discover_spectra_products_is_standard(self, template: assertions.Template) -> None:
+        """discover_spectra_products uses Standard (unlimited duration for fan-out pacing)."""
+        template.has_resource_properties(
+            "AWS::StepFunctions::StateMachine",
+            {
+                "StateMachineName": "nova-cat-discover-spectra-products",
+                "StateMachineType": "STANDARD",
+            },
+        )
+
+    def test_acquire_and_validate_spectra_is_express(self, template: assertions.Template) -> None:
+        """acquire_and_validate_spectra must remain Express (per-spectrum, high volume)."""
+        template.has_resource_properties(
+            "AWS::StepFunctions::StateMachine",
+            {
+                "StateMachineName": "nova-cat-acquire-and-validate-spectra",
+                "StateMachineType": "EXPRESS",
+            },
+        )
+
     def test_workflow_launcher_can_start_executions(self, template: assertions.Template) -> None:
         """workflow_launcher must have states:StartExecution on nova-cat-* state machines."""
         policies = template.find_resources("AWS::IAM::Policy")

@@ -162,6 +162,19 @@ class EsoXShooterProfile:
 
         spectral_units = "nm"
 
+        # Extract SNR (best-effort — not all products have this column)
+        _snr_value: float | None = None
+        col_names_upper = {c.name.upper() for c in spectrum_hdu.columns}
+        if "SNR" in col_names_upper:
+            try:
+                snr_col = spectrum_hdu.data["SNR"]
+                snr_arr = np.asarray(snr_col, dtype=float).ravel()
+                finite_snr = snr_arr[np.isfinite(snr_arr)]
+                if len(finite_snr) > 0:
+                    _snr_value = float(np.median(finite_snr))
+            except Exception:
+                pass  # SNR extraction is best-effort
+
         # ----------------------------------------------------------------
         # 3. Extract required header metadata
         # ----------------------------------------------------------------
@@ -231,6 +244,7 @@ class EsoXShooterProfile:
             telescope=m["telescope"],
             exposure_time_s=m["exposure_time_s"],
             spectral_resolution=m["spectral_resolution"],
+            snr=_snr_value,
             raw_header=primary_header,
             normalization_notes=notes,
         )

@@ -169,7 +169,7 @@
                     },
                     "PublishAcquireAndValidateSpectraRequests": {
                         "Type": "Task",
-                        "Comment": "Start one acquire_and_validate_spectra SFN execution per eligible data_product_id. Reads eligible products from DDB (eligibility=ACQUIRE) rather than the state payload. sfn:StartExecution is non-blocking \u2014 all N executions run in parallel as independent Standard Workflow state machines. ExecutionAlreadyExists is treated as idempotent success.",
+                        "Comment": "Start one acquire_and_validate_spectra SFN execution per eligible data_product_id. Reads eligible products from DDB (eligibility=ACQUIRE) rather than the state payload. sfn:StartExecution is non-blocking \u2014 all N executions run in parallel as independent Express Workflow state machines. ExecutionAlreadyExists is treated as idempotent success.",
                         "Resource": "${WorkflowLauncherFunctionArn}",
                         "Parameters": {
                             "task_name": "PublishAcquireAndValidateSpectraRequests",
@@ -179,7 +179,7 @@
                             "job_run_id.$": "$.job_run.job_run_id"
                         },
                         "ResultPath": null,
-                        "TimeoutSeconds": 60,
+                        "TimeoutSeconds": 600,
                         "Retry": [
                             {
                                 "ErrorEquals": [
