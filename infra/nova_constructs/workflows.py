@@ -38,6 +38,7 @@ import aws_cdk.aws_events as events
 import aws_cdk.aws_events_targets as events_targets
 import aws_cdk.aws_iam as iam
 import aws_cdk.aws_lambda as lambda_
+import aws_cdk.aws_logs as logs
 import aws_cdk.aws_s3 as s3
 import aws_cdk.aws_sns as sns
 import aws_cdk.aws_stepfunctions as sfn
@@ -77,11 +78,13 @@ class NovaCatWorkflows(Construct):
         sweep_schedule_hours: int = 6,
         env_prefix: str = "nova-cat",
         cf_prefix: str = "NovaCat",
+        removal_policy: cdk.RemovalPolicy = cdk.RemovalPolicy.DESTROY,
     ) -> None:
         super().__init__(scope, construct_id)
 
         self._env_prefix = env_prefix
         self._cf_prefix = cf_prefix
+        self._removal_policy = removal_policy
 
         self._workflows_dir = os.path.join(os.path.dirname(__file__), "../workflows")
 
@@ -103,6 +106,7 @@ class NovaCatWorkflows(Construct):
                 compute.spectra_validator,
                 compute.spectra_acquirer,
             ],
+            removal_policy=self._removal_policy,
         )
 
         # ------------------------------------------------------------------
@@ -123,6 +127,7 @@ class NovaCatWorkflows(Construct):
                 compute.spectra_discoverer,
                 compute.workflow_launcher,
             ],
+            removal_policy=self._removal_policy,
         )
 
         # ------------------------------------------------------------------
@@ -148,6 +153,7 @@ class NovaCatWorkflows(Construct):
                 compute.quarantine_handler,
                 compute.reference_manager,
             ],
+            removal_policy=self._removal_policy,
         )
         # ------------------------------------------------------------------
         # ingest_new_nova state machine
@@ -171,6 +177,7 @@ class NovaCatWorkflows(Construct):
                 compute.idempotency_guard,
                 compute.workflow_launcher,
             ],
+            removal_policy=self._removal_policy,
         )
 
         # Grant workflow_launcher permission to start executions and inject ARNs.
@@ -248,6 +255,7 @@ class NovaCatWorkflows(Construct):
                 compute.workflow_launcher,
                 compute.quarantine_handler,
             ],
+            removal_policy=self._removal_policy,
         )
 
         # ------------------------------------------------------------------
@@ -275,6 +283,7 @@ class NovaCatWorkflows(Construct):
                 compute.ticket_ingestor,
                 compute.quarantine_handler,
             ],
+            removal_policy=self._removal_policy,
         )
 
         # ------------------------------------------------------------------
@@ -629,6 +638,7 @@ class NovaCatWorkflows(Construct):
         asl_file: str,
         substitutions: dict[str, str],
         invokable_functions: list[lambda_.Function],
+        removal_policy: cdk.RemovalPolicy = cdk.RemovalPolicy.DESTROY,
     ) -> sfn.CfnStateMachine:
         """
         Create a Standard Workflow state machine from an ASL file.
@@ -642,6 +652,7 @@ class NovaCatWorkflows(Construct):
             asl_file:            Filename under infra/workflows/
             substitutions:       Mapping of token name → Lambda ARN (CDK token)
             invokable_functions: Lambda functions this state machine may invoke
+            removal_policy:      CDK removal policy for the log group
         """
         asl_path = os.path.join(self._workflows_dir, asl_file)
         with open(asl_path) as f:
@@ -677,6 +688,15 @@ class NovaCatWorkflows(Construct):
             )
         )
 
+        # CloudWatch log group for Express Workflow execution logging
+        log_group = logs.LogGroup(
+            self,
+            f"{_to_pascal(name)}LogGroup",
+            log_group_name=f"/aws/states/{self._env_prefix}-{name}",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=removal_policy,
+        )
+
         # CfnStateMachine (L1) rather than StateMachine (L2) because the L2
         # doesn't cleanly support loading ASL from a file with CloudFormation
         # token substitution. definition_string + definition_substitutions
@@ -694,6 +714,17 @@ class NovaCatWorkflows(Construct):
             )
             if substitutions
             else json.dumps(asl_body, separators=(",", ":")),
+            logging_configuration=sfn.CfnStateMachine.LoggingConfigurationProperty(
+                destinations=[
+                    sfn.CfnStateMachine.LogDestinationProperty(
+                        cloud_watch_logs_log_group=sfn.CfnStateMachine.CloudWatchLogsLogGroupProperty(
+                            log_group_arn=log_group.log_group_arn,
+                        ),
+                    ),
+                ],
+                include_execution_data=True,
+                level="ALL",
+            ),
         )
 
 
