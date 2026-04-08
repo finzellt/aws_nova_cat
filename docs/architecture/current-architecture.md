@@ -1,17 +1,21 @@
 # Nova Cat — Current Architecture Snapshot
 
-_Last Updated: 2026-03-28_
+_Last Updated: 2026-04-08_
 
-This document captures the **authoritative architectural baseline** of Nova Cat at this point in time.
+This document captures the **authoritative architectural baseline** of Nova Cat at this
+point in time.
 
 It defines:
 - System boundaries
 - Core domain model
-- Workflow architecture
+- Workflow architecture (ingestion + artifact regeneration)
 - Persistence model
 - Identity rules
 - Validation strategy
+- Artifact generation and publication pipeline
+- Frontend architecture and delivery layer
 - Observability model
+- Deployment model
 
 This document supersedes informal descriptions elsewhere.
 If drift is detected between artifacts, this file represents intended reality.
@@ -20,27 +24,38 @@ If drift is detected between artifacts, this file represents intended reality.
 
 # 1. System Overview
 
-Nova Cat is a serverless AWS application for aggregating, validating, and publishing classical nova data.
+Nova Cat is a serverless AWS application for aggregating, validating, publishing, and
+delivering classical nova data to a public website.
 
 Core characteristics:
 
-- Python-based
-- AWS serverless (Lambda, Step Functions, DynamoDB, S3)
+- Python-based backend, TypeScript/React frontend
+- AWS serverless (Lambda, Step Functions, DynamoDB, S3, Fargate, CloudFront,
+  EventBridge)
 - UUID-first identity
 - Contract-first design (Pydantic → JSON Schema)
 - Atomic spectra data products
 - Profile-driven validation
 - IVOA-aligned canonical representation
+- Immutable release publication model
 - Low throughput, cost-aware architecture
 
-The system is designed for **singular nova ingestion** in MVP.
+The system spans four subsystems:
+
+1. **Ingestion pipelines** — discover, acquire, validate, and persist spectra and
+   photometry from public archives and hand-curated tickets.
+2. **Artifact regeneration pipeline** — transform internal DynamoDB/S3 state into
+   published JSON/SVG/ZIP artifacts for frontend consumption.
+3. **Delivery layer** — serve published artifacts to browsers via S3 + CloudFront.
+4. **Frontend** — React/Next.js website consuming static artifacts with no runtime
+   backend communication.
 
 Two ingestion paths coexist:
 
 - **Archive-driven pipeline** (operational): Discovers and acquires spectra from public
   astronomical archives (ESO, CfA, AAVSO), validates FITS files against instrument
   profiles, and persists normalized products.
-- **Ticket-driven pipeline** (MVP primary, partially implemented): Ingests photometry
+- **Ticket-driven pipeline** (MVP primary, operational): Ingests photometry
   and spectra from hand-curated metadata tickets that completely describe each data
   file's structure. Bypasses runtime heuristics and the disambiguation algorithm.
   Designed in DESIGN-004; governed by `ingest_ticket` workflow.
@@ -59,8 +74,6 @@ All persistent entities use UUIDs:
 
 Names are never used as identifiers downstream of `initialize_nova`.
 
----
-
 ## 2.2 Name Resolution
 
 Name-based resolution occurs only in `initialize_nova`.
@@ -74,291 +87,73 @@ Duplicate detection via coordinate thresholds:
 
 | Separation | Action |
 |------------|--------|
-| < 2"       | Attach alias to existing nova |
-| 2–10"      | Identity quarantine |
-| > 10"      | Create new nova |
+| < 2″       | Attach alias to existing nova |
+| 2–10″      | Identity quarantine |
+| > 10″      | Create new nova |
 
-Identity quarantine persists as:
-
-`Nova.status = QUARANTINED`
-
-
----
+Identity quarantine persists as `Nova.status = QUARANTINED`.
 
 ## 2.3 Locator Identity and data_product_id
 
 **`data_product_id` — stable, deterministic UUID (SPECTRA products)**
 
 Minted during `discover_spectra_products`. Derived as follows:
-- **Preferred:** `UUID(hash(provider + provider_product_key))` — when a provider-native product ID is available.
-- **Fallback:** `UUID(hash(provider + normalized_canonical_locator))` — when no native ID exists.
+- **Preferred:** `UUID(hash(provider + provider_product_key))` — when a provider-native
+  product ID is available.
+- **Fallback:** `UUID(hash(provider + normalized_canonical_locator))` — when no native
+  ID exists.
 
 For ticket-ingested spectra, `data_product_id` is derived as
-`UUID(hash(bibcode + spectrum_filename + nova_id))` to ensure idempotency
-without a provider-native key.
+`UUID(hash(bibcode + spectrum_filename + nova_id))` to ensure idempotency without a
+provider-native key.
 
-Immutable once assigned; never reused across distinct products. See ADR-003 for full specification.
+Immutable once assigned; never reused across distinct products. See ADR-003 for full
+specification.
 
 `LOCATOR#<provider>#<locator_identity>` ensures stable deduplication.
 
 ---
 
-# 3. Domain Model (Persistent Entities)
-
-## 3.1 Nova
-
-Fields include:
-
-- nova_id
-- primary_name
-- primary_name_normalized
-- status
-- position (ra_deg, dec_deg, frame, epoch)
-- discovery_date — YYYY-MM-DD string; day `00` when only month precision is available
-  (e.g. `"2013-06-00"`); never use `01` as a proxy for unknown day.
-  See ADR-005 Amendment (Discovery Date Precision).
-
-Derived astronomical metadata (e.g., constellation) is not persisted.
-
----
-
-## 3.2 DataProduct (Spectra)
-
-Atomic unit of ingestion and validation.
-
-Each product has independent:
-
-- acquisition_status
-- validation_status
-- cooldown metadata
-- fingerprint (sha256)
-- header signature hash
-- fits_profile_id
-- quarantine_reason_code (if applicable)
-
-No dataset abstraction exists.
-
----
-
-## 3.3 PhotometryRow
-
-Individual photometric observation. Stored in the dedicated photometry DynamoDB table
-(§6), not the main NovaCat table. Schema defined in ADR-019 (v2.0).
-
-Each row carries:
-
-- `row_id` — deterministic UUID derived from
-  `SHA-256(nova_id|epoch_raw|band_id|magnitude_raw|filename)[:16 bytes]`
-- `nova_id` — FK to Nova
-- `band_id` — canonical band identifier (ADR-017 two-track convention:
-  `{Facility}_{Instrument}_{BandLabel}` or `Generic_{BandLabel}`)
-- `time_mjd` — epoch in Modified Julian Date (converted from source time system)
-- `magnitude`, `mag_err` — observed value and uncertainty
-- `is_upper_limit` — boolean flag for non-detection limits
-- Band resolution provenance: `band_resolution_type` (canonical / synonym /
-  generic_fallback) and `band_resolution_confidence` (high / low)
-- Per-row metadata: `telescope`, `observer`, `bibcode`, `data_origin`, `data_rights`
-
-Photometry rows are written via conditional `PutItem` keyed on `row_id` to ensure
-idempotency. Duplicate rows (same `row_id`) are silently suppressed.
-
----
-
-## 3.4 BandRegistryEntry
-
-Frozen Pydantic model representing a single entry in the band registry (ADR-017).
-Read-only at runtime; the registry is a versioned JSON data artifact seeded from the
-SVO Filter Profile Service.
-
-Fields include:
-
-- `band_id` — canonical identifier
-- `regime` — wavelength regime (optical, uv, nir, etc.)
-- `svo_filter_id` — SVO FPS identifier (if sourced from SVO)
-- `lambda_eff`, `bandpass_width` — spectral metadata
-- `aliases` — list of known alternative filter strings
-- `is_excluded` — flag for bands that should not be ingested
-
-The registry module exposes a read-only Python API: `lookup_band_id`, `get_entry`,
-`is_excluded`, `list_all_entries`.
-
----
-
-## 3.5 Ticket Models
-
-Typed Pydantic models for the ticket-driven ingestion path (DESIGN-004). Defined in
-`contracts/models/tickets.py`.
-
-Two ticket types exist as a discriminated union:
-
-- **PhotometryTicket** — describes a headerless CSV of photometric observations.
-  Carries column index mappings (0-based) for time, flux, error, filter string, and
-  optional per-row telescope/observer columns, plus ticket-level defaults.
-- **SpectraTicket** — describes a metadata CSV whose rows each reference individual
-  spectrum data files (two-hop indirection: ticket → metadata CSV → spectrum CSVs).
-  Carries column index mappings for the metadata CSV fields.
-
-Both types share common fields via `_TicketCommon` (not exported): `object_name`,
-`wavelength_regime`, `time_system`, `assumed_outburst_date`, `reference`, `bibcode`,
-`ticket_status`. All models use `extra = "forbid"`.
-
----
-
-## 3.6 FileObject
-
-Represents a raw or derived file stored in S3, linked to a DataProduct or Nova.
-
----
-
-## 3.7 Reference and NovaReference
-
-Reference: global entity keyed by ADS `bibcode`.
-
-reference_type values: journal_article, conference_abstract, poster, catalog,
-software, atel, cbat_circular, arxiv_preprint, other.
-
-The nova-to-reference relationship is recorded in NovaReference items
-(many-to-many; no duplication of the Reference item). NovaReference carries:
-- role (DISCOVERY | SPECTRA_SOURCE | PHOTOMETRY_SOURCE | OTHER)
-- added_by_workflow, notes, and link-level provenance
-
-The link is fully identified by (nova_id, bibcode). No UUID on the link item itself.
-
-See dynamodb-item-model.md sections 6 and 7 for full item shapes.
-See ADR-005 for the global entity decision and ADS integration strategy.
-
-
----
-
-## 3.8 Operational Records
-
-### JobRun
-One per workflow execution.
-
-### Attempt
-One per task invocation (including retries).
-
-Operational state is separate from scientific state.
-
----
-
-# 4. Workflow Architecture
-
-All workflows operate on UUIDs only.
-
-## 4.1 initialize_nova
-- Accepts candidate_name
-- Performs name resolution
-- Creates nova if necessary
-- Launches ingest_new_nova
-
-Terminal outcomes:
-- CREATED_AND_LAUNCHED
-- EXISTS_AND_LAUNCHED
-- NOT_FOUND
-- NOT_A_CLASSICAL_NOVA
-
----
-
-## 4.2 ingest_new_nova
-Coordinator:
-- refresh_references
-- discover_spectra_products
-
----
-
-## 4.3 discover_spectra_products
-- Map across providers
-- Adapter-based discovery
-- Assign `data_product_id` (stable UUID derived as `UUID(hash(provider + provider_product_key))`
-  or `UUID(hash(provider + normalized_canonical_locator))`; see ADR-003)
-- Publish AcquireAndValidateSpectra continuation event
-
----
-
-## 4.4 acquire_and_validate_spectra
-- Download bytes
-- Unzip if necessary
-- Compute fingerprint
-- Select FITS profile
-- Normalize to canonical model
-- Classify outcome (RETRYABLE / TERMINAL / QUARANTINE)
-- Persist results
-
-Eligibility index removed immediately after validation.
-
----
-
-## 4.5 refresh_references
-- Upsert references
-- Link nova to references
-- Compute discovery_date
-
----
-
-## 4.6 ingest_photometry
-
-- Accepts API-driven photometry upload
-- Resolves name → `nova_id`
-- Rebuilds and overwrites the canonical photometry table
-- Updates ingestion summary fields
-- If schema version changes (future capability), snapshots prior table before overwrite
-
-No dataset abstraction exists.
-
----
-
-## 4.7 name_check_and_reconcile
-
-- Accepts `nova_id`
-- Performs name normalization and reconciliation checks against the global `NameMapping` index
-- Proposed naming inputs (`proposed_public_name`, `proposed_aliases`) are passed via
-  `attributes` rather than typed fields, consistent with the minimal stable contract pattern
-- Operates entirely within the UUID-first execution model; no name-based downstream
-  operations are performed beyond the resolution boundary
-
----
-
-## 4.8 ingest_ticket
-
-Ticket-driven ingestion of photometry and spectra from hand-curated metadata tickets.
-This is the **primary ingestion path for MVP**. Designed in DESIGN-004; full workflow
-specification in `docs/workflows/ingest-ticket.md`.
-
-### State Machine
-
-```
-ticket.txt → ParseTicket → ResolveNova → TicketTypeBranch
-                                              │
-                                         ┌────┴────┐
-                                         │         │
-                                    photometry   spectra
-                                         │         │
-                                    CSV rows    metadata CSV
-                                         │         │
-                                    band reg    per-spectrum:
-                                    resolve      CSV → FITS
-                                         │         │
-                                    DDB PutItem   S3 upload +
-                                  (PhotometryRow)  DDB ref
-```
-
-States: ValidateInput → EnsureCorrelationId → BeginJobRun → AcquireIdempotencyLock
-→ ParseTicket → ResolveNova → TicketTypeBranch (Choice) → IngestPhotometry /
-IngestSpectra → FinalizeJobRunSuccess. Quarantine and terminal failure branches
-follow the standard shared-handler pattern.
-
-### Lambda Handlers
-
-| Handler | Service Module | Task States | Description |
-|---|---|---|---|
-| `ticket_parser` | `services/ticket_parser/` | ParseTicket | Reads `.txt` ticket file from S3, parses key-value pairs into raw dict, discriminates ticket type (`DATA FILENAME` → photometry, `METADATA FILENAME` → spectra), validates and coerces into `PhotometryTicket` or `SpectraTicket` via Pydantic. Two-stage pipeline: raw key-value parse → type discrimination/coercion/Pydantic construction. Single error surface: `TicketParseError`. |
-| `nova_resolver_ticket` | `services/nova_resolver_ticket/` | ResolveNova | Preflight DDB `NameMapping` lookup for existing `nova_id`. If not found, fires `initialize_nova` via `sfn:StartExecution` and polls `describe_execution` until terminal (max 30 poll attempts). Returns `nova_id`, `primary_name`, `ra_deg`, `dec_deg`. Quarantine outcomes: `UNRESOLVABLE_OBJECT_NAME` (NOT_FOUND), `IDENTITY_AMBIGUITY` (QUARANTINED). |
-| `ticket_ingestor` | `services/ticket_ingestor/` | IngestPhotometry, IngestSpectra | Single Lambda with `task_name` dispatch. **Photometry branch:** reads headerless CSV using ticket-supplied column indices, resolves filter strings against band registry (two-step: alias lookup → Generic fallback), constructs `PhotometryRow` objects, writes to dedicated photometry DDB table via conditional `PutItem`, updates `PRODUCT#PHOTOMETRY_TABLE` envelope item. **Spectra branch:** reads metadata CSV (two-hop indirection), converts each spectrum CSV to FITS with reconstructed headers, uploads to Public S3 bucket, inserts DataProduct + FileObject reference items in main NovaCat table. Container-based Lambda (astropy dependency). |
+# 3. Workflow Architecture — Ingestion
+
+## 3.1 Workflow Inventory
+
+| Workflow | Type | Purpose |
+|----------|------|---------|
+| `initialize_nova` | Express | Resolve a candidate name/coordinates to a stable `nova_id`. Creates or attaches to existing nova. |
+| `ingest_new_nova` | Standard | Orchestrates downstream launches (`refresh_references`, `discover_spectra_products`) for a newly resolved nova. |
+| `refresh_references` | Standard | Fetches ADS references for a nova, upserts Reference and NovaReference items, computes `discovery_date`. |
+| `discover_spectra_products` | Standard | Queries provider archives, assigns `data_product_id` values, persists product stubs, fans out `acquire_and_validate_spectra`. |
+| `acquire_and_validate_spectra` | Standard | Downloads spectra bytes, validates FITS against instrument profiles, persists normalized products to S3 + DDB. |
+| `ingest_ticket` | Standard | Ingests hand-curated photometry or spectra tickets. Resolves nova identity, then branches by ticket type. |
+
+All Standard Workflows follow a consistent execution pattern: `BeginJobRun` →
+`AcquireIdempotencyLock` → domain-specific states → `FinalizeJobRunSuccess` (or
+`TerminalFailHandler` → `FinalizeJobRunFailed`). Quarantine outcomes route through
+`QuarantineHandler` → `FinalizeJobRunQuarantined`.
+
+## 3.2 ingest_ticket Workflow (DESIGN-004)
+
+The ticket-driven ingestion path is the MVP primary ingestion mechanism. A ticket is a
+plain-text `.txt` file that fully describes one data file's structure (column indices,
+filter names, wavelength units, etc.).
+
+States: `ParseTicket` → `ResolveNova` → `TicketTypeBranch` → (`IngestPhotometry` |
+`IngestSpectra`) → `FinalizeJobRunSuccess`.
+
+**Photometry branch:** reads headerless CSV using ticket-supplied column indices,
+resolves filter strings against the band registry (two-step: alias lookup → Generic
+fallback), constructs `PhotometryRow` objects, writes to the dedicated photometry DDB
+table via conditional `PutItem`, updates the `PRODUCT#PHOTOMETRY_TABLE` envelope item.
+
+**Spectra branch:** reads metadata CSV (two-hop indirection), converts each spectrum CSV
+to FITS with reconstructed headers, uploads to the Public S3 bucket, inserts DataProduct
++ FileObject reference items in the main NovaCat table. Container-based Lambda (astropy
+dependency).
 
 ### Relationship to Existing Workflows
 
-- `initialize_nova` — called (fire-and-poll) by ResolveNova for unknown object names;
+- `initialize_nova` — called (sync invocation) by ResolveNova for unknown object names;
   not modified.
 - `ingest_photometry` — not called. `ingest_ticket` writes `PhotometryRow` items
   directly using the same DDB schema (ADR-020) but through a different code path.
@@ -366,19 +161,127 @@ follow the standard shared-handler pattern.
   DDB references directly, bypassing the discovery/acquisition/validation pipeline.
   Output artifacts are compatible.
 
-### Input Event
+## 3.3 WorkItem Emission
 
-- `ticket_path` (required) — S3 key or local path to the `.txt` ticket file
-- `data_dir` (required) — S3 prefix or local directory containing referenced data files
-- `correlation_id` (optional) — generated if missing
+All ingestion workflows write a **WorkItem** to the `WORKQUEUE` DynamoDB partition as a
+best-effort final step before `FinalizeJobRunSuccess` (ADR-031 Decision 7). WorkItems
+signal to the artifact regeneration pipeline which novae have new data. Each WorkItem
+names the nova and what changed (`spectra`, `photometry`, or `references`).
 
-No downstream workflow event is published. This is a terminal ingestion path.
+| Workflow | dirty_type |
+|----------|------------|
+| `ingest_ticket` (photometry branch) | `photometry` |
+| `ingest_ticket` (spectra branch) | `spectra` |
+| `acquire_and_validate_spectra` | `spectra` |
+| `refresh_references` | `references` |
+
+WorkItems carry a 30-day TTL and are deleted by the Finalize Lambda after successful
+artifact generation.
+
+---
+
+# 4. Workflow Architecture — Artifact Regeneration
+
+Designed in DESIGN-003. Connects the backend persistence layer to the frontend
+presentation layer.
+
+## 4.1 Pipeline Overview
+
+```
+Ingestion Workflows → WorkItem Queue → EventBridge (6h cron) → Coordinator Lambda
+→ RegenBatchPlan → Step Functions → Fargate Task → S3 Release → CloudFront → Browser
+```
+
+Three mechanisms:
+1. **Work queue** — tracks what changed (WorkItems in the `WORKQUEUE` DDB partition).
+2. **Sweep process** — generates artifacts (Coordinator Lambda → Fargate task).
+3. **Immutable release model** — delivers artifacts to browsers (S3 → CloudFront).
+
+## 4.2 Coordinator Lambda (`artifact_coordinator`)
+
+Invoked by EventBridge on a 6-hour schedule (configurable via CDK context) or manually.
+The coordinator is a planning and dispatch step — it never generates artifacts.
+
+Execution:
+1. Query the work queue (`PK=WORKQUEUE`, paginated).
+2. Check for stale or in-progress batch plans.
+   - `PENDING` plan → abandon and rebuild.
+   - `IN_PROGRESS` plan → exit immediately.
+3. Build per-nova manifests via the dependency matrix.
+4. Emit structured warnings for stale WorkItems (>7 days).
+5. Persist a `RegenBatchPlan` item with status `PENDING`.
+6. Start the `regenerate_artifacts` Step Functions workflow.
+
+Exit paths: empty queue (no-op), in-progress plan (exit with log), or normal dispatch.
+
+## 4.3 Dependency Matrix
+
+Maps dirty types to artifacts requiring regeneration:
+
+| dirty_type | Artifacts regenerated |
+|------------|----------------------|
+| `spectra` | `references.json`, `spectra.json`, `sparkline.svg`, `nova.json`, `bundle.zip` |
+| `photometry` | `photometry.json`, `sparkline.svg`, `nova.json`, `bundle.zip` |
+| `references` | `references.json`, `nova.json`, `bundle.zip` |
+
+`catalog.json` is always regenerated on every sweep (it is global, not per-nova).
+
+## 4.4 Regeneration Workflow (`regenerate_artifacts`)
+
+Standard Step Functions workflow with four states:
+
+1. **UpdatePlanInProgress** (Task → Lambda) — Sets plan status to `IN_PROGRESS`.
+2. **RunArtifactGenerator** (Task → ECS RunTask .sync) — Launches the Fargate task and
+   waits for completion.
+3. **Finalize** (Task → Lambda) — Commits succeeded novae: deletes consumed WorkItems,
+   writes observation counts (`spectra_count`, `photometry_count`, `references_count`,
+   `has_sparkline`) to Nova DDB items, updates plan status.
+4. **FailHandler** (Task → Lambda) — If Fargate crashes: marks plan as `FAILED`. All
+   WorkItems retained for the next sweep.
+
+## 4.5 Fargate Task (`artifact_generator`)
+
+Container-based ECS Fargate task (2 vCPU / 8 GB). Processes novae sequentially,
+generating up to seven artifacts per nova in dependency order:
+
+```
+references.json → spectra.json → photometry.json → sparkline.svg → nova.json → bundle.zip
+```
+
+After all per-nova artifacts, a four-phase publication sequence runs:
+1. **Phase 1** — Write swept novae artifacts to `releases/<YYYYMMDD-HHMMSS>/`.
+2. **Phase 2** — Copy unchanged ACTIVE novae from previous release via `s3:CopyObject`.
+3. **Phase 3** — Generate `catalog.json` and write to release prefix.
+4. **Phase 4** — Update `current.json` pointer (atomic switchover).
+
+Dependencies: astropy (coordinate formatting, FITS I/O), numpy, scipy (kd-tree for
+photometry band offsets), band registry (loaded once per execution).
+
+## 4.6 Per-Nova Artifact Generators
+
+| Artifact | Input Sources | Key Computation |
+|----------|---------------|-----------------|
+| `references.json` | NovaReference + Reference items (DDB) | Orphan handling, year-descending sort |
+| `spectra.json` | VALID DataProduct items (DDB) + web-ready CSVs (S3) | Peak-flux normalization, epoch sorting, DPO derivation |
+| `photometry.json` | PhotometryRow items (dedicated DDB table) | Regime grouping, upper limit suppression, LTTB subsampling, kd-tree band offset, DPO derivation |
+| `sparkline.svg` | Optical photometry (in-memory from photometry generator) | Band selection, coordinate transform to 90×55px viewport, SVG polyline + fill |
+| `nova.json` | Nova item (DDB) + in-process counts from spectra/photometry generators | Coordinate formatting (decimal → sexagesimal), discovery date pass-through |
+| `bundle.zip` | Raw FITS files (S3), PhotometryRow items (DDB), Reference items (DDB) | BibTeX generation, consolidated photometry FITS table, streaming ZIP assembly |
+| `catalog.json` | DDB Scan of all ACTIVE novae + in-memory sweep results | Stats block computation, merge of sweep counts with persisted counts |
+
+All generators produce artifacts conforming to ADR-014 schemas.
+
+## 4.7 Concurrency
+
+Only one sweep runs at a time. The batch plan status (`PENDING` / `IN_PROGRESS` /
+`COMPLETED` / `FAILED`) serves as the coordination mechanism — no distributed lock
+required.
 
 ---
 
 # 5. Validation Architecture
 
-Spectra validation is profile-driven:
+Spectra validation is profile-driven.
 
 Layered model:
 
@@ -409,19 +312,22 @@ PK = <nova_id>
 ```
 
 Item types:
-- NOVA
-- PRODUCT#...
-- FILE#...
-- NOVAREF#...
-- JOBRUN#...
-- ATTEMPT#...
+- `NOVA` — core nova metadata (coordinates, status, names, discovery_date,
+  observation counts, nova_type)
+- `PRODUCT#...` — data product metadata (spectra, photometry envelope)
+- `FILE#...` — S3 file references
+- `NOVAREF#...` — nova-to-reference links
+- `JOBRUN#...` — operational execution records
+- `ATTEMPT#...` — per-attempt execution records
 
 ### Global identity partitions
-- NAME#<normalized_name>
-- LOCATOR#<provider>#<locator_identity>
-- REFERENCE#<bibcode>
-- WORKFLOW#<correlation_id> — pre-nova workflow artifacts (e.g. FileObjects written
+- `NAME#<normalized_name>` — alias → nova_id mapping
+- `LOCATOR#<provider>#<locator_identity>` — deduplication
+- `REFERENCE#<bibcode>` — global reference metadata
+- `WORKFLOW#<correlation_id>` — pre-nova workflow artifacts (e.g. FileObjects written
   during `initialize_nova` quarantine before a `nova_id` exists)
+- `WORKQUEUE` — WorkItem records for the regeneration pipeline (§4)
+- `REGEN_PLAN` — RegenBatchPlan records for sweep coordination (§4)
 
 ## 6.2 Dedicated Photometry Table (NovaCatPhotometry)
 
@@ -429,47 +335,49 @@ Separate DynamoDB table for `PhotometryRow` items (ADR-020 Decision 1). Kept sep
 from the main NovaCat table because:
 
 - `PhotometryRow` has a distinct schema and independent lifecycle
-- `ticket_ingestor` and `ingest_photometry` need a narrowly scoped IAM grant that
-  does not extend to all NovaCat entities
-- Separate table simplifies future GSI design for cross-nova photometry queries
-  without touching the main table
+- `ticket_ingestor` and `ingest_photometry` need a narrowly scoped IAM grant that does
+  not extend to all NovaCat entities
+- Separate table simplifies future GSI design for cross-nova photometry queries without
+  touching the main table
 
 Primary key (ADR-020 Decision 2):
 - `PK` (String) = `"<nova_id>"`
 - `SK` (String) = `"PHOT#<row_id>"`
 
-No GSI provisioned at this time. A future GSI on band + epoch fields will enable
-cross-nova queries (ADR-020 OQ-5); it can be added without storage migration.
+No GSI provisioned at this time.
 
 The `PRODUCT#PHOTOMETRY_TABLE` envelope item (row counts, ingestion metadata) remains
 in the main NovaCat table under the nova's partition.
 
 ## 6.3 S3 Layout
 
-S3 layout:
-- raw/
-- derived/
-- quarantine/
-- bundles/
-- site/releases/
-- diagnostics/ — row-level failure records for photometry ingestion
+**Private bucket:**
+- `raw/` — raw acquired spectra FITS files
+- `derived/` — derived products including web-ready CSVs
+  (`derived/spectra/<nova_id>/<data_product_id>/web_ready.csv`)
+- `quarantine/` — quarantined files pending operator review
+- `bundles/` — (legacy, unused by current pipeline)
+- `diagnostics/` — row-level failure records for photometry ingestion
+  (`diagnostics/photometry/<nova_id>/row_failures/<sha256>.json`)
+
+**Public site bucket:**
+- `releases/<YYYYMMDD-HHMMSS>/` — immutable release directories
+  - `catalog.json` — global catalog artifact
+  - `nova/<nova_id>/` — per-nova artifacts (nova.json, references.json,
+    spectra.json, photometry.json, sparkline.svg, bundle.zip)
+- `current.json` — pointer to the active release (updated atomically on each sweep)
 
 Ticket-ingested FITS files: `raw/{nova_id}/ticket_ingestion/{data_product_id}.fits`
 (in the Public S3 bucket).
-
-Photometry row failure diagnostics:
-`diagnostics/photometry/<nova_id>/row_failures/<ticket_filename_sha256>.json`
-(in the Private S3 bucket).
 
 ---
 
 # 7. Execution Governance
 
 Failure taxonomy:
-
-- RETRYABLE
-- TERMINAL
-- QUARANTINE
+- `RETRYABLE` — transient failures eligible for Step Functions retry
+- `TERMINAL` — permanent failures that fail the JobRun
+- `QUARANTINE` — data quality issues requiring operator review
 
 Idempotency:
 - Internal only
@@ -483,9 +391,54 @@ No idempotency keys exposed in boundary schemas.
 
 ---
 
-# 8. Frontend
+# 8. Publication and Delivery
 
-## 8.1 Overview
+## 8.1 Immutable Release Model
+
+Each sweep writes all artifacts — freshly generated and unchanged — to a new, uniquely
+prefixed release directory (`releases/<YYYYMMDD-HHMMSS>/`). A stable pointer file
+(`current.json`) at the bucket root identifies the active release. The frontend reads
+the pointer first, then constructs artifact URLs relative to the release prefix.
+
+Properties:
+- **Atomic switchover.** Users see either the previous complete release or the new
+  complete release — never a mix.
+- **Trivial rollback.** Reverting is a single `put_object` updating the pointer.
+- **Cache-friendly.** Every release produces new URL paths; no CloudFront invalidation
+  needed under normal operations.
+
+Old releases are expired by a 7-day S3 lifecycle rule.
+
+## 8.2 CloudFront Distribution
+
+Serves the public site S3 bucket via Origin Access Control (OAC). All public access
+goes through CloudFront; the bucket blocks direct access.
+
+Two cache behaviors:
+
+| Path Pattern | Default TTL | Purpose |
+|---|---|---|
+| `/current.json` | 60 seconds | Mutable pointer; short TTL ensures ≤60s staleness after sweep |
+| `/releases/*` | 7 days | Immutable release content; long TTL, no invalidation needed |
+
+Additional configuration:
+- CORS: `Access-Control-Allow-Origin: *` via response headers policy (not S3 CORS)
+- Custom error response: 403 → 404 (standard OAC behavior for missing keys)
+- Price Class All (cost difference negligible at MVP traffic)
+- Compression: gzip + Brotli on all behaviors
+- No Origin Shield at MVP
+- No invalidation required under normal operations
+
+The distribution domain name is exported as a CDK output for consumption by the Vercel
+environment configuration.
+
+Design reference: DESIGN-003 §13.
+
+---
+
+# 9. Frontend
+
+## 9.1 Overview
 
 The Open Nova Catalog website is a React/Next.js application that provides catalog
 browsing, nova detail pages, and interactive scientific visualizations. It consumes
@@ -499,7 +452,7 @@ visual styling, layout, and client-side interaction only.
 This architecture is defined in ADR-009 (published artifact architecture) and the
 contracts are specified in ADR-014 (artifact schemas).
 
-## 8.2 Technology Stack
+## 9.2 Technology Stack
 
 - **Framework:** React with Next.js (App Router, TypeScript)
 - **Visualization:** Plotly.js via react-plotly.js
@@ -511,7 +464,7 @@ contracts are specified in ADR-014 (artifact schemas).
 Design decisions are captured in ADR-011 (architecture and tech stack) and ADR-012
 (visual design system).
 
-## 8.3 Design System
+## 9.3 Design System
 
 All colors are mediated through a two-layer CSS custom property system: primitive tokens
 (raw color values) map to semantic tokens (intent-based names like `--color-interactive`
@@ -524,7 +477,7 @@ block.
 
 Full specification: ADR-012.
 
-## 8.4 Site Structure
+## 9.4 Site Structure
 
 | Route | Page | Description |
 |-------|------|-------------|
@@ -538,7 +491,7 @@ Full specification: ADR-012.
 Nova pages are accessible by both UUID (`/nova/<uuid>`) and primary name
 (`/nova/<primary-name>`). Navigation model defined in ADR-010.
 
-## 8.5 Component Architecture
+## 9.5 Component Architecture
 
 **Catalog layer:**
 - `CatalogTable` — TanStack Table component with sorting, pagination (25 rows),
@@ -559,52 +512,58 @@ Nova pages are accessible by both UUID (`/nova/<uuid>`) and primary name
 **Shared utilities** (`src/lib/`):
 - Epoch format conversion (MJD ↔ DPO ↔ Calendar Date)
 - Catalog data loading (server-side filesystem read for SSG)
+- Data client (`dataClient.ts`) for artifact fetching
 
-## 8.6 Artifact Consumption
+## 9.6 Data Client
 
-The frontend fetches static JSON artifacts at page load time. During development, these
-are mock fixtures served from `frontend/public/data/`. In production, they will be served
-from an S3 bucket via CloudFront (hosting architecture not yet formalized — see §8.7).
+The data client (`src/lib/dataClient.ts`) centralizes all data-layer access behind
+three functions:
+
+- `resolveRelease()` — discovers the active release ID by fetching `current.json`
+- `getArtifactUrl()` — constructs full artifact URLs relative to the release prefix
+- `fetchArtifact<T>()` — convenience: resolve + fetch + parse
+
+Environment modes:
+- **Production:** `NEXT_PUBLIC_DATA_URL` is set to the CloudFront domain. URLs resolve
+  to `${DATA_URL}/releases/${releaseId}/${path}`.
+- **Development:** `NEXT_PUBLIC_DATA_URL` is unset. Returns a `"local"` release ID and
+  URLs resolve to `/data/${path}` (Next.js public directory with mock fixtures).
+
+Design reference: DESIGN-003 §14.
+
+## 9.7 Artifact Consumption
+
+The frontend fetches static JSON artifacts via the data client. In development, mock
+fixtures are served from `frontend/public/data/`. In production, they are served from
+the S3 bucket via CloudFront.
 
 | Artifact | Path | Consumer |
 |----------|------|----------|
-| `catalog.json` | Root | Homepage, catalog table, search |
+| `catalog.json` | Root of release | Homepage, catalog table, search |
 | `nova/<id>/nova.json` | Per-nova | Nova page metadata region |
 | `nova/<id>/references.json` | Per-nova | Nova page references table |
 | `nova/<id>/spectra.json` | Per-nova | Spectra viewer |
 | `nova/<id>/photometry.json` | Per-nova | Light curve panel |
 | `nova/<id>/sparkline.svg` | Per-nova | Catalog table light curve column |
+| `nova/<id>/bundle.zip` | Per-nova | Download link on nova detail page |
 
 Schemas: ADR-014.
 
-## 8.7 Open Architecture Gaps (Frontend)
-
-The following are identified but not yet designed:
-
-- **Hosting and deployment:** How Vercel (app hosting) connects to S3/CloudFront
-  (data artifact serving). URL patterns, environment variables, CORS, cache headers.
-  Flagged as ADR-011 Open Question 3.
-- **Artifact generation pipeline:** The `generate_site_data` pipeline that transforms
-  internal DynamoDB/S3 data into the published ADR-014 JSON artifacts. Not yet designed.
-- **Publication gate:** The trigger mechanism for artifact regeneration (automatic on
-  ingestion vs. operator-initiated vs. scheduled). Not yet designed.
-
 ---
 
-# 9. Photometry Pipeline
+# 10. Photometry Pipeline
 
 The photometry system handles multi-regime data (optical magnitudes, X-ray count rates,
 gamma-ray photon fluxes, radio flux densities). Two ingestion paths exist:
 
-- **Ticket-driven path** (MVP primary, partially implemented): Uses hand-curated
-  metadata tickets that supply all structural information explicitly. Bypasses
-  Layer 0 heuristics and the ADR-018 disambiguation algorithm. Implemented via the
-  `ingest_ticket` workflow (§4.8). Photometry reader, DDB write layer, and band
-  registry integration are operational.
+- **Ticket-driven path** (MVP primary, operational): Uses hand-curated metadata tickets
+  that supply all structural information explicitly. Bypasses Layer 0 heuristics and the
+  ADR-018 disambiguation algorithm. Implemented via the `ingest_ticket` workflow (§3.2).
+  Photometry reader, DDB write layer, and band registry integration are operational.
 - **Heuristic path** (future): Runtime inference via the seven-layer architecture
   described below. Designed but not yet implemented.
 
-## 9.1 Layer Architecture
+## 10.1 Layer Architecture
 
 The seven-layer architecture governs the heuristic ingestion path. The ticket-driven
 path bypasses Layers 0–4 by providing explicit structural metadata.
@@ -620,7 +579,7 @@ path bypasses Layers 0–4 by providing explicit structural metadata.
 | 5 | Ingestion workflow handlers | Ticket path implemented; heuristic path pending |
 | 6 | Persistence and query | Implemented (ADR-020); dedicated DDB table provisioned |
 
-## 9.2 Key Design Decisions Made
+## 10.2 Key Design Decisions
 
 - **Row-level DynamoDB storage** (ADR-020) rather than canonical Parquet files
 - **Dedicated photometry DynamoDB table** separate from the main NovaCat table (§6.2)
@@ -631,33 +590,33 @@ path bypasses Layers 0–4 by providing explicit structural metadata.
   redundant
 - **Row-level failure persistence** to S3 diagnostics for operator review
 - **AI-assisted adapter registration** at development time only; no runtime dependency
-- **Conservative photometric system defaults** and case-sensitive filter matching (ADR-016)
+- **Conservative photometric system defaults** and case-sensitive filter matching
+  (ADR-016)
 
-## 9.3 Design Chain Status
+## 10.3 Design Chain Status
 
 The foundational ADR chain is complete: ADR-017 (band registry) → ADR-018
-(disambiguation) → ADR-019 (table model) → ADR-020 (storage format). The
-ticket-driven path (DESIGN-004) provides the MVP implementation; the heuristic path
-(Layer 0 → adapter → persistence) remains as the future fallback for files without
-tickets.
+(disambiguation) → ADR-019 (table model) → ADR-020 (storage format). The ticket-driven
+path (DESIGN-004) provides the MVP implementation; the heuristic path (Layer 0 → adapter
+→ persistence) remains as the future fallback for files without tickets.
 
 Full design context: DESIGN-001, DESIGN-002, DESIGN-004.
 
 ---
 
-# 10. Observability Model
+# 11. Observability Model
 
 Structured logs include:
 
-- workflow_name
-- execution_arn
-- job_run_id
-- state_name
-- attempt_number
-- correlation_id
-- primary UUID(s)
-- error_classification
-- error_fingerprint
+- `workflow_name`
+- `execution_arn`
+- `job_run_id`
+- `state_name`
+- `attempt_number`
+- `correlation_id`
+- Primary UUID(s)
+- `error_classification`
+- `error_fingerprint`
 
 Metrics:
 - Success / failure / quarantine counts
@@ -665,9 +624,16 @@ Metrics:
 - Provider health
 - Latency
 
+Regeneration pipeline observability (DESIGN-003 §15):
+- `plan_id`, `release_id`, `nova_id` in all Fargate task logs
+- Per-nova success/failure tracking in RegenBatchPlan results
+- CloudWatch alarms: sweep failure alarm, sweep skip alarm (48-hour no-success
+  detection), wired to the existing SNS quarantine topic
+- AWS Budget alert: $5/month on S3 + CloudFront + ECS combined spend
+
 ---
 
-# 11. Architectural Invariants
+# 12. Architectural Invariants
 
 The following must remain true:
 
@@ -687,10 +653,15 @@ The following must remain true:
 - Ticket-driven and heuristic ingestion paths produce compatible output artifacts.
   The same `PhotometryRow` schema (ADR-019) and DDB key structure (ADR-020) are
   shared across both paths.
+- Published artifacts conform to ADR-014 schemas. The frontend never computes
+  scientific quantities — all computation is the backend's responsibility and is
+  embedded in artifacts at generation time.
+- The immutable release model ensures atomic switchover and trivial rollback.
+  `current.json` is the sole coordination point between the backend and frontend.
 
 ---
 
-# 12. Deferred / Non-MVP
+# 13. Deferred / Non-MVP
 
 - Global multi-nova sweeps
 - Spatial indexing
@@ -698,49 +669,86 @@ The following must remain true:
 - Advanced photometry version diffing
 - Provider auto-discovery scaling
 - Heuristic ingestion path (Layers 0–4 runtime implementation)
+- Incremental / differential artifact updates (full regeneration per nova on every sweep)
+- Multi-operator concurrency controls
+- Programmatic API access to artifact data (deferred per ADR-011)
+- Custom CloudFront domain (e.g. `data.nova-cat.org`)
+- Origin Shield (CloudFront)
+- `nova_type` enrichment (post-MVP; field exists as null)
 
 ---
 
-# 13. Deployment Model
+# 14. Deployment Model
 
 Nova Cat is deployed as two independent CDK stacks in the same AWS account and region:
 
 ## NovaCat (production)
 
-The live stack. All production workflows, Lambdas, state machines, and the primary
-DynamoDB tables (`NovaCat` + `NovaCatPhotometry`) live here. CloudFormation exports
-are prefixed `NovaCat-`.
+The live stack. All production workflows, Lambdas, state machines, the Fargate task
+definition, the CloudFront distribution, and the primary DynamoDB tables (`NovaCat` +
+`NovaCatPhotometry`) live here. CloudFormation exports are prefixed `NovaCat-`.
 
 ## NovaCatSmoke (smoke test)
 
-An isolated parallel deployment used exclusively by the smoke test suite.
-Identical to `NovaCat` in every functional respect — same Lambda code, same ASL,
-same IAM grants — but with independently namespaced resources:
+An isolated parallel deployment used exclusively by the smoke test suite. Identical to
+`NovaCat` in every functional respect — same Lambda code, same ASL, same IAM grants —
+but with independently namespaced resources:
 
 - Lambda functions: `nova-cat-smoke-*`
 - State machines: `nova-cat-smoke-*`
 - DynamoDB tables: `NovaCatSmoke`, `NovaCatSmokePhotometry`
 - CloudFormation exports: `NovaCatSmoke-*`
 
-The smoke stack uses `DESTROY` removal policy throughout. Its DynamoDB tables are
-wiped between test runs, eliminating any risk of smoke tests touching production data.
+The smoke stack uses `DESTROY` removal policy throughout. Its DynamoDB tables are wiped
+between test runs, eliminating any risk of smoke tests touching production data.
 
 Smoke tests resolve all stack outputs from `NovaCatSmoke` via CloudFormation exports.
-If the smoke stack is not deployed, all smoke tests skip cleanly with a descriptive message.
+If the smoke stack is not deployed, all smoke tests skip cleanly with a descriptive
+message.
 
 Both stacks are deployed together via `./deploy.sh`. Individual stack targeting is
 supported: `./deploy.sh NovaCat` or `./deploy.sh NovaCatSmoke`.
 
 ## Resource Counts
 
-- **Lambda functions:** 15 (4 container-based for astropy/numpy: `archive_resolver`,
-  `spectra_discoverer`, `spectra_validator`, `ticket_ingestor`)
-- **Step Functions workflows:** 6 (`initialize_nova`, `ingest_new_nova`,
+- **Lambda functions:** 17 (13 zip-bundled, 4 container-based)
+  - Zip-bundled: `nova_resolver`, `job_run_manager`, `idempotency_guard`,
+    `workflow_launcher`, `reference_manager`, `spectra_acquirer`,
+    `photometry_ingestor`, `quarantine_handler`, `name_reconciler`,
+    `ticket_parser`, `nova_resolver_ticket`, `artifact_coordinator`,
+    `artifact_finalizer`
+  - Container-based (DockerImageFunction): `archive_resolver`,
+    `spectra_discoverer`, `spectra_validator`, `ticket_ingestor`
+- **Step Functions workflows:** 7 (`initialize_nova` [Express], `ingest_new_nova`,
   `discover_spectra_products`, `acquire_and_validate_spectra`, `refresh_references`,
-  `ingest_ticket`)
+  `ingest_ticket`, `regenerate_artifacts`)
+- **ECS resources:** 1 Fargate task definition (`artifact_generator`, 2 vCPU / 8 GB),
+  1 ECS cluster
 - **DynamoDB tables:** 2 per stack (main `NovaCat` + dedicated `NovaCatPhotometry`)
 - **S3 buckets:** 2 (private data + public site)
+- **CloudFront distributions:** 1 (public site bucket, OAC)
+- **EventBridge rules:** 1 (6-hour cron for artifact coordinator)
 - **SNS topics:** 1 (quarantine notifications)
+
+---
+
+# 15. ADR and Design Document Index
+
+Architecture decisions and design documents govern this system:
+
+- **ADR-001 – ADR-007:** Core system design (contracts, workflows, persistence,
+  identity, references, architecture baseline)
+- **ADR-008 – ADR-014:** Frontend design (product vision, MVP strategy, navigation,
+  architecture, visual design system, visualization design, artifact schemas)
+- **ADR-015 – ADR-021:** Photometry pipeline design (column mapping, band/filter
+  resolution, band registry, storage format, pre-ingestion normalization)
+- **ADR-030:** ADR amendment policy revision
+- **ADR-031:** Data layer readiness for artifact generation (schema evolution,
+  WorkItem integration, documentation alignment)
+- **DESIGN-001:** Photometry ingestion redesign
+- **DESIGN-002:** Data provenance and derived quantities
+- **DESIGN-003:** Artifact regeneration pipeline (the "middle end")
+- **DESIGN-004:** Source profile schema and ticket-driven ingestion
 
 ---
 
