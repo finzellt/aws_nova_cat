@@ -68,3 +68,4 @@ services/nova_common_layer/python/*.dist-info/
 /tools/diagnose_xshooter
 frontend/public/data/
 tools/novacat-tools/notebooks/novacat.ipynb
+tools/novacat-tools/notebooks/novacat.ipynb
