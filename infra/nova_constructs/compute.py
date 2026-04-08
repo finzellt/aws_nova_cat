@@ -259,6 +259,7 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
             "Starts downstream Step Functions executions and publishes SNS continuation events. "
             "Used by: initialize_nova, ingest_new_nova, discover_spectra_products."
         ),
+        timeout=cdk.Duration.seconds(300),  # fan-out: 8s delay × up to ~30 batches
     ),
     "reference_manager": _FunctionSpec(
         service_dir="reference_manager",
@@ -583,7 +584,7 @@ class NovaCatCompute(Construct):
                 "Container-bundled: astropy/astroquery require Docker deployment."
             ),
             memory_size=_DEFAULT_MEMORY_MB,
-            timeout=cdk.Duration.seconds(60),
+            timeout=cdk.Duration.seconds(120),
             environment=shared_env,
             log_retention=_LOG_RETENTION,
             tracing=lambda_.Tracing.ACTIVE,
@@ -678,7 +679,7 @@ class NovaCatCompute(Construct):
 
         table.grant_read_write_data(self._functions["idempotency_guard"])
 
-        table.grant_read_data(self._functions["workflow_launcher"])
+        table.grant_read_write_data(self._functions["workflow_launcher"])
         quarantine_topic.grant_publish(self._functions["workflow_launcher"])
 
         table.grant_read_write_data(self._functions["reference_manager"])

@@ -705,7 +705,7 @@ class NovaCatWorkflows(Construct):
         # doesn't cleanly support loading ASL from a file with CloudFormation
         # token substitution. definition_string + definition_substitutions
         # maps directly to CloudFormation's DefinitionString + Fn::Sub.
-        return sfn.CfnStateMachine(
+        state_machine = sfn.CfnStateMachine(
             self,
             _to_pascal(name),
             state_machine_name=f"{self._env_prefix}-{name}",
@@ -730,6 +730,8 @@ class NovaCatWorkflows(Construct):
                 level="ALL",
             ),
         )
+        state_machine.node.add_dependency(role)
+        return state_machine
 
 
 def _grant_start_execution(

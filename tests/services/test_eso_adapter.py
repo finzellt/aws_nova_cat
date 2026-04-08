@@ -14,6 +14,7 @@ Covers:
 
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import Any
 from unittest.mock import patch
@@ -367,3 +368,87 @@ class TestQuery:
             result = self.adapter.query(nova_id="nova-001", ra_deg=271.0, dec_deg=-30.0)
         assert result[0]["CREATORDID"] is None
         assert result[0]["access_url"] is None
+
+    def test_sets_session_timeout(self) -> None:
+        """Verify the per-request timeout is set on the pyvo session."""
+        from spectra_discoverer.adapters.eso import _REQUEST_TIMEOUT_S
+
+        with patch("spectra_discoverer.adapters.eso.vo") as mock_vo:
+            mock_service = mock_vo.dal.SSAService.return_value
+            mock_service.search.return_value = []
+            self.adapter.query(nova_id="nova-001", ra_deg=271.0, dec_deg=-30.0)
+            assert mock_service._session.timeout == _REQUEST_TIMEOUT_S
+
+    @patch("spectra_discoverer.adapters.eso.time.sleep")
+    def test_retries_on_failure_then_succeeds(self, mock_sleep: Any) -> None:
+        """Search fails on first attempt, succeeds on second."""
+        mock_row: dict[str, Any] = {
+            f: None
+            for f in [
+                "COLLECTION",
+                "TARGETNAME",
+                "s_ra",
+                "s_dec",
+                "em_min",
+                "em_max",
+                "SPECRP",
+                "SNR",
+                "t_min",
+                "t_max",
+                "CREATORDID",
+                "access_url",
+            ]
+        }
+        with patch("spectra_discoverer.adapters.eso.vo") as mock_vo:
+            mock_service = mock_vo.dal.SSAService.return_value
+            mock_service.search.side_effect = [ConnectionError("timeout"), [mock_row]]
+            result = self.adapter.query(nova_id="nova-001", ra_deg=271.0, dec_deg=-30.0)
+
+        assert len(result) == 1
+        assert mock_service.search.call_count == 2
+        mock_sleep.assert_called_once_with(3)
+
+    @patch("spectra_discoverer.adapters.eso.time.sleep")
+    def test_all_attempts_fail_raises_retryable_error(self, mock_sleep: Any) -> None:
+        """All 3 attempts fail — RetryableError must be raised."""
+        from nova_common.errors import RetryableError
+
+        with patch("spectra_discoverer.adapters.eso.vo") as mock_vo:
+            mock_service = mock_vo.dal.SSAService.return_value
+            mock_service.search.side_effect = ConnectionError("timeout")
+            with pytest.raises(RetryableError, match="ESO SSAP query failed"):
+                self.adapter.query(nova_id="nova-001", ra_deg=271.0, dec_deg=-30.0)
+
+        assert mock_service.search.call_count == 3
+        assert mock_sleep.call_count == 2
+
+    @patch("spectra_discoverer.adapters.eso.time.sleep")
+    def test_warning_logged_on_retry(
+        self, mock_sleep: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A WARNING log is emitted for each failed attempt that will be retried."""
+        mock_row: dict[str, Any] = {
+            f: None
+            for f in [
+                "COLLECTION",
+                "TARGETNAME",
+                "s_ra",
+                "s_dec",
+                "em_min",
+                "em_max",
+                "SPECRP",
+                "SNR",
+                "t_min",
+                "t_max",
+                "CREATORDID",
+                "access_url",
+            ]
+        }
+        with patch("spectra_discoverer.adapters.eso.vo") as mock_vo:
+            mock_service = mock_vo.dal.SSAService.return_value
+            mock_service.search.side_effect = [ConnectionError("oops"), [mock_row]]
+            with caplog.at_level(logging.WARNING):
+                self.adapter.query(nova_id="nova-001", ra_deg=271.0, dec_deg=-30.0)
+
+        warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("attempt 1/3 failed" in msg for msg in warning_messages)

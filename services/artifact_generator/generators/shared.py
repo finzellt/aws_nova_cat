@@ -39,6 +39,7 @@ def resolve_outburst_mjd(
     discovery_date: str | None,
     nova_type: str | None,
     observation_epochs_mjd: Sequence[float],
+    outburst_date: str | None = None,
 ) -> tuple[float | None, bool]:
     """Resolve the outburst reference MJD for a nova.
 
@@ -61,6 +62,10 @@ def resolve_outburst_mjd(
         Combined MJD epoch values from both spectra
         (``observation_date_mjd``) and photometry (``time_mjd``) items.
         Pre-queried by the caller.
+    outburst_date
+        Operator-injected precise ``YYYY-MM-DD`` outburst date.  When
+        present (and the nova is not recurrent), takes priority over
+        *discovery_date*.  ``None`` by default.
 
     Returns
     -------
@@ -70,9 +75,14 @@ def resolve_outburst_mjd(
         observations are available.
     """
     # Recurrent novae always use the earliest-observation fallback,
-    # regardless of whether discovery_date is present (§7.6).
-    if nova_type != "recurrent" and discovery_date is not None:
-        return _outburst_from_discovery_date(discovery_date), False
+    # regardless of whether discovery_date or outburst_date is present (§7.6).
+    if nova_type != "recurrent":
+        # Priority 1: operator-injected outburst_date
+        if outburst_date is not None:
+            return _outburst_from_discovery_date(outburst_date), False
+        # Priority 2: ADS-derived discovery_date
+        if discovery_date is not None:
+            return _outburst_from_discovery_date(discovery_date), False
 
     # Fallback — earliest observation minus 1 day.
     # Places the estimated outburst so the earliest observation becomes

@@ -759,6 +759,66 @@ class TestComputeDiscoveryDate:
             with pytest.raises(TerminalError, match="nova_id"):
                 h.handle(self._event(nova_id=None), None)
 
+    # ------------------------------------------------------------------
+    # Month-precision comparison (day-00 handling)
+    # ------------------------------------------------------------------
+
+    def test_month_precision_same_month_treats_as_equal(self, table: Any) -> None:
+        """2019-03-00 vs 2019-03-26 in same month → tiebreak on bibcode."""
+        bib_month = "2019ATel.0001....M"
+        bib_day = "2019ATel.9999....D"
+        with mock_aws():
+            _seed_novaref(table, _NOVA_ID, bib_month)
+            _seed_novaref(table, _NOVA_ID, bib_day)
+            _seed_reference(table, bib_month, "2019-03-00")
+            _seed_reference(table, bib_day, "2019-03-26")
+            h = _load_handler()
+            result = h.handle(self._event(), None)
+            # Same YYYY-MM → tiebreak picks lexicographically smaller bibcode
+            assert result["earliest_bibcode"] == bib_month
+
+    def test_month_precision_different_months(self, table: Any) -> None:
+        """2019-02-00 vs 2019-03-00 → February wins (different months)."""
+        bib_feb = "2019ATel.0002....F"
+        bib_mar = "2019ATel.0003....M"
+        with mock_aws():
+            _seed_novaref(table, _NOVA_ID, bib_feb)
+            _seed_novaref(table, _NOVA_ID, bib_mar)
+            _seed_reference(table, bib_feb, "2019-02-00")
+            _seed_reference(table, bib_mar, "2019-03-00")
+            h = _load_handler()
+            result = h.handle(self._event(), None)
+            assert result["earliest_bibcode"] == bib_feb
+            assert result["earliest_publication_date"] == "2019-02-00"
+
+    def test_day_precise_same_month_picks_earlier_day(self, table: Any) -> None:
+        """2019-03-15 vs 2019-03-26 — same month, both day-precise: equal at month level."""
+        bib_15 = "2019ATel.0015....A"
+        bib_26 = "2019ATel.0026....B"
+        with mock_aws():
+            _seed_novaref(table, _NOVA_ID, bib_15)
+            _seed_novaref(table, _NOVA_ID, bib_26)
+            _seed_reference(table, bib_15, "2019-03-15")
+            _seed_reference(table, bib_26, "2019-03-26")
+            h = _load_handler()
+            result = h.handle(self._event(), None)
+            # Same YYYY-MM → tiebreak on bibcode
+            assert result["earliest_bibcode"] == bib_15
+
+    def test_month_precision_vs_different_month_day_precise(self, table: Any) -> None:
+        """2019-03-00 vs 2019-04-26 → March wins (different months)."""
+        bib_mar = "2019ATel.0003....M"
+        bib_apr = "2019ATel.0004....A"
+        with mock_aws():
+            _seed_novaref(table, _NOVA_ID, bib_mar)
+            _seed_novaref(table, _NOVA_ID, bib_apr)
+            _seed_reference(table, bib_mar, "2019-03-00")
+            _seed_reference(table, bib_apr, "2019-04-26")
+            h = _load_handler()
+            result = h.handle(self._event(), None)
+            assert result["earliest_bibcode"] == bib_mar
+            assert result["earliest_publication_date"] == "2019-03-00"
+
 
 # ===========================================================================
 # TestUpsertDiscoveryDateMetadata
@@ -881,6 +941,40 @@ class TestUpsertDiscoveryDateMetadata:
 
             with pytest.raises(TerminalError, match="nova_id"):
                 h.handle(self._event(nova_id=None), None)
+
+    # ------------------------------------------------------------------
+    # Month-precision comparison in upsert
+    # ------------------------------------------------------------------
+
+    def test_noop_when_same_month_different_day_precision(self, table: Any) -> None:
+        """2019-03-00 (new) vs 2019-03-26 (current) → same month → no overwrite."""
+        with mock_aws():
+            _seed_nova(table)
+            table.update_item(
+                Key={"PK": _NOVA_ID, "SK": "NOVA"},
+                UpdateExpression="SET discovery_date = :d",
+                ExpressionAttributeValues={":d": "2019-03-26"},
+            )
+            h = _load_handler()
+            result = h.handle(self._event(earliest_publication_date="2019-03-00"), None)
+            assert result["updated"] is False
+            nova = table.get_item(Key={"PK": _NOVA_ID, "SK": "NOVA"})["Item"]
+            assert nova["discovery_date"] == "2019-03-26"  # unchanged
+
+    def test_updates_when_month_is_earlier(self, table: Any) -> None:
+        """2019-02-00 (new) vs 2019-03-00 (current) → earlier month → overwrite."""
+        with mock_aws():
+            _seed_nova(table)
+            table.update_item(
+                Key={"PK": _NOVA_ID, "SK": "NOVA"},
+                UpdateExpression="SET discovery_date = :d",
+                ExpressionAttributeValues={":d": "2019-03-00"},
+            )
+            h = _load_handler()
+            result = h.handle(self._event(earliest_publication_date="2019-02-00"), None)
+            assert result["updated"] is True
+            nova = table.get_item(Key={"PK": _NOVA_ID, "SK": "NOVA"})["Item"]
+            assert nova["discovery_date"] == "2019-02-00"
 
 
 # ===========================================================================

@@ -11,7 +11,12 @@ Personal operator tooling — not production code.
 
 import os
 
-from cloudwatch_client import discover_log_groups, fetch_recent_logs, trace_by_correlation_id
+from cloudwatch_client import (
+    discover_log_groups,
+    fetch_logs_range,
+    fetch_recent_logs,
+    trace_by_correlation_id,
+)
 from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
@@ -53,13 +58,17 @@ def api_logs():
     Fetch logs and return as JSON.
 
     Query params:
-        minutes     — how far back to look (default 30, max 1440)
+        start_epoch — explicit start time (Unix epoch seconds)
+        end_epoch   — explicit end time (Unix epoch seconds)
+        minutes     — fallback: how far back from now (default 30, max 1440)
+                      ignored if start_epoch/end_epoch are provided
+        limit       — max rows to return (default 2000, max 10000)
         log_groups  — comma-separated log group names (default: all)
         query       — custom Insights query string (optional)
     """
     try:
-        minutes = request.args.get("minutes", "30")
-        minutes = max(1, min(int(minutes), 1440))  # clamp to 1min–24hr
+        limit = request.args.get("limit", "2000")
+        limit = max(100, min(int(limit), 10000))
 
         groups_param = request.args.get("log_groups", "")
         if groups_param.strip():
@@ -69,11 +78,27 @@ def api_logs():
 
         custom_query = request.args.get("query", "").strip() or None
 
-        result = fetch_recent_logs(
-            minutes=minutes,
-            query_string=custom_query,
-            log_groups=log_groups,
-        )
+        start_param = request.args.get("start_epoch", "").strip()
+        end_param = request.args.get("end_epoch", "").strip()
+
+        if start_param and end_param:
+            result = fetch_logs_range(
+                start_epoch=int(start_param),
+                end_epoch=int(end_param),
+                query_string=custom_query,
+                log_groups=log_groups,
+                limit=limit,
+            )
+        else:
+            minutes = request.args.get("minutes", "30")
+            minutes = max(1, min(int(minutes), 1440))
+            result = fetch_recent_logs(
+                minutes=minutes,
+                query_string=custom_query,
+                log_groups=log_groups,
+                limit=limit,
+            )
+
         return jsonify(result)
 
     except Exception as e:

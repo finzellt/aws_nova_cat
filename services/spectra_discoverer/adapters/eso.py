@@ -42,6 +42,7 @@ Dependencies:
 from __future__ import annotations
 
 import math
+import time
 from decimal import Decimal
 from typing import Any
 from urllib.parse import urlparse, urlunparse
@@ -59,6 +60,13 @@ _SEARCH_DIAMETER_DEG = (
 )  # 20 arcsec diameter, divided by 2 for radius, converted to degrees
 
 _SSAP_ENDPOINT = "http://archive.eso.org/ssap"
+
+# Per-request HTTP timeout in seconds.
+_REQUEST_TIMEOUT_S = 15
+
+# Application-level retry parameters for the SSAP query.
+_MAX_QUERY_ATTEMPTS = 3
+_QUERY_RETRY_DELAY_S = 3
 
 # SSAP fields extracted from each ESO result row.
 _SSAP_FIELDS = [
@@ -103,15 +111,31 @@ class ESOAdapter:
         Raises RetryableError on any network or service failure so the
         handler's retry policy can engage.
         """
-        try:
-            ssap_service = vo.dal.SSAService(_SSAP_ENDPOINT)
-            pos = SkyCoord(ra_deg, dec_deg, unit="deg")
-            size = Quantity(_SEARCH_DIAMETER_DEG, unit="deg")
-            resultset = ssap_service.search(pos=pos.fk5, diameter=size)
-        except Exception as exc:
+        ssap_service = vo.dal.SSAService(_SSAP_ENDPOINT)
+        ssap_service._session.timeout = _REQUEST_TIMEOUT_S
+        pos = SkyCoord(ra_deg, dec_deg, unit="deg")
+        size = Quantity(_SEARCH_DIAMETER_DEG, unit="deg")
+
+        last_exc: Exception | None = None
+        for attempt in range(1, _MAX_QUERY_ATTEMPTS + 1):
+            try:
+                resultset = ssap_service.search(pos=pos.fk5, diameter=size)
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt < _MAX_QUERY_ATTEMPTS:
+                    logger.warning(
+                        "ESO SSAP query attempt %d/%d failed, retrying in %ds",
+                        attempt,
+                        _MAX_QUERY_ATTEMPTS,
+                        _QUERY_RETRY_DELAY_S,
+                        extra={"nova_id": nova_id, "error": str(exc)},
+                    )
+                    time.sleep(_QUERY_RETRY_DELAY_S)
+        else:
             raise RetryableError(
-                f"ESO SSAP query failed for nova_id={nova_id!r} ra={ra_deg} dec={dec_deg}: {exc}"
-            ) from exc
+                f"ESO SSAP query failed for nova_id={nova_id!r} ra={ra_deg} dec={dec_deg}: {last_exc}"
+            ) from last_exc
 
         raw_products: list[dict[str, Any]] = []
         for row in resultset:

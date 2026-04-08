@@ -391,6 +391,7 @@ def _process_nova(
             nova_item.get("discovery_date"),
             nova_item.get("nova_type"),
             observation_epochs,
+            outburst_date=nova_item.get("outburst_date"),
         )
         nova_context["outburst_mjd"] = outburst_mjd
         nova_context["outburst_mjd_is_estimated"] = is_estimated

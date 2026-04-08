@@ -132,6 +132,69 @@ class TestResolveOutburstMjd:
         assert mjd == pytest.approx(expected_mjd, abs=0.001)
         assert estimated is False
 
+    # ------------------------------------------------------------------
+    # outburst_date priority
+    # ------------------------------------------------------------------
+
+    def test_outburst_date_used_when_present(self) -> None:
+        """outburst_date present → used, is_estimated = False."""
+        expected_mjd = float(
+            Time("2021-08-08T00:00:00", format="isot", scale="utc").mjd,
+        )
+        mjd, estimated = resolve_outburst_mjd(
+            None,
+            None,
+            [],
+            outburst_date="2021-08-08",
+        )
+        assert mjd == pytest.approx(expected_mjd, abs=0.001)
+        assert estimated is False
+
+    def test_outburst_date_wins_over_discovery_date(self) -> None:
+        """outburst_date and discovery_date both present → outburst_date wins."""
+        outburst_mjd_expected = float(
+            Time("2021-08-08T00:00:00", format="isot", scale="utc").mjd,
+        )
+        discovery_mjd = float(
+            Time("2021-09-01T00:00:00", format="isot", scale="utc").mjd,
+        )
+        mjd, estimated = resolve_outburst_mjd(
+            "2021-09-00",
+            None,
+            [],
+            outburst_date="2021-08-08",
+        )
+        assert mjd == pytest.approx(outburst_mjd_expected, abs=0.001)
+        assert mjd != pytest.approx(discovery_mjd, abs=0.5)
+        assert estimated is False
+
+    def test_outburst_date_ignored_for_recurrent_nova(self) -> None:
+        """outburst_date present + recurrent nova → fallback used."""
+        epochs = [51544.0, 51545.0]
+        mjd, estimated = resolve_outburst_mjd(
+            "2000-01-01",
+            "recurrent",
+            epochs,
+            outburst_date="2000-01-05",
+        )
+        # Should use earliest-observation fallback, not outburst_date
+        assert mjd == pytest.approx(51543.0, abs=0.01)
+        assert estimated is True
+
+    def test_outburst_date_none_falls_through_to_discovery(self) -> None:
+        """outburst_date = None → falls through to discovery_date."""
+        expected_mjd = float(
+            Time("2000-01-01T00:00:00", format="isot", scale="utc").mjd,
+        )
+        mjd, estimated = resolve_outburst_mjd(
+            "2000-01-01",
+            None,
+            [],
+            outburst_date=None,
+        )
+        assert mjd == pytest.approx(expected_mjd, abs=0.001)
+        assert estimated is False
+
 
 # ======================================================================
 # format_coordinates

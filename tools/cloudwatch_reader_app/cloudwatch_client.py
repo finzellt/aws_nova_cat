@@ -43,7 +43,7 @@ LOG_GROUP_PREFIXES = [
 # You can also set the LOG_VIEWER_EXTRA_PREFIXES env var to a
 # comma-separated list of additional prefixes to discover.
 ECS_LOG_PREFIXES = [
-    "NovaCat-WorkflowsArtifactGenerator",  # Catches CDK-generated names like NovaCatStack-Workflows...
+    "NovaCat",  # Catches CDK-generated names like NovaCatStack-Workflows...
 ]
 
 POLL_INTERVAL_SECONDS = 0.5
@@ -100,7 +100,7 @@ def discover_log_groups() -> list[str]:
 # ── Logs Insights query execution ────────────────────────────────────
 
 
-def _build_default_query() -> str:
+def _build_default_query(limit: int = 2000) -> str:
     """
     Default Insights query with enrichment-friendly field selection.
 
@@ -123,7 +123,7 @@ def _build_default_query() -> str:
             "  plan_id, phase, artifact, release_id",
             "| filter @message not like /^(START|END) RequestId/",
             "| sort @timestamp desc",
-            "| limit 2000",
+            f"| limit {limit}",
         ]
     )
 
@@ -451,6 +451,7 @@ def fetch_recent_logs(
     minutes: int = 30,
     query_string: str | None = None,
     log_groups: list[str] | None = None,
+    limit: int = 2000,
 ) -> dict:
     """
     High-level entry point: fetch logs from the last N minutes.
@@ -461,8 +462,8 @@ def fetch_recent_logs(
     if log_groups is None:
         log_groups = discover_log_groups()
 
-    query_used = query_string or _build_default_query()
-    rows = run_query(log_groups, start_epoch, end_epoch, query_string)
+    query_used = query_string or _build_default_query(limit=limit)
+    rows = run_query(log_groups, start_epoch, end_epoch, query_used)
 
     return {
         "log_groups": log_groups,
@@ -472,6 +473,34 @@ def fetch_recent_logs(
         "start_epoch": start_epoch,
         "end_epoch": end_epoch,
         "minutes": minutes,
+        "limit": limit,
+    }
+
+
+def fetch_logs_range(
+    start_epoch: int,
+    end_epoch: int,
+    query_string: str | None = None,
+    log_groups: list[str] | None = None,
+    limit: int = 2000,
+) -> dict:
+    """
+    Fetch logs for an explicit time range (epoch seconds).
+    """
+    if log_groups is None:
+        log_groups = discover_log_groups()
+
+    query_used = query_string or _build_default_query(limit=limit)
+    rows = run_query(log_groups, start_epoch, end_epoch, query_used)
+
+    return {
+        "log_groups": log_groups,
+        "row_count": len(rows),
+        "rows": rows,
+        "query": query_used,
+        "start_epoch": start_epoch,
+        "end_epoch": end_epoch,
+        "limit": limit,
     }
 
 
