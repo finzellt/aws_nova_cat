@@ -69,3 +69,7 @@ services/nova_common_layer/python/*.dist-info/
 frontend/public/data/
 tools/novacat-tools/notebooks/novacat.ipynb
 tools/novacat-tools/notebooks/novacat.ipynb
+/tools/ticket_ingestion/old_data
+/tools/ticket_ingestion/data
+/tools/ticket_ingestion/data
+*.ipynb

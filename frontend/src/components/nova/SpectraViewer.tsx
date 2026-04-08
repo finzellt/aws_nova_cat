@@ -16,7 +16,7 @@
  *   - Blended lines at mean wavelength with blend noted in label
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { LineChart, CircleAlert } from 'lucide-react';
 import type { SpectraArtifact, SpectrumRecord } from '@/types/nova';
@@ -413,6 +413,7 @@ function computeWaterfallPacking(
   // Compute display flux (optionally sqrt-compressed) interpolated onto grid
   const gridFlux: number[][] = [];
   const peakHeights: number[] = [];
+  const troughDepths: number[] = [];
   for (const ps of preparedSpectra) {
     const spec = ps.record;
     const displayFlux = compressed
@@ -421,10 +422,13 @@ function computeWaterfallPacking(
     const interpolated = interpolateToGrid(spec.wavelengths, displayFlux, grid);
     gridFlux.push(interpolated);
     let peak = 0;
+    let trough = 0;
     for (const f of interpolated) {
       if (!isNaN(f) && f > peak) peak = f;
+      if (!isNaN(f) && f < trough) trough = f;
     }
     peakHeights.push(peak);
+    troughDepths.push(trough);
   }
 
   const avgPeak = peakHeights.reduce((a, b) => a + b, 0) / N;
@@ -432,7 +436,7 @@ function computeWaterfallPacking(
 
   // Place baselines
   const baselines = new Array<number>(N);
-  baselines[0] = 0;
+  baselines[0] = -1 * Math.min(0, troughDepths[0]);
   for (let i = 1; i < N; i++) {
     const prev = gridFlux[i - 1];
     const cur = gridFlux[i];
@@ -705,6 +709,29 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
     new Set()
   );
 
+  // ── User zoom state ──────────────────────────────────────────────────────
+  // null = not zoomed (use default computed range)
+  const [userXRange, setUserXRange] = useState<[number, number] | null>(null);
+  const [userYRange, setUserYRange] = useState<[number, number] | null>(null);
+
+  const handleRelayout = useCallback((update: Record<string, unknown>) => {
+    if ('xaxis.autorange' in update || 'yaxis.autorange' in update) {
+      setUserXRange(null);
+      setUserYRange(null);
+      return;
+    }
+    const x0 = update['xaxis.range[0]'] as number | undefined;
+    const x1 = update['xaxis.range[1]'] as number | undefined;
+    const y0 = update['yaxis.range[0]'] as number | undefined;
+    const y1 = update['yaxis.range[1]'] as number | undefined;
+    if (x0 !== undefined && x1 !== undefined) {
+      setUserXRange([x0, x1]);
+    }
+    if (y0 !== undefined && y1 !== undefined) {
+      setUserYRange([y0, y1]);
+    }
+  }, []);
+
   const handleFeatureToggle = (group: FeatureGroup) => {
     setActiveFeatureGroups((prev) => {
       const next = new Set(prev);
@@ -729,12 +756,13 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
       return buildPlotData(
         data, epochFormat,
         selectedSpectrumId, logFluxY, fluxScale, activeFeatureGroups,
+        userXRange, userYRange,
       );
     } catch {
       setRenderError(true);
       return null;
     }
-  }, [data, epochFormat, selectedSpectrumId, logFluxY, fluxScale, activeFeatureGroups]);
+  }, [data, epochFormat, selectedSpectrumId, logFluxY, fluxScale, activeFeatureGroups, userXRange, userYRange]);
 
   if (renderError || plotData === null) {
     return <ErrorState onRetry={onRetry} />;
@@ -759,7 +787,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
           <ToggleGroup<EpochFormat>
             ariaLabel="Epoch label format"
             value={epochFormat}
-            onChange={setEpochFormat}
+            onChange={(v) => { setEpochFormat(v); setUserXRange(null); setUserYRange(null); }}
             options={[
               {
                 value: 'dpo', label: 'DPO',
@@ -823,6 +851,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
         data={traces}
         layout={layout}
         config={config}
+        onRelayout={handleRelayout}
         useResizeHandler
         style={{ width: '100%', height: 480 }}
       />
@@ -831,7 +860,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
       <LegendStrip
         spectra={preparedSpectra}
         selectedId={selectedSpectrumId}
-        onSelect={setSelectedSpectrumId}
+        onSelect={(id) => { setSelectedSpectrumId(id); setUserXRange(null); setUserYRange(null); }}
       />
     </div>
   );
@@ -846,6 +875,8 @@ function buildPlotData(
   logFluxY: boolean,
   fluxScale: FluxScale,
   activeFeatureGroups: Set<FeatureGroup>,
+  userXRange: [number, number] | null,
+  userYRange: [number, number] | null,
 ) {
   const { spectra, outburst_mjd } = data;
   const hasDpo = outburst_mjd !== null;
@@ -929,22 +960,31 @@ function buildPlotData(
     // In log mode the hover trace y-values must be positive (Plotly
     // drops non-positive points on a log axis).  Match the visible
     // axis range so the invisible hover line spans the full plot.
-    const markerYMin = logFluxY
+    const defaultYMin = logFluxY
       ? Math.max(fluxMin, 0.001)
       : fluxMin - fluxPadding;
-    const markerYMax = logFluxY
+    const defaultYMax = logFluxY
       ? fluxMax * 1.1
       : fluxMax + fluxPadding;
+    const effectiveWlMin = userXRange ? userXRange[0] : selectedWlMin;
+    const effectiveWlMax = userXRange ? userXRange[1] : selectedWlMax;
+    const effectiveYMin = userYRange ? userYRange[0] : defaultYMin;
+    const effectiveYMax = userYRange ? userYRange[1] : defaultYMax;
     addFeatureMarkers(
       activeFeatureGroups, traces, shapes,
-      selectedWlMin, selectedWlMax,
-      markerYMin, markerYMax,
+      effectiveWlMin, effectiveWlMax,
+      effectiveYMin, effectiveYMax,
     );
+
+    const defaultXRange: [number, number] = [selectedWlMin - singleWlPadding, selectedWlMax + singleWlPadding];
+    const defaultYRange: [number, number] = logFluxY
+      ? [Math.log10(Math.max(fluxMin, 0.001)), Math.log10(fluxMax * 1.1)]
+      : [fluxMin - fluxPadding, fluxMax + fluxPadding];
 
     const layout = {
       xaxis: {
         title: { text: 'Wavelength (nm)', font: { size: 12, color: 'var(--color-text-secondary)', family: 'DM Sans, sans-serif' } },
-        range: [selectedWlMin - singleWlPadding, selectedWlMax + singleWlPadding],
+        range: userXRange ?? defaultXRange,
         gridcolor: 'var(--color-border-subtle)',
         zerolinecolor: 'var(--color-border-subtle)',
         tickfont: { size: 10, color: 'var(--color-text-tertiary)', family: 'DM Mono, monospace' },
@@ -956,9 +996,7 @@ function buildPlotData(
         gridcolor: 'var(--color-border-subtle)',
         zerolinecolor: 'var(--color-border-subtle)',
         tickfont: { size: 10, color: 'var(--color-text-tertiary)', family: 'DM Mono, monospace' },
-        range: logFluxY
-          ? [Math.log10(Math.max(fluxMin, 0.001)), Math.log10(fluxMax * 1.1)]
-          : [fluxMin - fluxPadding, fluxMax + fluxPadding],
+        range: userYRange ?? defaultYRange,
       },
       annotations: allAnnotations,
       shapes,
@@ -1036,19 +1074,25 @@ function buildPlotData(
   });
 
   // ── Feature markers (waterfall mode) ──────────────────────────────────
+  const wfEffectiveWlMin = userXRange ? userXRange[0] : globalWlMin;
+  const wfEffectiveWlMax = userXRange ? userXRange[1] : globalWlMax;
+  const wfEffectiveYMin = userYRange ? userYRange[0] : waterfallYMin;
+  const wfEffectiveYMax = userYRange ? userYRange[1] : waterfallYMax;
   addFeatureMarkers(
     activeFeatureGroups, traces, shapes,
-    globalWlMin, globalWlMax,
-    waterfallYMin, waterfallYMax,
+    wfEffectiveWlMin, wfEffectiveWlMax,
+    wfEffectiveYMin, wfEffectiveYMax,
   );
 
   const wlPadding = (globalWlMax - globalWlMin) * 0.02;
   const rightMargin = effectiveFormat === 'calendar' ? 110 : 80;
+  const defaultWfXRange: [number, number] = [globalWlMin - wlPadding, globalWlMax + wlPadding];
+  const defaultWfYRange: [number, number] = [waterfallYMin, waterfallYMax];
 
   const layout = {
     xaxis: {
       title: { text: 'Wavelength (nm)', font: { size: 12, color: 'var(--color-text-secondary)', family: 'DM Sans, sans-serif' } },
-      range: [globalWlMin - wlPadding, globalWlMax + wlPadding],
+      range: userXRange ?? defaultWfXRange,
       gridcolor: 'var(--color-border-subtle)',
       zerolinecolor: 'var(--color-border-subtle)',
       tickfont: { size: 10, color: 'var(--color-text-tertiary)', family: 'DM Mono, monospace' },
@@ -1057,7 +1101,7 @@ function buildPlotData(
       showticklabels: false,
       gridcolor: 'var(--color-border-subtle)',
       zerolinecolor: 'var(--color-border-subtle)',
-      range: [waterfallYMin, waterfallYMax],
+      range: userYRange ?? defaultWfYRange,
     },
     annotations: allAnnotations,
     shapes,
