@@ -805,3 +805,79 @@ class TestEsoFallbackProfileSnrExtraction:
         assert result.success is True
         assert result.spectrum is not None
         assert result.spectrum.snr is None
+
+    def test_snr_extracted_from_snr_reduced_column(self, profile: EsoFallbackProfile) -> None:
+        """BinTable has SNR_REDUCED but no SNR column → median of SNR_REDUCED."""
+        wave = _make_wave_angstrom()
+        flux = _make_flux()
+        n = len(wave)
+        snr_data = np.linspace(5.0, 35.0, n)
+        expected_median = float(np.median(snr_data))
+
+        cols = [
+            fits.Column(name="WAVE", format=f"{n}D", unit="angstrom", array=wave.reshape(1, n)),
+            fits.Column(name="FLUX", format=f"{n}E", unit="adu", array=flux.reshape(1, n)),
+            fits.Column(name="ERR", format=f"{n}E", unit="adu", array=(flux * 0.05).reshape(1, n)),
+            fits.Column(name="SNR_REDUCED", format=f"{n}D", unit="", array=snr_data.reshape(1, n)),
+        ]
+        hdu = fits.BinTableHDU.from_columns(cols)
+        hdu.name = "SPECTRUM"
+        hdulist = _make_hdulist(spectrum_hdu=hdu)
+        result = profile.validate(hdulist, _product_metadata())
+        assert result.success is True
+        assert result.spectrum is not None
+        assert result.spectrum.snr is not None
+        assert abs(result.spectrum.snr - expected_median) < 0.01
+
+    def test_snr_header_fallback_when_no_column(self, profile: EsoFallbackProfile) -> None:
+        """No SNR column in BinTable, but HDU[0] header has SNR keyword."""
+        header = _make_primary_header(SNR=42.5)
+        hdulist = _make_hdulist(primary_header=header)
+        result = profile.validate(hdulist, _product_metadata())
+        assert result.success is True
+        assert result.spectrum is not None
+        assert result.spectrum.snr is not None
+        assert abs(result.spectrum.snr - 42.5) < 0.01
+
+    def test_snr_header_fallback_adds_normalization_note(self, profile: EsoFallbackProfile) -> None:
+        """Header SNR fallback must add a normalization note."""
+        header = _make_primary_header(SNR=42.5)
+        hdulist = _make_hdulist(primary_header=header)
+        result = profile.validate(hdulist, _product_metadata())
+        assert result.success is True
+        assert any("HDU[0] header keyword" in note for note in result.normalization_notes)
+
+    def test_snr_column_preferred_over_header(self, profile: EsoFallbackProfile) -> None:
+        """BinTable SNR column takes priority over HDU[0] header SNR keyword."""
+        wave = _make_wave_angstrom()
+        flux = _make_flux()
+        n = len(wave)
+        snr_data = np.linspace(8.0, 40.0, n)
+        expected_median = float(np.median(snr_data))
+
+        cols = [
+            fits.Column(name="WAVE", format=f"{n}D", unit="angstrom", array=wave.reshape(1, n)),
+            fits.Column(name="FLUX", format=f"{n}E", unit="adu", array=flux.reshape(1, n)),
+            fits.Column(name="ERR", format=f"{n}E", unit="adu", array=(flux * 0.05).reshape(1, n)),
+            fits.Column(name="SNR", format=f"{n}D", unit="", array=snr_data.reshape(1, n)),
+        ]
+        hdu = fits.BinTableHDU.from_columns(cols)
+        hdu.name = "SPECTRUM"
+        header = _make_primary_header(SNR=999.0)
+        hdulist = _make_hdulist(primary_header=header, spectrum_hdu=hdu)
+        result = profile.validate(hdulist, _product_metadata())
+        assert result.success is True
+        assert result.spectrum is not None
+        assert result.spectrum.snr is not None
+        assert abs(result.spectrum.snr - expected_median) < 0.01
+        assert result.spectrum.snr != 999.0
+
+    def test_snr_none_when_no_column_and_no_header(self, profile: EsoFallbackProfile) -> None:
+        """No SNR column and no SNR header keyword → snr is None."""
+        header = _make_primary_header()
+        assert "SNR" not in header
+        hdulist = _make_hdulist(primary_header=header)
+        result = profile.validate(hdulist, _product_metadata())
+        assert result.success is True
+        assert result.spectrum is not None
+        assert result.spectrum.snr is None

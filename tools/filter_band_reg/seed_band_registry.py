@@ -12,6 +12,7 @@ Usage::
     python tools/filter_band_reg/seed_band_registry.py --output /path/to/band_registry.json
     python tools/filter_band_reg/seed_band_registry.py --dry-run
     python tools/filter_band_reg/seed_band_registry.py --specs /alt/band_specs.json
+    python tools/filter_band_reg/seed_band_registry.py --local-db /path/to/svo_fps.db
 
 By default the script loads band definitions from ``band_specs.json`` in the
 same directory as this script.  Use ``--specs`` to override.
@@ -42,6 +43,11 @@ Design notes
   emitted and a WARNING is logged.  Sparse entries have ``null`` for all
   SVO-derived fields.  Review them before committing.
 
+* If ``--local-db`` is provided, the local ``svo_fps.db`` SQLite database
+  is tried as a fallback when the remote SVO API fails for a candidate.
+  This supports custom or locally-added filter profiles (e.g.
+  ``Generic/Cousins.R``) that are not in the public SVO database.
+
 * Intentionally-sparse entries (those with ``"sparse": true`` in
   band_specs.json, e.g. ``Generic_K``, ``Open``) bypass SVO lookup entirely
   and do not trigger the failure log.
@@ -66,6 +72,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sqlite3
 import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -352,6 +359,81 @@ def _query_svo_for_filter(
 
 
 # ---------------------------------------------------------------------------
+# Local SVO database fallback (svo_fps.db)
+# ---------------------------------------------------------------------------
+
+# Set via --local-db CLI arg; None means local fallback is disabled.
+_local_db_path: Path | None = None
+
+# Column name mapping: local SQLite → SVO AstropyTable column names
+_LOCAL_TO_SVO_COLUMNS: dict[str, str] = {
+    "filter_name": "filterID",
+    "wavelength_eff": "WavelengthEff",
+    "wavelength_mean": "WavelengthMean",
+    "wavelength_pivot": "WavelengthPivot",
+    "wavelength_min": "WavelengthMin",
+    "wavelength_max": "WavelengthMax",
+    "fwhm": "FWHM",
+    "width_eff": "WidthEff",
+    "detector_type": "DetectorType",
+    "zero_point": "ZeroPoint",
+    "mag_sys": "MagSys",
+    "phot_cal_id": "PhotCalID",
+    "zero_point_type": "ZeroPointType",
+}
+
+
+def _query_local_db(filter_id: str) -> AstropyTable | None:
+    """
+    Query the local svo_fps.db for a filter by its filterID.
+
+    Returns an AstropyTable with SVO-compatible column names so that
+    ``_build_entry_from_svo`` can consume it without changes.
+    Returns ``None`` if the local db is not configured or the filter
+    is not found.
+    """
+    if _local_db_path is None:
+        return None
+
+    try:
+        conn = sqlite3.connect(str(_local_db_path))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.execute(
+            "SELECT * FROM filters WHERE filter_name = ?",
+            (filter_id,),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+    except Exception as exc:
+        log.warning("Local DB query failed for %s: %s", filter_id, exc)
+        return None
+
+    if not rows:
+        log.debug("Local DB: no rows for filterID=%s", filter_id)
+        return None
+
+    # Convert SQLite rows to dicts with SVO column names
+    svo_rows: list[dict[str, Any]] = []
+    for row in rows:
+        svo_row: dict[str, Any] = {}
+        row_dict = dict(row)
+        for local_col, svo_col in _LOCAL_TO_SVO_COLUMNS.items():
+            if local_col in row_dict:
+                svo_row[svo_col] = row_dict[local_col]
+        svo_rows.append(svo_row)
+
+    # Wrap in an AstropyTable for compatibility with _build_entry_from_svo
+    table = AstropyTable(rows=svo_rows)
+    log.info(
+        "Local DB: found %d row%s for filterID=%s",
+        len(table),
+        "s" if len(table) != 1 else "",
+        filter_id,
+    )
+    return table
+
+
+# ---------------------------------------------------------------------------
 # Value extraction helpers
 # ---------------------------------------------------------------------------
 
@@ -604,7 +686,29 @@ def _fetch_band(spec: BandSpec) -> tuple[dict[str, Any], bool]:
             )
             return entry, True
 
-    # All candidates exhausted
+    # All remote SVO candidates exhausted — try local db fallback
+    if _local_db_path is not None:
+        for candidate in spec.svo_candidates:
+            filter_id = candidate["filter_id"]
+            log.info(
+                "%-30s  trying local DB: %s",
+                spec.band_id,
+                filter_id,
+            )
+            local_rows = _query_local_db(filter_id)
+            if local_rows is not None:
+                entry = _build_entry_from_svo(spec, local_rows)
+                matched_id = entry.get("svo_filter_id") or filter_id
+                log.info(
+                    "%-30s  ✓ matched %s from local DB  (%d cal row%s)",
+                    spec.band_id,
+                    matched_id,
+                    len(local_rows),
+                    "s" if len(local_rows) != 1 else "",
+                )
+                return entry, True
+
+    # All candidates exhausted (remote + local)
     filter_ids = [c["filter_id"] for c in spec.svo_candidates]
     log.warning(
         "%-30s  ✗ SVO lookup failed (tried %s) — sparse entry emitted",
@@ -689,6 +793,14 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Enable debug logging",
     )
+    parser.add_argument(
+        "--local-db",
+        default=None,
+        help=(
+            "Path to a local svo_fps.db SQLite database. "
+            "Used as a fallback when the remote SVO API fails for a candidate filter ID."
+        ),
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -696,6 +808,16 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)-8s %(message)s",
         stream=sys.stderr,
     )
+
+    # ── Configure local DB fallback ────────────────────────────────────
+    global _local_db_path  # noqa: PLW0603
+    if args.local_db:
+        db_path = Path(args.local_db)
+        if not db_path.exists():
+            log.error("Local DB not found: %s", db_path)
+            return 1
+        _local_db_path = db_path
+        log.info("Local DB fallback enabled: %s", _local_db_path)
 
     # ── Load band specs ─────────────────────────────────────────────────
     specs_path = Path(args.specs) if args.specs else _DEFAULT_SPECS_PATH
