@@ -58,6 +58,7 @@ const RIGHT_ALIGNED_COLUMNS = new Set([
   'ra_dec',
   'discovery_date',
   'spectra_count',
+  'spectral_visits',
   'photometry_count',
   'references_count',
   'light_curve',
@@ -279,6 +280,21 @@ export function CatalogTable({
             {getValue<number>()}
           </span>
         ),
+      },
+
+      // ── Spectral visits (distinct observation nights) ──────────────────
+      {
+        accessorKey: 'spectral_visits',
+        header: 'Visits',
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const count = getValue<number>();
+          return (
+            <span className="font-mono tabular-nums text-[var(--color-text-primary)]">
+              {count === 0 ? '—' : count}
+            </span>
+          );
+        },
       },
 
       // ── Photometry count ───────────────────────────────────────────────

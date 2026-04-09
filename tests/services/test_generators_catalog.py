@@ -112,6 +112,7 @@ def _seed_nova(
     photometry_count: int | None = None,
     references_count: int | None = None,
     has_sparkline: bool | None = None,
+    spectral_visits: int | None = None,
 ) -> None:
     """Write a Nova item to the mocked table."""
     item: dict[str, Any] = {
@@ -134,6 +135,8 @@ def _seed_nova(
         item["references_count"] = references_count
     if has_sparkline is not None:
         item["has_sparkline"] = has_sparkline
+    if spectral_visits is not None:
+        item["spectral_visits"] = spectral_visits
     table.put_item(Item=item)
 
 
@@ -145,6 +148,7 @@ def _nova_result(
     photometry_count: int | None = 12,
     references_count: int | None = 3,
     has_sparkline: bool | None = True,
+    spectral_visits: int | None = 2,
     error: str | None = None,
 ) -> NovaResult:
     """Build a NovaResult for the sweep overlay."""
@@ -161,6 +165,7 @@ def _nova_result(
         photometry_count=photometry_count,
         references_count=references_count,
         has_sparkline=has_sparkline,
+        spectral_visits=spectral_visits,
     )
 
 
@@ -583,6 +588,7 @@ class TestRecordFields:
             "dec",
             "discovery_date",
             "spectra_count",
+            "spectral_visits",
             "photometry_count",
             "references_count",
             "has_sparkline",
@@ -599,3 +605,42 @@ class TestRecordFields:
         assert "status" not in nova
         assert "ra_deg" not in nova
         assert "dec_deg" not in nova
+
+
+# ===========================================================================
+# spectral_visits field
+# ===========================================================================
+
+
+class TestSpectralVisits:
+    """spectral_visits flows through DDB and sweep overlay correctly."""
+
+    def test_ddb_spectral_visits_used_for_unswepped_nova(self, table: Any) -> None:
+        """Non-swept nova reads spectral_visits from DDB item."""
+        _seed_nova(table, _NOVA_A, spectra_count=6, spectral_visits=3)
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["spectral_visits"] == 3
+
+    def test_sweep_overlay_spectral_visits(self, table: Any) -> None:
+        """Swept nova uses in-memory spectral_visits from NovaResult."""
+        _seed_nova(table, _NOVA_A, spectra_count=1, spectral_visits=1)
+        sweep = [_nova_result(_NOVA_A, spectra_count=6, spectral_visits=3)]
+        result = generate_catalog_json(sweep, table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["spectral_visits"] == 3
+
+    def test_missing_spectral_visits_defaults_to_zero(self, table: Any) -> None:
+        """Nova DDB item without spectral_visits field → 0."""
+        _seed_nova(table, _NOVA_A)  # No spectral_visits seeded.
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["spectral_visits"] == 0
+
+    def test_failed_sweep_falls_back_to_ddb(self, table: Any) -> None:
+        """Failed sweep result uses DDB spectral_visits, not overlay."""
+        _seed_nova(table, _NOVA_A, spectral_visits=5)
+        sweep = [_nova_result(_NOVA_A, success=False)]
+        result = generate_catalog_json(sweep, table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["spectral_visits"] == 5

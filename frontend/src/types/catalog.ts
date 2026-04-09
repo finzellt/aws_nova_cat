@@ -46,6 +46,9 @@ export interface NovaSummary {
   /** Count of validated spectra. Default sort key (descending). */
   spectra_count: number;
 
+  /** Count of distinct observation nights with spectra. */
+  spectral_visits: number;
+
   /**
    * Count of photometric observations.
    * Value is 0 (not null) when none are available; the table renders `—` for 0.
