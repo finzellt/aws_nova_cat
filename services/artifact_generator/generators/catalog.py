@@ -109,6 +109,7 @@ def _build_sweep_overlay(
             photometry_count=result.photometry_count or 0,
             references_count=result.references_count or 0,
             has_sparkline=result.has_sparkline or False,
+            spectral_visits=result.spectral_visits or 0,
         )
     return overlay
 
@@ -121,6 +122,7 @@ class _SweepCounts:
         "photometry_count",
         "references_count",
         "spectra_count",
+        "spectral_visits",
     )
 
     def __init__(
@@ -130,11 +132,13 @@ class _SweepCounts:
         photometry_count: int,
         references_count: int,
         has_sparkline: bool,
+        spectral_visits: int,
     ) -> None:
         self.spectra_count = spectra_count
         self.photometry_count = photometry_count
         self.references_count = references_count
         self.has_sparkline = has_sparkline
+        self.spectral_visits = spectral_visits
 
 
 # ---------------------------------------------------------------------------
@@ -211,11 +215,13 @@ def _merge_records(
             photometry_count = overlay.photometry_count
             references_count = overlay.references_count
             has_sparkline = overlay.has_sparkline
+            spectral_visits = overlay.spectral_visits
         else:
             spectra_count = _to_int(item.get("spectra_count", 0))
             photometry_count = _to_int(item.get("photometry_count", 0))
             references_count = _to_int(item.get("references_count", 0))
             has_sparkline = bool(item.get("has_sparkline", False))
+            spectral_visits = _to_int(item.get("spectral_visits", 0))
 
         # Coordinate formatting (§5.3).
         ra_str, dec_str = format_coordinates(
@@ -236,6 +242,7 @@ def _merge_records(
                 "photometry_count": photometry_count,
                 "references_count": references_count,
                 "has_sparkline": has_sparkline,
+                "spectral_visits": spectral_visits,
             }
         )
 

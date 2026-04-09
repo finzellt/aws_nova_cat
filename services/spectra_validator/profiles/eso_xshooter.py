@@ -164,16 +164,31 @@ class EsoXShooterProfile:
 
         # Extract SNR (best-effort — not all products have this column)
         _snr_value: float | None = None
-        col_names_upper = {c.name.upper() for c in spectrum_hdu.columns}
-        if "SNR" in col_names_upper:
-            try:
-                snr_col = spectrum_hdu.data["SNR"]
+        try:
+            col_names_upper = {c.name.upper() for c in spectrum_hdu.columns}
+            _snr_col_name: str | None = None
+            for _alias in ("SNR", "SNR_REDUCED", "SNR_MED", "SNR_MEAN"):
+                if _alias in col_names_upper:
+                    _snr_col_name = _alias
+                    break
+            if _snr_col_name is not None:
+                snr_col = spectrum_hdu.data[_snr_col_name]
                 snr_arr = np.asarray(snr_col, dtype=float).ravel()
                 finite_snr = snr_arr[np.isfinite(snr_arr)]
                 if len(finite_snr) > 0:
                     _snr_value = float(np.median(finite_snr))
-            except Exception:
-                pass  # SNR extraction is best-effort
+            else:
+                _hdr_snr = hdulist[0].header.get("SNR")
+                if _hdr_snr is not None:
+                    _hdr_snr_f = float(_hdr_snr)
+                    if math.isfinite(_hdr_snr_f):
+                        _snr_value = _hdr_snr_f
+                        notes.append(
+                            "SNR: extracted from HDU[0] header keyword"
+                            " (no BinTable SNR column found)."
+                        )
+        except Exception:
+            pass  # SNR extraction is best-effort
 
         # ----------------------------------------------------------------
         # 3. Extract required header metadata

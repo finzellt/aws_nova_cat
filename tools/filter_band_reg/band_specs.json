@@ -39,13 +39,19 @@
     {
       "_comment": "── Johnson-Cousins (Bessell reference profiles) ──────────────────────",
       "band_id": "HCT_HFOSC_Bessell_U",
-      "aliases": ["HCT_HFOSC_Bessell_U"],
+      "aliases": [
+        "HCT_HFOSC_Bessell_U"
+      ],
       "band_name": "U",
       "regime": "optical",
       "observatory_facility": "HCT",
       "instrument": "HFOSC",
       "svo_candidates": [
-        {"filter_id": "HCT/HFOSC.Bessell_U", "facility": "HCT", "instrument": "HFOSC"}
+        {
+          "filter_id": "HCT/HFOSC.Bessell_U",
+          "facility": "HCT",
+          "instrument": "HFOSC"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -54,14 +60,24 @@
     },
     {
       "band_id": "HCT_HFOSC_Bessell_B",
-      "aliases": ["HCT_HFOSC_Bessell_B"],
+      "aliases": [
+        "HCT_HFOSC_Bessell_B"
+      ],
       "band_name": "B",
       "regime": "optical",
       "observatory_facility": "HCT",
       "instrument": "HFOSC",
       "svo_candidates": [
-        {"filter_id": "HCT/HFOSC.Bessell_B", "facility": "HCT", "instrument": "HFOSC"},
-        {"filter_id": "OAF/Bessell.B", "facility": "OAF", "instrument": "Bessell"}
+        {
+          "filter_id": "HCT/HFOSC.Bessell_B",
+          "facility": "HCT",
+          "instrument": "HFOSC"
+        },
+        {
+          "filter_id": "OAF/Bessell.B",
+          "facility": "OAF",
+          "instrument": "Bessell"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -70,14 +86,24 @@
     },
     {
       "band_id": "HCT_HFOSC_Bessell_V",
-      "aliases": ["HCT_HFOSC_Bessell_V"],
+      "aliases": [
+        "HCT_HFOSC_Bessell_V"
+      ],
       "band_name": "V",
       "regime": "optical",
       "observatory_facility": "HCT",
       "instrument": "HFOSC",
       "svo_candidates": [
-        {"filter_id": "HCT/HFOSC.Bessell_V", "facility": "HCT", "instrument": "HFOSC"},
-        {"filter_id": "OAF/Bessell.V", "facility": "OAF", "instrument": "Bessell"}
+        {
+          "filter_id": "HCT/HFOSC.Bessell_V",
+          "facility": "HCT",
+          "instrument": "HFOSC"
+        },
+        {
+          "filter_id": "OAF/Bessell.V",
+          "facility": "OAF",
+          "instrument": "Bessell"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -86,14 +112,24 @@
     },
     {
       "band_id": "HCT_HFOSC_Bessell_R",
-      "aliases": ["HCT_HFOSC_Bessell_R"],
+      "aliases": [
+        "HCT_HFOSC_Bessell_R"
+      ],
       "band_name": "R",
       "regime": "optical",
       "observatory_facility": "HCT",
       "instrument": "HFOSC",
       "svo_candidates": [
-        {"filter_id": "HCT/HFOSC.Bessell_R", "facility": "HCT", "instrument": "HFOSC"},
-        {"filter_id": "OAF/Bessell.R", "facility": "OAF", "instrument": "Bessell"}
+        {
+          "filter_id": "HCT/HFOSC.Bessell_R",
+          "facility": "HCT",
+          "instrument": "HFOSC"
+        },
+        {
+          "filter_id": "OAF/Bessell.R",
+          "facility": "OAF",
+          "instrument": "Bessell"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -102,31 +138,48 @@
     },
     {
       "band_id": "HCT_HFOSC_Bessell_I",
-      "aliases": ["HCT_HFOSC_Bessell_I"],
+      "aliases": [
+        "HCT_HFOSC_Bessell_I"
+      ],
       "band_name": "I",
       "regime": "optical",
       "observatory_facility": "HCT",
       "instrument": "HFOSC",
       "svo_candidates": [
-        {"filter_id": "HCT/HFOSC.Bessell_I", "facility": "HCT", "instrument": "HFOSC"},
-        {"filter_id": "OAF/Bessell.I", "facility": "OAF", "instrument": "Bessell"}
+        {
+          "filter_id": "HCT/HFOSC.Bessell_I",
+          "facility": "HCT",
+          "instrument": "HFOSC"
+        },
+        {
+          "filter_id": "OAF/Bessell.I",
+          "facility": "OAF",
+          "instrument": "Bessell"
+        }
       ],
       "sparse": false,
       "excluded": false,
       "exclusion_reason": null,
       "lambda_eff_hint": null
     },
-
     {
       "_comment": "── Sloan unprimed ────────────────────────────────────────────────────",
       "band_id": "SLOAN_SDSS_u",
-      "aliases": ["SLOAN_SDSS_u", "Sloan_u", "u"],
+      "aliases": [
+        "SLOAN_SDSS_u",
+        "Sloan_u",
+        "u"
+      ],
       "band_name": "u",
       "regime": "optical",
       "observatory_facility": "SLOAN",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "SLOAN/SDSS.u", "facility": "SLOAN", "instrument": null}
+        {
+          "filter_id": "SLOAN/SDSS.u",
+          "facility": "SLOAN",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -135,13 +188,21 @@
     },
     {
       "band_id": "SLOAN_SDSS_g",
-      "aliases": ["SLOAN_SDSS_g", "Sloan_g", "g"],
+      "aliases": [
+        "SLOAN_SDSS_g",
+        "Sloan_g",
+        "g"
+      ],
       "band_name": "g",
       "regime": "optical",
       "observatory_facility": "SLOAN",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "SLOAN/SDSS.g", "facility": "SLOAN", "instrument": null}
+        {
+          "filter_id": "SLOAN/SDSS.g",
+          "facility": "SLOAN",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -150,13 +211,21 @@
     },
     {
       "band_id": "SLOAN_SDSS_r",
-      "aliases": ["SLOAN_SDSS_r", "Sloan_r", "r"],
+      "aliases": [
+        "SLOAN_SDSS_r",
+        "Sloan_r",
+        "r"
+      ],
       "band_name": "r",
       "regime": "optical",
       "observatory_facility": "SLOAN",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "SLOAN/SDSS.r", "facility": "SLOAN", "instrument": null}
+        {
+          "filter_id": "SLOAN/SDSS.r",
+          "facility": "SLOAN",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -165,13 +234,21 @@
     },
     {
       "band_id": "SLOAN_SDSS_i",
-      "aliases": ["SLOAN_SDSS_i", "Sloan_i", "i"],
+      "aliases": [
+        "SLOAN_SDSS_i",
+        "Sloan_i",
+        "i"
+      ],
       "band_name": "i",
       "regime": "optical",
       "observatory_facility": "SLOAN",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "SLOAN/SDSS.i", "facility": "SLOAN", "instrument": null}
+        {
+          "filter_id": "SLOAN/SDSS.i",
+          "facility": "SLOAN",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -180,30 +257,45 @@
     },
     {
       "band_id": "SLOAN_SDSS_z",
-      "aliases": ["SLOAN_SDSS_z", "Sloan_z", "z_s"],
+      "aliases": [
+        "SLOAN_SDSS_z",
+        "Sloan_z",
+        "z_s"
+      ],
       "band_name": "z",
       "regime": "optical",
       "observatory_facility": "SLOAN",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "SLOAN/SDSS.z", "facility": "SLOAN", "instrument": null}
+        {
+          "filter_id": "SLOAN/SDSS.z",
+          "facility": "SLOAN",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
       "exclusion_reason": null,
       "lambda_eff_hint": null
     },
-
     {
       "_comment": "── Sloan primed ──────────────────────────────────────────────────────",
       "band_id": "SLOAN_SDSS_up",
-      "aliases": ["SLOAN_SDSS_up", "Sloan_up", "up"],
+      "aliases": [
+        "SLOAN_SDSS_up",
+        "Sloan_up",
+        "up"
+      ],
       "band_name": "u'",
       "regime": "optical",
       "observatory_facility": "SLOAN",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "SLOAN/SDSS.up", "facility": "SLOAN", "instrument": null}
+        {
+          "filter_id": "SLOAN/SDSS.up",
+          "facility": "SLOAN",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -212,13 +304,21 @@
     },
     {
       "band_id": "SLOAN_SDSS_gp",
-      "aliases": ["SLOAN_SDSS_gp", "Sloan_gp", "gp"],
+      "aliases": [
+        "SLOAN_SDSS_gp",
+        "Sloan_gp",
+        "gp"
+      ],
       "band_name": "g'",
       "regime": "optical",
       "observatory_facility": "SLOAN",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "SLOAN/SDSS.gp", "facility": "SLOAN", "instrument": null}
+        {
+          "filter_id": "SLOAN/SDSS.gp",
+          "facility": "SLOAN",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -227,13 +327,21 @@
     },
     {
       "band_id": "SLOAN_SDSS_rp",
-      "aliases": ["SLOAN_SDSS_rp", "Sloan_rp", "rp"],
+      "aliases": [
+        "SLOAN_SDSS_rp",
+        "Sloan_rp",
+        "rp"
+      ],
       "band_name": "r'",
       "regime": "optical",
       "observatory_facility": "SLOAN",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "SLOAN/SDSS.rp", "facility": "SLOAN", "instrument": null}
+        {
+          "filter_id": "SLOAN/SDSS.rp",
+          "facility": "SLOAN",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -242,31 +350,44 @@
     },
     {
       "band_id": "SLOAN_SDSS_ip",
-      "aliases": ["SLOAN_SDSS_ip", "Sloan_ip", "ip"],
+      "aliases": [
+        "SLOAN_SDSS_ip",
+        "Sloan_ip",
+        "ip"
+      ],
       "band_name": "i'",
       "regime": "optical",
       "observatory_facility": "SLOAN",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "SLOAN/SDSS.ip", "facility": "SLOAN", "instrument": null}
+        {
+          "filter_id": "SLOAN/SDSS.ip",
+          "facility": "SLOAN",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
       "exclusion_reason": null,
       "lambda_eff_hint": null
     },
-
     {
       "_comment": "── 2MASS ─────────────────────────────────────────────────────────────",
       "_comment2": "Redundancy collapse: 2MASS/2MASS.J → 2MASS_J. Bare J and H aliases moved to Generic entries.",
       "band_id": "2MASS_J",
-      "aliases": ["2MASS_J"],
+      "aliases": [
+        "2MASS_J"
+      ],
       "band_name": "J",
       "regime": "nir",
       "observatory_facility": "2MASS",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "2MASS/2MASS.J", "facility": "2MASS", "instrument": null}
+        {
+          "filter_id": "2MASS/2MASS.J",
+          "facility": "2MASS",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -275,13 +396,19 @@
     },
     {
       "band_id": "2MASS_H",
-      "aliases": ["2MASS_H"],
+      "aliases": [
+        "2MASS_H"
+      ],
       "band_name": "H",
       "regime": "nir",
       "observatory_facility": "2MASS",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "2MASS/2MASS.H", "facility": "2MASS", "instrument": null}
+        {
+          "filter_id": "2MASS/2MASS.H",
+          "facility": "2MASS",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -291,30 +418,44 @@
     {
       "_comment": "Ks is unambiguous (only 2MASS uses this label), so the bare alias stays here.",
       "band_id": "2MASS_Ks",
-      "aliases": ["2MASS_Ks", "Ks"],
+      "aliases": [
+        "2MASS_Ks",
+        "Ks"
+      ],
       "band_name": "Ks",
       "regime": "nir",
       "observatory_facility": "2MASS",
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "2MASS/2MASS.Ks", "facility": "2MASS", "instrument": null}
+        {
+          "filter_id": "2MASS/2MASS.Ks",
+          "facility": "2MASS",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
       "exclusion_reason": null,
       "lambda_eff_hint": null
     },
-
     {
       "_comment": "── Swift UVOT ────────────────────────────────────────────────────────",
       "band_id": "Swift_UVOT_UVW1",
-      "aliases": ["Swift_UVOT_UVW1", "UVOT_UVW1", "uvw1"],
+      "aliases": [
+        "Swift_UVOT_UVW1",
+        "UVOT_UVW1",
+        "uvw1"
+      ],
       "band_name": "UVW1",
       "regime": "uv",
       "observatory_facility": "Swift",
       "instrument": "UVOT",
       "svo_candidates": [
-        {"filter_id": "Swift/UVOT.UVW1", "facility": "Swift", "instrument": "UVOT"}
+        {
+          "filter_id": "Swift/UVOT.UVW1",
+          "facility": "Swift",
+          "instrument": "UVOT"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -323,13 +464,21 @@
     },
     {
       "band_id": "Swift_UVOT_UVW2",
-      "aliases": ["Swift_UVOT_UVW2", "UVOT_UVW2", "uvw2"],
+      "aliases": [
+        "Swift_UVOT_UVW2",
+        "UVOT_UVW2",
+        "uvw2"
+      ],
       "band_name": "UVW2",
       "regime": "uv",
       "observatory_facility": "Swift",
       "instrument": "UVOT",
       "svo_candidates": [
-        {"filter_id": "Swift/UVOT.UVW2", "facility": "Swift", "instrument": "UVOT"}
+        {
+          "filter_id": "Swift/UVOT.UVW2",
+          "facility": "Swift",
+          "instrument": "UVOT"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -338,48 +487,76 @@
     },
     {
       "band_id": "Swift_UVOT_UVM2",
-      "aliases": ["Swift_UVOT_UVM2", "UVOT_UVM2", "uvm2", "UVM2"],
+      "aliases": [
+        "Swift_UVOT_UVM2",
+        "UVOT_UVM2",
+        "uvm2",
+        "UVM2"
+      ],
       "band_name": "UVM2",
       "regime": "uv",
       "observatory_facility": "Swift",
       "instrument": "UVOT",
       "svo_candidates": [
-        {"filter_id": "Swift/UVOT.UVM2", "facility": "Swift", "instrument": "UVOT"}
+        {
+          "filter_id": "Swift/UVOT.UVM2",
+          "facility": "Swift",
+          "instrument": "UVOT"
+        }
       ],
       "sparse": false,
       "excluded": false,
       "exclusion_reason": null,
       "lambda_eff_hint": null
     },
-
     {
       "_comment": "── HST ───────────────────────────────────────────────────────────────",
       "band_id": "HST_WFC3_UVIS2_F555W",
-      "aliases": ["HST_WFC3_UVIS2_F555W", "HST_F555W", "F555W"],
+      "aliases": [
+        "HST_WFC3_UVIS2_F555W",
+        "HST_F555W",
+        "F555W"
+      ],
       "band_name": "F555W",
       "regime": "optical",
       "observatory_facility": "HST",
       "instrument": "WFC3_UVIS2",
       "svo_candidates": [
-        {"filter_id": "HST/WFC3_UVIS2.F555W", "facility": "HST", "instrument": "WFC3_UVIS2"},
-        {"filter_id": "HST/WFPC2.F555W", "facility": "HST", "instrument": "WFPC2"}
+        {
+          "filter_id": "HST/WFC3_UVIS2.F555W",
+          "facility": "HST",
+          "instrument": "WFC3_UVIS2"
+        },
+        {
+          "filter_id": "HST/WFPC2.F555W",
+          "facility": "HST",
+          "instrument": "WFPC2"
+        }
       ],
       "sparse": false,
       "excluded": false,
       "exclusion_reason": null,
       "lambda_eff_hint": null
     },
-
     {
       "_comment": "── Spitzer IRAC ──────────────────────────────────────────────────────",
       "band_id": "Spitzer_IRAC_I1",
-      "aliases": ["Spitzer_IRAC_I1", "Spitzer_IRAC1", "[3.6]", "3.6"],
+      "aliases": [
+        "Spitzer_IRAC_I1",
+        "Spitzer_IRAC1",
+        "[3.6]",
+        "3.6"
+      ],
       "band_name": "[3.6]",
       "regime": "mir",
       "observatory_facility": "Spitzer",
       "instrument": "IRAC",
       "svo_candidates": [
-        {"filter_id": "Spitzer/IRAC.I1", "facility": "Spitzer", "instrument": "IRAC"}
+        {
+          "filter_id": "Spitzer/IRAC.I1",
+          "facility": "Spitzer",
+          "instrument": "IRAC"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -388,20 +565,28 @@
     },
     {
       "band_id": "Spitzer_IRAC_I2",
-      "aliases": ["Spitzer_IRAC_I2", "Spitzer_IRAC2", "[4.5]", "4.5"],
+      "aliases": [
+        "Spitzer_IRAC_I2",
+        "Spitzer_IRAC2",
+        "[4.5]",
+        "4.5"
+      ],
       "band_name": "[4.5]",
       "regime": "mir",
       "observatory_facility": "Spitzer",
       "instrument": "IRAC",
       "svo_candidates": [
-        {"filter_id": "Spitzer/IRAC.I2", "facility": "Spitzer", "instrument": "IRAC"}
+        {
+          "filter_id": "Spitzer/IRAC.I2",
+          "facility": "Spitzer",
+          "instrument": "IRAC"
+        }
       ],
       "sparse": false,
       "excluded": false,
       "exclusion_reason": null,
       "lambda_eff_hint": null
     },
-
     {
       "_comment": [
         "── Generic fallback entries ─────────────────────────────────────────",
@@ -414,13 +599,21 @@
         "See: ADR-017 amendment § Alias Ownership Invariant"
       ],
       "band_id": "Generic_U",
-      "aliases": ["Generic_U", "Johnson_U", "U"],
+      "aliases": [
+        "Generic_U",
+        "Johnson_U",
+        "U"
+      ],
       "band_name": "U",
       "regime": "optical",
       "observatory_facility": null,
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "HCT/HFOSC.Bessell_U", "facility": "HCT", "instrument": "HFOSC"}
+        {
+          "filter_id": "HCT/HFOSC.Bessell_U",
+          "facility": "HCT",
+          "instrument": "HFOSC"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -429,13 +622,21 @@
     },
     {
       "band_id": "Generic_B",
-      "aliases": ["Generic_B", "Johnson_B", "B"],
+      "aliases": [
+        "Generic_B",
+        "Johnson_B",
+        "B"
+      ],
       "band_name": "B",
       "regime": "optical",
       "observatory_facility": null,
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "HCT/HFOSC.Bessell_B", "facility": "HCT", "instrument": "HFOSC"}
+        {
+          "filter_id": "HCT/HFOSC.Bessell_B",
+          "facility": "HCT",
+          "instrument": "HFOSC"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -444,13 +645,23 @@
     },
     {
       "band_id": "Generic_V",
-      "aliases": ["Generic_V", "Johnson_V", "V", "Johnson V", "Vmag"],
+      "aliases": [
+        "Generic_V",
+        "Johnson_V",
+        "V",
+        "Johnson V",
+        "Vmag"
+      ],
       "band_name": "V",
       "regime": "optical",
       "observatory_facility": null,
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "HCT/HFOSC.Bessell_V", "facility": "HCT", "instrument": "HFOSC"}
+        {
+          "filter_id": "HCT/HFOSC.Bessell_V",
+          "facility": "HCT",
+          "instrument": "HFOSC"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -459,13 +670,21 @@
     },
     {
       "band_id": "Generic_R",
-      "aliases": ["Generic_R", "Cousins_R", "R"],
+      "aliases": [
+        "Generic_R",
+        "Cousins_R",
+        "R"
+      ],
       "band_name": "R",
       "regime": "optical",
       "observatory_facility": null,
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "HCT/HFOSC.Bessell_R", "facility": "HCT", "instrument": "HFOSC"}
+        {
+          "filter_id": "HCT/HFOSC.Bessell_R",
+          "facility": "HCT",
+          "instrument": "HFOSC"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -474,13 +693,21 @@
     },
     {
       "band_id": "Generic_I",
-      "aliases": ["Generic_I", "Cousins_I", "I"],
+      "aliases": [
+        "Generic_I",
+        "Cousins_I",
+        "I"
+      ],
       "band_name": "I",
       "regime": "optical",
       "observatory_facility": null,
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "HCT/HFOSC.Bessell_I", "facility": "HCT", "instrument": "HFOSC"}
+        {
+          "filter_id": "HCT/HFOSC.Bessell_I",
+          "facility": "HCT",
+          "instrument": "HFOSC"
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -490,13 +717,20 @@
     {
       "_comment": "Generic NIR J/H: reference spectral data from 2MASS profiles.",
       "band_id": "Generic_J",
-      "aliases": ["Generic_J", "J"],
+      "aliases": [
+        "Generic_J",
+        "J"
+      ],
       "band_name": "J",
       "regime": "nir",
       "observatory_facility": null,
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "2MASS/2MASS.J", "facility": "2MASS", "instrument": null}
+        {
+          "filter_id": "2MASS/2MASS.J",
+          "facility": "2MASS",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -505,13 +739,20 @@
     },
     {
       "band_id": "Generic_H",
-      "aliases": ["Generic_H", "H"],
+      "aliases": [
+        "Generic_H",
+        "H"
+      ],
       "band_name": "H",
       "regime": "nir",
       "observatory_facility": null,
       "instrument": null,
       "svo_candidates": [
-        {"filter_id": "2MASS/2MASS.H", "facility": "2MASS", "instrument": null}
+        {
+          "filter_id": "2MASS/2MASS.H",
+          "facility": "2MASS",
+          "instrument": null
+        }
       ],
       "sparse": false,
       "excluded": false,
@@ -526,7 +767,10 @@
         "The lambda_eff hint (21900 Å) is the community-standard K-band centre."
       ],
       "band_id": "Generic_K",
-      "aliases": ["Generic_K", "K"],
+      "aliases": [
+        "Generic_K",
+        "K"
+      ],
       "band_name": "K",
       "regime": "nir",
       "observatory_facility": null,
@@ -537,11 +781,12 @@
       "exclusion_reason": null,
       "lambda_eff_hint": 21900.0
     },
-
     {
       "_comment": "── Excluded entries ───────────────────────────────────────────────────",
       "band_id": "Open",
-      "aliases": ["Open"],
+      "aliases": [
+        "Open"
+      ],
       "band_name": null,
       "regime": null,
       "observatory_facility": null,
@@ -550,6 +795,52 @@
       "sparse": true,
       "excluded": true,
       "exclusion_reason": "unfiltered/open observation",
+      "lambda_eff_hint": null
+    },
+    {
+      "band_id": "Generic_Ic",
+      "aliases": [
+        "Generic_Ic",
+        "Cousins_Ic",
+        "Ic"
+      ],
+      "band_name": "Ic",
+      "regime": "optical",
+      "observatory_facility": null,
+      "instrument": null,
+      "svo_candidates": [
+        {
+          "filter_id": "Generic/Cousins.I",
+          "facility": "Generic",
+          "instrument": "Cousins"
+        }
+      ],
+      "sparse": false,
+      "excluded": false,
+      "exclusion_reason": null,
+      "lambda_eff_hint": null
+    },
+    {
+      "band_id": "Generic_Rc",
+      "aliases": [
+        "Generic_Rc",
+        "Cousins_Rc",
+        "Rc"
+      ],
+      "band_name": "Rc",
+      "regime": "optical",
+      "observatory_facility": null,
+      "instrument": null,
+      "svo_candidates": [
+        {
+          "filter_id": "Generic/Cousins.R",
+          "facility": "Generic",
+          "instrument": "Cousins"
+        }
+      ],
+      "sparse": false,
+      "excluded": false,
+      "exclusion_reason": null,
       "lambda_eff_hint": null
     }
   ]

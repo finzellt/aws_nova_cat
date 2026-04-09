@@ -176,6 +176,7 @@ class NovaResult(BaseModel):
     photometry_count: int | None = Field(default=None, ge=0)
     references_count: int | None = Field(default=None, ge=0)
     has_sparkline: bool | None = Field(default=None)
+    spectral_visits: int | None = Field(default=None, ge=0)
 
 
 # ---------------------------------------------------------------------------

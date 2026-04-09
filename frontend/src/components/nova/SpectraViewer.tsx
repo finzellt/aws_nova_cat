@@ -77,38 +77,38 @@ interface SpectralLine {
 
 const SPECTRAL_LINES: SpectralLine[] = [
   // ── Fe II group ─────────────────────────────────────────────────────────
-  { wavelength_nm: 393.4, label: 'Ca II 3934',      group: 'fe2' },
-  { wavelength_nm: 396.8, label: 'Ca II 3968',      group: 'fe2' },
-  { wavelength_nm: 449.1, label: 'Fe II 4491',      group: 'fe2' },
-  { wavelength_nm: 450.8, label: 'Fe II 4508',      group: 'fe2' },
-  { wavelength_nm: 531.7, label: 'Fe II 5317',      group: 'fe2' },
-  { wavelength_nm: 536.3, label: 'Fe II 5363',      group: 'fe2' },
-  { wavelength_nm: 589.2, label: 'Na D 5892',       group: 'fe2' },
-  { wavelength_nm: 614.8, label: 'Fe II 6148',      group: 'fe2' },
-  { wavelength_nm: 634.7, label: 'Si II 6347',      group: 'fe2' },
-  { wavelength_nm: 637.1, label: 'Si II 6371',      group: 'fe2' },
-  { wavelength_nm: 777.3, label: 'O I 7773',        group: 'fe2' },
-  { wavelength_nm: 822.7, label: 'O I 8227',        group: 'fe2' },
-  { wavelength_nm: 844.6, label: 'O I 8446',        group: 'fe2' },
+  { wavelength_nm: 393.4, label: 'Ca II 393',       group: 'fe2' },
+  { wavelength_nm: 396.8, label: 'Ca II 397',       group: 'fe2' },
+  { wavelength_nm: 449.1, label: 'Fe II 449',       group: 'fe2' },
+  { wavelength_nm: 450.8, label: 'Fe II 451',       group: 'fe2' },
+  { wavelength_nm: 531.7, label: 'Fe II 532',       group: 'fe2' },
+  { wavelength_nm: 536.3, label: 'Fe II 536',       group: 'fe2' },
+  { wavelength_nm: 589.2, label: 'Na D 589',        group: 'fe2' },
+  { wavelength_nm: 614.8, label: 'Fe II 615',       group: 'fe2' },
+  { wavelength_nm: 634.7, label: 'Si II 635',       group: 'fe2' },
+  { wavelength_nm: 637.1, label: 'Si II 637',       group: 'fe2' },
+  { wavelength_nm: 777.3, label: 'O I 777',         group: 'fe2' },
+  { wavelength_nm: 822.7, label: 'O I 823',         group: 'fe2' },
+  { wavelength_nm: 844.6, label: 'O I 845',         group: 'fe2' },
 
   // ── He/N group ──────────────────────────────────────────────────────────
-  { wavelength_nm: 463.8, label: 'N III 4638',      group: 'hen' },
-  { wavelength_nm: 468.6, label: 'He II 4686',      group: 'hen' },
-  { wavelength_nm: 567.9, label: 'N II 5679',       group: 'hen' },
-  { wavelength_nm: 587.6, label: 'He I 5876',       group: 'hen' },
-  { wavelength_nm: 706.5, label: 'He I 7065',       group: 'hen' },
-  { wavelength_nm: 823.7, label: 'He II 8237',      group: 'hen' },
+  { wavelength_nm: 463.8, label: 'N III 464',       group: 'hen' },
+  { wavelength_nm: 468.6, label: 'He II 469',       group: 'hen' },
+  { wavelength_nm: 567.9, label: 'N II 568',        group: 'hen' },
+  { wavelength_nm: 587.6, label: 'He I 588',        group: 'hen' },
+  { wavelength_nm: 706.5, label: 'He I 707',        group: 'hen' },
+  { wavelength_nm: 823.7, label: 'He II 824',       group: 'hen' },
 
   // ── Nebular group ───────────────────────────────────────────────────────
-  { wavelength_nm: 515.8, label: '[Fe VII] 5158',   group: 'nebular' },
-  { wavelength_nm: 572.1, label: '[Fe VII] 5721',   group: 'nebular' },
-  { wavelength_nm: 608.6, label: '[Fe VII] 6086',   group: 'nebular' },
-  { wavelength_nm: 630.0, label: '[O I] 6300',      group: 'nebular' },
-  { wavelength_nm: 700.6, label: '[Ar V] 7006',     group: 'nebular' },
-  { wavelength_nm: 732.0, label: '[O II] 7320',     group: 'nebular' },
-  { wavelength_nm: 772.5, label: '[S I] 7725',      group: 'nebular' },
-  { wavelength_nm: 906.9, label: '[S III] 9069',    group: 'nebular' },
-  { wavelength_nm: 953.1, label: '[S III] 9531',    group: 'nebular' },
+  { wavelength_nm: 515.8, label: '[Fe VII] 516',    group: 'nebular' },
+  { wavelength_nm: 572.1, label: '[Fe VII] 572',    group: 'nebular' },
+  { wavelength_nm: 608.6, label: '[Fe VII] 609',    group: 'nebular' },
+  { wavelength_nm: 630.0, label: '[O I] 630',       group: 'nebular' },
+  { wavelength_nm: 700.6, label: '[Ar V] 701',      group: 'nebular' },
+  { wavelength_nm: 732.0, label: '[O II] 732',      group: 'nebular' },
+  { wavelength_nm: 772.5, label: '[S I] 773',       group: 'nebular' },
+  { wavelength_nm: 906.9, label: '[S III] 907',     group: 'nebular' },
+  { wavelength_nm: 953.1, label: '[S III] 953',     group: 'nebular' },
 
   // ── Balmer series (universal) ───────────────────────────────────────────
   { wavelength_nm: 656.279, label: 'Hα',            group: 'hen', universal: true },
@@ -1158,8 +1158,7 @@ function addFeatureMarkers(
 
   for (const line of activeLines) {
     const color = FEATURE_GROUP_COLORS[line.group];
-    const wavelengthAngstrom = Math.round(line.wavelength_nm * 10);
-    const hoverLabel = `${line.label} Å`;
+    const hoverLabel = `${line.label} — ${line.wavelength_nm.toFixed(1)} nm`;
 
     // ── Vertical dashed line (Plotly shape) ───────────────────────────
     shapes.push({

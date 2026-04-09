@@ -47,7 +47,12 @@ from generators.bundle import generate_bundle_zip
 from generators.catalog import generate_catalog_json
 from generators.nova import generate_nova_json
 from generators.photometry import generate_photometry_json
-from generators.references import generate_references_json
+from generators.references import (
+    _batch_get_references,
+    _build_record,
+    _query_nova_references,
+    generate_references_json,
+)
 from generators.shared import resolve_outburst_mjd
 from generators.sparkline import generate_sparkline_svg
 from generators.spectra import generate_spectra_json
@@ -217,6 +222,33 @@ def _collect_observation_epochs(nova_id: str) -> list[float]:
     return epochs
 
 
+def _load_references_for_bundle(
+    nova_id: str,
+    table: Any,
+    dynamodb_resource: Any,
+) -> list[dict[str, Any]]:
+    """Load reference records from DDB for the bundle generator.
+
+    Used on partial sweeps where the references generator is skipped but
+    the bundle generator still needs ``references_output`` to build the
+    BibTeX ``.bib`` file.  Reuses the same DDB query helpers as the
+    references generator.
+    """
+    nova_refs = _query_nova_references(nova_id, table)
+    if not nova_refs:
+        return []
+
+    bibcodes = [ref["bibcode"] for ref in nova_refs]
+    ref_items = _batch_get_references(bibcodes, table.table_name, dynamodb_resource, nova_id)
+
+    records: list[dict[str, Any]] = []
+    for bibcode in bibcodes:
+        ref_item = ref_items.get(bibcode)
+        if ref_item is not None:
+            records.append(_build_record(ref_item))
+    return records
+
+
 # ---------------------------------------------------------------------------
 # Artifact dispatch + publication (§12.5 Phase 1)
 # ---------------------------------------------------------------------------
@@ -384,6 +416,7 @@ def _process_nova(
         nova_context["photometry_count"] = int(nova_item.get("photometry_count", 0))
         nova_context["references_count"] = int(nova_item.get("references_count", 0))
         nova_context["has_sparkline"] = nova_item.get("has_sparkline", False)
+        nova_context["spectral_visits"] = int(nova_item.get("spectral_visits", 0))
 
         # Resolve outburst MJD (§7.6).
         observation_epochs = _collect_observation_epochs(nova_id)
@@ -395,6 +428,15 @@ def _process_nova(
         )
         nova_context["outburst_mjd"] = outburst_mjd
         nova_context["outburst_mjd_is_estimated"] = is_estimated
+
+        # Pre-populate references_output for the bundle generator.
+        # On partial sweeps where references.json is not in the manifest,
+        # the references generator won't run and references_output would
+        # remain empty — causing the bundle to produce an empty .bib file.
+        if "references.json" not in artifacts_to_generate:
+            nova_context["references_output"] = _load_references_for_bundle(
+                nova_id, _table, _dynamodb
+            )
 
         # --- Generate and publish artifacts in dependency order ---
         generated_artifacts: set[str] = set()
@@ -493,6 +535,7 @@ def _process_nova(
         photometry_count=nova_context.get("photometry_count", 0),
         references_count=nova_context.get("references_count", 0),
         has_sparkline=nova_context.get("has_sparkline", False),
+        spectral_visits=nova_context.get("spectral_visits", 0),
     )
 
 
@@ -637,6 +680,8 @@ def main() -> None:
             )
 
     # Step 8 — Write results back to the plan.
+    # TODO: Add spectral_visits to Finalize Lambda writeback
+    # (services/artifact_finalizer/handler.py — _write_observation_counts)
     _write_results_to_plan(plan, nova_results)
 
     _logger.info(

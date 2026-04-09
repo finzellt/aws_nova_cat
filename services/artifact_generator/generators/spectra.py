@@ -221,6 +221,16 @@ def generate_spectra_json(
     # Step 5 — Update context.
     nova_context["spectra_count"] = len(products)
 
+    # Group by integer MJD (floor) to count distinct nights.
+    distinct_nights = len(
+        {
+            int(float(p["observation_date_mjd"]))
+            for p in products
+            if p.get("observation_date_mjd") is not None
+        }
+    )
+    nova_context["spectral_visits"] = distinct_nights
+
     _logger.info(
         "Generated spectra.json",
         extra={

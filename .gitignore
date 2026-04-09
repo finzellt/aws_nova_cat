@@ -73,3 +73,4 @@ tools/novacat-tools/notebooks/novacat.ipynb
 /tools/ticket_ingestion/data
 /tools/ticket_ingestion/data
 *.ipynb
+/tools/interact_with_fits_files/fits_downloads/V1716_Sco

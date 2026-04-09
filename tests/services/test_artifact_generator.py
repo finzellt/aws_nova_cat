@@ -811,3 +811,156 @@ class TestDdbCountPrePopulation:
         assert captured_ctx["photometry_count"] == 0
         assert captured_ctx["references_count"] == 0
         assert captured_ctx["has_sparkline"] is False
+
+
+# ---------------------------------------------------------------------------
+# References pre-population for bundle (BN3 — partial sweep .bib fix)
+# ---------------------------------------------------------------------------
+
+
+def _seed_nova_reference(table: Any, nova_id: str, bibcode: str) -> None:
+    """Write a NovaReference link item."""
+    table.put_item(
+        Item={
+            "PK": nova_id,
+            "SK": f"NOVAREF#{bibcode}",
+            "entity_type": "NovaReference",
+            "bibcode": bibcode,
+        }
+    )
+
+
+def _seed_reference(table: Any, bibcode: str, **kwargs: Any) -> None:
+    """Write a Reference entity item."""
+    item: dict[str, Any] = {
+        "PK": f"REFERENCE#{bibcode}",
+        "SK": "METADATA",
+        "entity_type": "Reference",
+        "bibcode": bibcode,
+        "title": kwargs.get("title", f"Title for {bibcode}"),
+        "authors": kwargs.get("authors", ["Author A", "Author B"]),
+        "year": kwargs.get("year", 2020),
+    }
+    if "doi" in kwargs:
+        item["doi"] = kwargs["doi"]
+    if "arxiv_id" in kwargs:
+        item["arxiv_id"] = kwargs["arxiv_id"]
+    table.put_item(Item=item)
+
+
+def _photometry_only_manifest() -> dict[str, Any]:
+    """Partial sweep: only photometry dirty, no references.json."""
+    return {
+        "dirty_types": ["photometry"],
+        "artifacts": ["photometry.json", "nova.json", "bundle.zip"],
+    }
+
+
+class TestReferencesPrePopulationForBundle:
+    """BN3: Verify references_output is pre-populated from DDB when the
+    references generator is skipped but the bundle generator will run."""
+
+    def test_partial_sweep_prepopulates_references_output(self, table: Any) -> None:
+        """When references.json is NOT in manifest, references_output is
+        loaded from DDB so the bundle generator can build a correct .bib."""
+        with mock_aws():
+            mod = _load_module()
+            _seed_nova(table, _NOVA_A, references_count=2)
+            _seed_nova_reference(table, _NOVA_A, "2020ApJ...123..456A")
+            _seed_nova_reference(table, _NOVA_A, "2021MNRAS.789..012B")
+            _seed_reference(table, "2020ApJ...123..456A", year=2020)
+            _seed_reference(table, "2021MNRAS.789..012B", year=2021)
+
+            captured_refs: list[dict[str, Any]] = []
+
+            def _capture_generate(
+                nova_id: str,
+                artifact: Any,
+                nova_context: dict[str, Any],
+                publisher: Any = None,
+            ) -> None:
+                artifact_val = artifact.value if hasattr(artifact, "value") else str(artifact)
+                if artifact_val == "bundle.zip":
+                    captured_refs.extend(nova_context.get("references_output", []))
+                _noop_generate(nova_id, artifact, nova_context, publisher)
+
+            publisher = MagicMock()
+            with patch.object(mod, "_generate_and_publish", _capture_generate):
+                result = mod._process_nova(_NOVA_A, _photometry_only_manifest(), publisher)
+
+        assert result.success is True
+        assert len(captured_refs) == 2
+        bibcodes = {r["bibcode"] for r in captured_refs}
+        assert bibcodes == {"2020ApJ...123..456A", "2021MNRAS.789..012B"}
+        # Verify record structure matches what the references generator produces.
+        for ref in captured_refs:
+            assert "title" in ref
+            assert "authors" in ref
+            assert "year" in ref
+            assert "ads_url" in ref
+
+    def test_full_sweep_references_generator_overwrites(self, table: Any) -> None:
+        """When references.json IS in the manifest, the references generator
+        runs and overwrites any pre-populated value — pre-population is harmless."""
+        with mock_aws():
+            mod = _load_module()
+            _seed_nova(table, _NOVA_A, references_count=1)
+            _seed_nova_reference(table, _NOVA_A, "2020ApJ...123..456A")
+            _seed_reference(table, "2020ApJ...123..456A", year=2020)
+
+            captured_refs: list[dict[str, Any]] = []
+
+            def _overwrite_generate(
+                nova_id: str,
+                artifact: Any,
+                nova_context: dict[str, Any],
+                publisher: Any = None,
+            ) -> None:
+                artifact_val = artifact.value if hasattr(artifact, "value") else str(artifact)
+                if artifact_val == "references.json":
+                    # Simulate the references generator overwriting with its own output.
+                    nova_context["references_count"] = 1
+                    nova_context["references_output"] = [
+                        {"bibcode": "GENERATOR_OUTPUT", "title": "From generator"}
+                    ]
+                    return
+                if artifact_val == "bundle.zip":
+                    captured_refs.extend(nova_context.get("references_output", []))
+                _noop_generate(nova_id, artifact, nova_context, publisher)
+
+            publisher = MagicMock()
+            with patch.object(mod, "_generate_and_publish", _overwrite_generate):
+                result = mod._process_nova(_NOVA_A, _all_artifacts_manifest(), publisher)
+
+        assert result.success is True
+        # The bundle should see the generator's output, not the pre-populated one.
+        assert len(captured_refs) == 1
+        assert captured_refs[0]["bibcode"] == "GENERATOR_OUTPUT"
+
+    def test_partial_sweep_nova_has_zero_references(self, table: Any) -> None:
+        """When the nova has no references, references_output is [] (not an error)."""
+        with mock_aws():
+            mod = _load_module()
+            _seed_nova(table, _NOVA_A, references_count=0)
+            # No NovaReference items seeded.
+
+            captured_refs: list[Any] | None = None
+
+            def _capture_generate(
+                nova_id: str,
+                artifact: Any,
+                nova_context: dict[str, Any],
+                publisher: Any = None,
+            ) -> None:
+                nonlocal captured_refs
+                artifact_val = artifact.value if hasattr(artifact, "value") else str(artifact)
+                if artifact_val == "bundle.zip":
+                    captured_refs = list(nova_context.get("references_output", []))
+                _noop_generate(nova_id, artifact, nova_context, publisher)
+
+            publisher = MagicMock()
+            with patch.object(mod, "_generate_and_publish", _capture_generate):
+                result = mod._process_nova(_NOVA_A, _photometry_only_manifest(), publisher)
+
+        assert result.success is True
+        assert captured_refs == []

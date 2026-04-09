@@ -22,7 +22,9 @@ from __future__ import annotations
 import statistics
 from decimal import Decimal
 from typing import Any
+from unittest.mock import MagicMock
 
+import boto3
 import pytest
 from generators.shared import lttb
 from generators.spectra import (
@@ -36,6 +38,7 @@ from generators.spectra import (
     _trim_wavelength_range_min,
     generate_spectra_json,
 )
+from moto import mock_aws
 
 # ---------------------------------------------------------------------------
 # _trim_dead_edges
@@ -812,3 +815,127 @@ class TestObservationsSnr:
         obs = artifact["observations"]
         assert len(obs) == 1
         assert "snr" not in obs[0]
+
+
+# ===========================================================================
+# spectral_visits — distinct observation nights
+# ===========================================================================
+
+_SV_TABLE_NAME = "NovaCat-SV-Test"
+_SV_REGION = "us-east-1"
+_SV_NOVA_ID = "aaaaaaaa-0000-0000-0000-000000000001"
+
+
+def _seed_spectra_product(
+    table: Any,
+    nova_id: str,
+    data_product_id: str,
+    *,
+    observation_date_mjd: Decimal | None = Decimal("59234.5"),
+) -> None:
+    """Write a minimal VALID spectra DataProduct item."""
+    item: dict[str, Any] = {
+        "PK": nova_id,
+        "SK": f"PRODUCT#SPECTRA#{data_product_id}",
+        "data_product_id": data_product_id,
+        "validation_status": "VALID",
+        "instrument": "TestInstrument",
+        "telescope": "TestTelescope",
+        "provider": "TestProvider",
+        "flux_unit": "erg/s/cm2/A",
+    }
+    if observation_date_mjd is not None:
+        item["observation_date_mjd"] = observation_date_mjd
+    table.put_item(Item=item)
+
+
+def _make_sv_context(outburst_mjd: float | None = 59230.0) -> dict[str, Any]:
+    """Build a minimal nova_context for the spectra generator."""
+    return {
+        "outburst_mjd": outburst_mjd,
+        "outburst_mjd_is_estimated": False,
+        "nova_item": {"primary_name": "Test Nova", "nova_id": _SV_NOVA_ID},
+    }
+
+
+def _stub_s3() -> MagicMock:
+    """Return a mock S3 client that returns an empty CSV body."""
+    mock_s3 = MagicMock()
+    mock_body = MagicMock()
+    mock_body.read.return_value = b"wavelength_nm,flux_normalized\n"
+    mock_s3.get_object.return_value = {"Body": mock_body}
+    return mock_s3
+
+
+class TestSpectralVisits:
+    """spectral_visits counts distinct integer-MJD nights."""
+
+    @pytest.fixture(autouse=True)
+    def _aws_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AWS_DEFAULT_REGION", _SV_REGION)
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+
+    @pytest.fixture()
+    def ddb_table(self) -> Any:
+        with mock_aws():
+            dynamodb = boto3.resource("dynamodb", region_name=_SV_REGION)
+            tbl = dynamodb.create_table(
+                TableName=_SV_TABLE_NAME,
+                KeySchema=[
+                    {"AttributeName": "PK", "KeyType": "HASH"},
+                    {"AttributeName": "SK", "KeyType": "RANGE"},
+                ],
+                AttributeDefinitions=[
+                    {"AttributeName": "PK", "AttributeType": "S"},
+                    {"AttributeName": "SK", "AttributeType": "S"},
+                ],
+                BillingMode="PAY_PER_REQUEST",
+            )
+            yield tbl
+
+    def test_three_nights_from_six_spectra(self, ddb_table: Any) -> None:
+        """6 spectra across 3 distinct integer-MJD nights → spectral_visits = 3."""
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p1", observation_date_mjd=Decimal("59234.1"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p2", observation_date_mjd=Decimal("59234.8"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p3", observation_date_mjd=Decimal("59235.3"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p4", observation_date_mjd=Decimal("59235.9"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p5", observation_date_mjd=Decimal("59240.2"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p6", observation_date_mjd=Decimal("59240.7"))
+
+        ctx = _make_sv_context()
+        generate_spectra_json(_SV_NOVA_ID, ddb_table, _stub_s3(), "test-bucket", ctx)
+
+        assert ctx["spectra_count"] == 6
+        assert ctx["spectral_visits"] == 3
+
+    def test_same_night_counts_as_one(self, ddb_table: Any) -> None:
+        """2 spectra on the same night (MJD 59234.1 and 59234.8) → spectral_visits = 1."""
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p1", observation_date_mjd=Decimal("59234.1"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p2", observation_date_mjd=Decimal("59234.8"))
+
+        ctx = _make_sv_context()
+        generate_spectra_json(_SV_NOVA_ID, ddb_table, _stub_s3(), "test-bucket", ctx)
+
+        assert ctx["spectra_count"] == 2
+        assert ctx["spectral_visits"] == 1
+
+    def test_zero_spectra(self, ddb_table: Any) -> None:
+        """No spectra → spectral_visits = 0."""
+        ctx = _make_sv_context()
+        generate_spectra_json(_SV_NOVA_ID, ddb_table, _stub_s3(), "test-bucket", ctx)
+
+        assert ctx["spectra_count"] == 0
+        assert ctx["spectral_visits"] == 0
+
+    def test_none_mjd_excluded(self, ddb_table: Any) -> None:
+        """Products with observation_date_mjd = None are excluded from the count."""
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p1", observation_date_mjd=Decimal("59234.5"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p2", observation_date_mjd=Decimal("59235.5"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p3", observation_date_mjd=None)
+
+        ctx = _make_sv_context()
+        generate_spectra_json(_SV_NOVA_ID, ddb_table, _stub_s3(), "test-bucket", ctx)
+
+        assert ctx["spectra_count"] == 3
+        assert ctx["spectral_visits"] == 2
