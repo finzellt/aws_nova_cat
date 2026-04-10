@@ -73,6 +73,7 @@ class NovaCatQuery:
 
         Columns: data_product_id, provider, acquisition_status,
                  validation_status, eligibility, fits_profile_id,
+                 observation_date_mjd, instrument, telescope,
                  attempt_count, last_attempt_at, quarantine_reason_code,
                  sha256, byte_length, raw_s3_key, updated_at
         """
@@ -89,6 +90,9 @@ class NovaCatQuery:
                 "validation_status": item.get("validation_status"),
                 "eligibility": item.get("eligibility"),
                 "fits_profile_id": item.get("fits_profile_id"),
+                "observation_date_mjd": item.get("observation_date_mjd"),
+                "instrument": item.get("instrument"),
+                "telescope": item.get("telescope"),
                 "attempt_count": item.get("attempt_count"),
                 "last_attempt_at": item.get("last_attempt_at"),
                 "quarantine_reason_code": item.get("quarantine_reason_code"),
