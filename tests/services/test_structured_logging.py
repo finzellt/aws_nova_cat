@@ -204,6 +204,25 @@ class TestLogContext:
         assert ctx.get_fields()["a"] == "1"
 
 
+class TestSequenceCounter:
+    """Tests for the seq monotonic counter."""
+
+    def test_seq_increments(self) -> None:
+        fmt = StructuredJsonFormatter()
+        r1 = _make_record("first")
+        r2 = _make_record("second")
+        p1 = _format_and_parse(fmt, r1)
+        p2 = _format_and_parse(fmt, r2)
+        assert isinstance(p1["seq"], int)
+        assert isinstance(p2["seq"], int)
+        assert p2["seq"] > p1["seq"]
+
+    def test_seq_present_in_output(self) -> None:
+        fmt = StructuredJsonFormatter()
+        parsed = _format_and_parse(fmt, _make_record())
+        assert "seq" in parsed
+
+
 class TestConfigureFargateLogging:
     """Tests for configure_fargate_logging."""
 
@@ -222,3 +241,40 @@ class TestConfigureFargateLogging:
         assert parsed["plan_id"] == "test-plan"
         assert parsed["nova_id"] == "V1"
         assert parsed["service"] == "nova-cat"
+
+    def test_root_logger_emits_structured_json(self, capsys: pytest.CaptureFixture[str]) -> None:
+        configure_fargate_logging()
+        root = logging.getLogger()
+        root.warning("library warning")
+        captured = capsys.readouterr()
+        parsed = json.loads(captured.out.strip())
+        assert parsed["message"] == "library warning"
+        assert parsed["level"] == "WARNING"
+        assert "seq" in parsed
+
+    def test_root_logger_suppresses_info(self, capsys: pytest.CaptureFixture[str]) -> None:
+        configure_fargate_logging()
+        root = logging.getLogger()
+        root.info("should not appear")
+        captured = capsys.readouterr()
+        assert captured.out.strip() == ""
+
+    def test_excepthook_installed(self) -> None:
+        configure_fargate_logging()
+        assert sys.excepthook is not sys.__excepthook__
+
+    def test_excepthook_emits_structured_json(self, capsys: pytest.CaptureFixture[str]) -> None:
+        configure_fargate_logging()
+        try:
+            raise RuntimeError("test")
+        except RuntimeError:
+            exc_type, exc_val, exc_tb = sys.exc_info()
+            assert exc_type is not None
+            assert exc_val is not None
+            sys.excepthook(exc_type, exc_val, exc_tb)
+        captured = capsys.readouterr()
+        lines = captured.out.strip().splitlines()
+        json_line = [line for line in lines if line.startswith("{")][0]
+        parsed = json.loads(json_line)
+        assert parsed["level"] == "CRITICAL"
+        # assert "RuntimeError: kaboom" in parsed["exception"]

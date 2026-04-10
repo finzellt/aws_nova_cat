@@ -91,6 +91,7 @@ def generate_bundle_zip(
             bundle_files.append("README.txt")
 
             # 2. Spectra FITS files
+            seen_filenames: dict[str, int] = {}
             for dp in data_products:
                 dp_id: str = dp["data_product_id"]
                 fits_bucket = dp.get("raw_s3_bucket")
@@ -125,6 +126,12 @@ def generate_bundle_zip(
                     continue
 
                 spectrum_filename = _spectrum_filename(hyphenated, dp)
+                if spectrum_filename in seen_filenames:
+                    seen_filenames[spectrum_filename] += 1
+                    base, ext = spectrum_filename.rsplit(".", 1)
+                    spectrum_filename = f"{base}_{seen_filenames[spectrum_filename]}.{ext}"
+                else:
+                    seen_filenames[spectrum_filename] = 1
                 arc_path = f"spectra/{spectrum_filename}"
                 zf.writestr(arc_path, fits_bytes)
                 bundle_files.append(arc_path)

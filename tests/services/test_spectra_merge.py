@@ -4,10 +4,10 @@ Groups:
   1 — Arm group detection (_merge_multi_arm_spectra grouping)
   2 — Merge validation (overlap rejection in _merge_arm_group)
   3 — Overlap blending (_blend_overlap)
-  4 — Gap handling (_detect_gap + NaN sentinel insertion)
-  5 — Segment-aware LTTB budget allocation (_segment_aware_lttb)
+  4 — Gap handling (no NaN sentinels — simple concatenation)
+  5 — LTTB downsampling (_segment_aware_lttb)
   6 — Composite spectrum identity (deterministic, order-independent)
-  7 — Merged CSV round-trip (NaN survival through serialize/parse)
+  7 — Merged CSV round-trip
   8 — End-to-end merge in generate_spectra_json
 """
 
@@ -24,10 +24,8 @@ from unittest.mock import MagicMock
 
 import pytest
 from generators.spectra import (
-    _LTTB_SEGMENT_MIN,
     _LTTB_THRESHOLD,
     _blend_overlap,
-    _detect_gap,
     _merge_arm_group,
     _merge_multi_arm_spectra,
     _parse_web_ready_csv,
@@ -307,10 +305,10 @@ class TestOverlapBlending:
 
 
 class TestGapHandling:
-    """NaN sentinel insertion at wavelength gaps."""
+    """Gap regions between arms produce no NaN sentinels — simple concatenation."""
 
-    def test_two_arms_with_gap(self) -> None:
-        """Arm A ends at 470nm, arm B starts at 520nm → NaN at midpoint ~495."""
+    def test_two_arms_with_gap_no_nan(self) -> None:
+        """Arm A ends at 470nm, arm B starts at 520nm → no NaN, just a wavelength jump."""
         arm_a = _make_stage1(dp_id="blue", wl_min=350, wl_max=470, n_points=100)
         arm_b = _make_stage1(dp_id="red", wl_min=520, wl_max=850, n_points=100)
         group = [arm_a, arm_b]
@@ -318,14 +316,18 @@ class TestGapHandling:
         merged = _merge_arm_group(group, "nova-t", MagicMock(), "bucket")
         assert merged is not None
 
-        nan_indices = [i for i, f in enumerate(merged["fluxes"]) if math.isnan(f)]
-        assert len(nan_indices) == 1
-        # Midpoint between 470 and 520 is 495.
-        nan_wl = merged["wavelengths"][nan_indices[0]]
-        assert nan_wl == pytest.approx(495.0, abs=1.0)
+        nan_count = sum(1 for f in merged["fluxes"] if math.isnan(f))
+        assert nan_count == 0
+        # All wavelengths are real floats.
+        assert all(isinstance(w, float) for w in merged["wavelengths"])
+        # Wavelengths span both arms.
+        assert merged["wavelengths"][0] == pytest.approx(350.0, abs=1)
+        assert merged["wavelengths"][-1] == pytest.approx(850.0, abs=1)
+        # Total points = sum of both arms (no sentinel inserted).
+        assert len(merged["wavelengths"]) == 200
 
-    def test_three_arms_with_two_gaps(self) -> None:
-        """UVB/VIS/NIR with gaps → two NaN sentinels."""
+    def test_three_arms_with_two_gaps_no_nan(self) -> None:
+        """UVB/VIS/NIR with gaps → zero NaN sentinels, just concatenated."""
         arms = [
             _make_stage1(dp_id="uvb", wl_min=300, wl_max=470, n_points=100),
             _make_stage1(dp_id="vis", wl_min=520, wl_max=900, n_points=100),
@@ -334,11 +336,12 @@ class TestGapHandling:
         merged = _merge_arm_group(arms, "nova-t", MagicMock(), "bucket")
         assert merged is not None
 
-        nan_indices = [i for i, f in enumerate(merged["fluxes"]) if math.isnan(f)]
-        assert len(nan_indices) == 2
+        nan_count = sum(1 for f in merged["fluxes"] if math.isnan(f))
+        assert nan_count == 0
+        assert len(merged["wavelengths"]) == 300
 
     def test_no_gap_contiguous_arms(self) -> None:
-        """Arms that overlap → no NaN insertion."""
+        """Arms that overlap → blended, no NaN."""
         arms = [
             _make_stage1(dp_id="vis", wl_min=550, wl_max=1020, n_points=100),
             _make_stage1(dp_id="nir", wl_min=994, wl_max=2480, n_points=100),
@@ -349,19 +352,6 @@ class TestGapHandling:
         nan_count = sum(1 for f in merged["fluxes"] if math.isnan(f))
         assert nan_count == 0
 
-    def test_detect_gap_true_for_large_jump(self) -> None:
-        """Direct test: jump much larger than local spacing → True."""
-        # Evenly spaced arm with 1nm spacing.
-        wl_a = [float(i) for i in range(400, 471)]
-        wl_b = [520.0, 521.0]
-        assert _detect_gap(wl_a, wl_b) is True
-
-    def test_detect_gap_false_for_normal_spacing(self) -> None:
-        """Direct test: next point at normal spacing → False."""
-        wl_a = [float(i) for i in range(400, 471)]
-        wl_b = [471.0, 472.0]
-        assert _detect_gap(wl_a, wl_b) is False
-
 
 # ---------------------------------------------------------------------------
 # Group 5 — Segment-aware LTTB budget allocation
@@ -369,81 +359,10 @@ class TestGapHandling:
 
 
 class TestSegmentAwareLttb:
-    """Proportional point budget calculation across NaN-separated segments."""
+    """Single-pass LTTB downsampling (no NaN segmentation)."""
 
-    def test_two_segments_equal_span(self) -> None:
-        """Equal wavelength spans → equal point budgets."""
-        # Build two 150nm segments separated by NaN, total > _LTTB_THRESHOLD.
-        n_per = 1500  # each segment has 1500 points (3000 total > 2000).
-        seg_a_wl = [300.0 + i * (150.0 / (n_per - 1)) for i in range(n_per)]
-        seg_a_fx = [1.0] * n_per
-        seg_b_wl = [500.0 + i * (150.0 / (n_per - 1)) for i in range(n_per)]
-        seg_b_fx = [1.0] * n_per
-
-        wl = seg_a_wl + [425.0] + seg_b_wl  # NaN sentinel at midpoint
-        fx = seg_a_fx + [float("nan")] + seg_b_fx
-
-        out_wl, out_fx = _segment_aware_lttb(wl, fx)
-
-        # Should be downsampled to ~2000 total.
-        assert len(out_wl) <= _LTTB_THRESHOLD + 10  # small margin for NaN separators
-
-        # Find the NaN separator in output.
-        nan_idx = [i for i, f in enumerate(out_fx) if math.isnan(f)]
-        assert len(nan_idx) == 1
-
-        # Points before and after NaN should be roughly equal.
-        before = nan_idx[0]
-        after = len(out_wl) - nan_idx[0] - 1
-        ratio = before / after if after > 0 else float("inf")
-        assert 0.7 < ratio < 1.3  # within 30%
-
-    def test_two_segments_unequal_span(self) -> None:
-        """Blue 150nm, red 300nm → red gets ~2× the budget."""
-        n_per = 1500
-        seg_a_wl = [300.0 + i * (150.0 / (n_per - 1)) for i in range(n_per)]
-        seg_a_fx = [1.0] * n_per
-        seg_b_wl = [500.0 + i * (300.0 / (n_per - 1)) for i in range(n_per)]
-        seg_b_fx = [1.0] * n_per
-
-        wl = seg_a_wl + [425.0] + seg_b_wl
-        fx = seg_a_fx + [float("nan")] + seg_b_fx
-
-        out_wl, out_fx = _segment_aware_lttb(wl, fx)
-
-        nan_idx = [i for i, f in enumerate(out_fx) if math.isnan(f)]
-        assert len(nan_idx) == 1
-
-        before = nan_idx[0]
-        after = len(out_wl) - nan_idx[0] - 1
-        # Red segment (2× span) should have ~2× points.
-        ratio = after / before if before > 0 else float("inf")
-        assert 1.5 < ratio < 2.8
-
-    def test_minimum_floor_enforcement(self) -> None:
-        """Tiny 5nm segment alongside 500nm → tiny segment gets ≥ 50 points."""
-        n_per = 1500
-        # Tiny segment: 5nm span.
-        seg_a_wl = [300.0 + i * (5.0 / (n_per - 1)) for i in range(n_per)]
-        seg_a_fx = [1.0] * n_per
-        # Large segment: 500nm span.
-        seg_b_wl = [400.0 + i * (500.0 / (n_per - 1)) for i in range(n_per)]
-        seg_b_fx = [1.0] * n_per
-
-        wl = seg_a_wl + [350.0] + seg_b_wl
-        fx = seg_a_fx + [float("nan")] + seg_b_fx
-
-        out_wl, out_fx = _segment_aware_lttb(wl, fx)
-
-        nan_idx = [i for i, f in enumerate(out_fx) if math.isnan(f)]
-        assert len(nan_idx) == 1
-
-        # Points before NaN = tiny segment budget.
-        tiny_points = nan_idx[0]
-        assert tiny_points >= _LTTB_SEGMENT_MIN
-
-    def test_single_segment_no_nan(self) -> None:
-        """No NaN → full budget to one segment (standard LTTB path)."""
+    def test_downsampled_when_over_threshold(self) -> None:
+        """3000-point spectrum reduced to ≤ _LTTB_THRESHOLD."""
         n = 3000
         wl = [400.0 + i * 0.1 for i in range(n)]
         fx = [1.0] * n
@@ -452,8 +371,30 @@ class TestSegmentAwareLttb:
 
         assert len(out_wl) <= _LTTB_THRESHOLD
         assert len(out_wl) == len(out_fx)
-        # No NaN in output.
         assert not any(math.isnan(f) for f in out_fx)
+
+    def test_passthrough_when_under_threshold(self) -> None:
+        """500-point spectrum passes through unchanged."""
+        n = 500
+        wl = [400.0 + i * 0.1 for i in range(n)]
+        fx = [1.0] * n
+
+        out_wl, out_fx = _segment_aware_lttb(wl, fx)
+
+        assert len(out_wl) == n
+        assert out_wl == wl
+        assert out_fx == fx
+
+    def test_endpoints_preserved(self) -> None:
+        """LTTB always retains first and last points."""
+        n = 3000
+        wl = [400.0 + i * 0.1 for i in range(n)]
+        fx = [1.0 + 50.0 * max(0.0, 1.0 - abs(i - n // 2) / 50.0) for i in range(n)]
+
+        out_wl, out_fx = _segment_aware_lttb(wl, fx)
+
+        assert out_wl[0] == pytest.approx(wl[0])
+        assert out_wl[-1] == pytest.approx(wl[-1])
 
 
 # ---------------------------------------------------------------------------
@@ -493,7 +434,7 @@ class TestCompositeIdentity:
 
 
 class TestMergedCsvRoundTrip:
-    """CSV serialization/deserialization preserves NaN sentinels."""
+    """CSV serialization/deserialization for merged spectra."""
 
     @staticmethod
     def _serialize_csv(wavelengths: list[float], fluxes: list[float]) -> str:
@@ -505,28 +446,8 @@ class TestMergedCsvRoundTrip:
             writer.writerow([wl, fx])
         return buf.getvalue()
 
-    def test_round_trip_with_nan(self) -> None:
-        """NaN sentinels survive CSV serialize → parse round-trip."""
-        wavelengths = [400.0, 450.0, 470.0, 495.0, 520.0, 600.0, 700.0]
-        fluxes = [1.0, 2.0, 3.0, float("nan"), 4.0, 5.0, 6.0]
-
-        csv_body = self._serialize_csv(wavelengths, fluxes)
-        parsed_wl, parsed_fx = _parse_web_ready_csv(csv_body)
-
-        assert len(parsed_wl) == len(wavelengths)
-        assert len(parsed_fx) == len(fluxes)
-
-        for orig, parsed in zip(wavelengths, parsed_wl, strict=True):
-            assert parsed == pytest.approx(orig)
-
-        # NaN at index 3 survives.
-        assert math.isnan(parsed_fx[3])
-        # Non-NaN values match.
-        for i in [0, 1, 2, 4, 5, 6]:
-            assert parsed_fx[i] == pytest.approx(fluxes[i])
-
-    def test_round_trip_without_nan(self) -> None:
-        """Normal merged spectrum (no NaN) round-trips identically."""
+    def test_round_trip(self) -> None:
+        """Merged spectrum round-trips identically through CSV."""
         wavelengths = [400.0, 500.0, 600.0, 700.0, 800.0]
         fluxes = [1.0, 2.5, 3.0, 2.0, 1.5]
 
@@ -615,9 +536,8 @@ class TestEndToEndMerge:
         # Point budget respected.
         assert len(spec["wavelengths"]) <= _LTTB_THRESHOLD + 10  # margin for rounding
 
-        # NaN sentinels should not appear in final flux_normalized
-        # (they are preserved through LTTB but _normalize_flux preserves them;
-        # the frontend handles NaN display — verify the actual behavior).
-        # Check that normalization succeeded and values are finite or NaN
-        # (the implementation preserves NaN through normalization).
+        # No NaN or None values in the output arrays.
+        assert all(isinstance(f, float) for f in spec["flux_normalized"])
+        assert all(isinstance(w, float) for w in spec["wavelengths"])
+        assert not any(math.isnan(f) for f in spec["flux_normalized"])
         assert len(spec["flux_normalized"]) == len(spec["wavelengths"])

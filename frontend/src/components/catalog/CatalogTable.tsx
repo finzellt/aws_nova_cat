@@ -357,7 +357,7 @@ export function CatalogTable({
               width={90}
               height={55}
               alt={`Light curve sparkline for ${row.original.primary_name}`}
-              className="block"
+              className="block mx-auto"
             />
           );
         },
@@ -512,7 +512,8 @@ export function CatalogTable({
                           : undefined
                       }
                       className={[
-                        'px-3 py-2 text-xs font-semibold whitespace-nowrap select-none',
+                        header.id === 'light_curve' ? 'px-1' : 'px-3',
+                        'py-2 text-xs font-semibold whitespace-nowrap select-none',
                         isRightAligned ? 'text-right' : 'text-left',
                         // Active sort column uses primary text; others use secondary.
                         isActiveSortColumn
@@ -591,7 +592,8 @@ export function CatalogTable({
                           // h-12 = 48px minimum row height per ADR-012.
                           // Table cells behave as min-height in practice: the
                           // name cell with an alias line will expand naturally.
-                          'px-3 h-12 align-middle',
+                          cell.column.id === 'light_curve' ? 'px-1' : 'px-3',
+                          'h-12 align-middle',
                           isRightAligned ? 'text-right' : 'text-left',
                         ].join(' ')}
                       >

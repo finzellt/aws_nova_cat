@@ -24,7 +24,6 @@ import csv
 import hashlib
 import io
 import logging
-import math
 import statistics
 import time
 import uuid
@@ -45,12 +44,13 @@ _FLUX_FLOOR = 1e-4  # minimum normalized flux; prevents log(0) in frontend
 _RELATIVE_ZERO_FRACTION = 1e-6  # fraction of peak flux below which values are "dead"
 
 _LTTB_THRESHOLD = 2000  # max points per spectrum (DESIGN-003 §7.9, P-4)
-_LTTB_SEGMENT_MIN = 50  # minimum LTTB budget per NaN-separated segment
 _TRIM_TOLERANCE = 1.1  # 10% beyond median before wavelength trim kicks in
+
+_GAP_FACTOR: float = 5.0  # wavelength step multiplier to detect chip gap isolation
+_CHIP_GAP_FLUX_FRACTION: float = 0.1  # fraction of median abs flux below which flux is "near zero"
 
 _ARM_MJD_TOLERANCE = 0.333  # days (~8 hr) — grouping tolerance for arms
 _ARM_OVERLAP_MAX_NM = 100.0  # nm — max overlap before we reject a merge
-_GAP_SPACING_FACTOR = 3.0  # gap detection: jump > N × local median spacing
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +354,19 @@ def _process_spectrum_stage1(
         )
         return None
 
+    # --- Interior dead runs (chip gaps) ---
+    wavelengths, fluxes = _remove_interior_dead_runs(wavelengths, fluxes, data_product_id)
+
+    # --- Chip gap artifact rejection ---
+    wavelengths, fluxes = _reject_chip_gap_artifacts(wavelengths, fluxes, data_product_id)
+
+    if not wavelengths:
+        _logger.warning(
+            "Empty spectrum after chip gap rejection — skipping",
+            extra={"nova_id": nova_id, "data_product_id": data_product_id},
+        )
+        return None
+
     return {
         "wavelengths": wavelengths,
         "fluxes": fluxes,
@@ -458,11 +471,6 @@ def _process_spectrum_stage2(
         )
         return None
 
-    # --- Strip NaN sentinels (used for segment-aware LTTB, invalid in JSON) ---
-    clean = [(w, f) for w, f in zip(wavelengths, flux_normalized, strict=True) if not math.isnan(f)]
-    wavelengths = [p[0] for p in clean]
-    flux_normalized = [p[1] for p in clean]
-
     # --- Metadata ---
     epoch_mjd = _to_float(product.get("observation_date_mjd", 0))
 
@@ -477,8 +485,8 @@ def _process_spectrum_stage2(
         "instrument": product.get("instrument", "unknown"),
         "telescope": product.get("telescope", "unknown"),
         "provider": product.get("provider", "unknown"),
-        "wavelength_min": wavelengths[0],
-        "wavelength_max": wavelengths[-1],
+        "wavelength_min": min(wavelengths),
+        "wavelength_max": max(wavelengths),
         "flux_unit": product.get("flux_unit", "unknown"),
         "normalization_scale": normalization_scale,
         "wavelengths": wavelengths,
@@ -550,7 +558,7 @@ def _trim_dead_edges(
             blue_zeros += 1
         else:
             break
-    blue_trim = blue_zeros if blue_zeros > 1 else 0
+    blue_trim = blue_zeros if blue_zeros >= 1 else 0
 
     # --- red (high-wavelength) edge ---
     red_zeros = 0
@@ -559,7 +567,7 @@ def _trim_dead_edges(
             red_zeros += 1
         else:
             break
-    red_trim = red_zeros if red_zeros > 1 else 0
+    red_trim = red_zeros if red_zeros >= 1 else 0
 
     if blue_trim or red_trim:
         _logger.debug(
@@ -573,6 +581,117 @@ def _trim_dead_edges(
 
     end = n - red_trim if red_trim else n
     return wavelengths[blue_trim:end], fluxes[blue_trim:end]
+
+
+# ---------------------------------------------------------------------------
+# Chip gap artifact rejection
+# ---------------------------------------------------------------------------
+
+
+def _reject_chip_gap_artifacts(
+    wavelengths: list[float],
+    fluxes: list[float],
+    data_product_id: str,
+) -> tuple[list[float], list[float]]:
+    """Remove interpolated chip gap artifacts.
+
+    Chip gaps produce isolated points at irregular wavelength spacing
+    with near-zero flux. These are reduction pipeline artifacts, not
+    real spectral data.
+    """
+    n = len(wavelengths)
+    if n < 3:
+        return wavelengths, fluxes
+
+    # Compute median wavelength step
+    steps = [wavelengths[i + 1] - wavelengths[i] for i in range(n - 1)]
+    median_step = sorted(steps)[len(steps) // 2]  # simple median
+
+    # Compute median absolute flux (excluding zeros)
+    abs_fluxes = [abs(f) for f in fluxes if f != 0.0]
+    if not abs_fluxes:
+        return wavelengths, fluxes
+    median_flux = sorted(abs_fluxes)[len(abs_fluxes) // 2]
+
+    flux_threshold = median_flux * _CHIP_GAP_FLUX_FRACTION
+    gap_threshold = median_step * _GAP_FACTOR
+
+    # Identify chip gap artifacts
+    keep_wl: list[float] = []
+    keep_fx: list[float] = []
+    removed = 0
+
+    for i in range(n):
+        # Check wavelength isolation
+        gap_left = (wavelengths[i] - wavelengths[i - 1]) if i > 0 else 0.0
+        gap_right = (wavelengths[i + 1] - wavelengths[i]) if i < n - 1 else 0.0
+        is_isolated = gap_left > gap_threshold or gap_right > gap_threshold
+
+        # Check near-zero flux
+        is_near_zero = abs(fluxes[i]) < flux_threshold
+
+        if is_isolated and is_near_zero:
+            removed += 1
+            continue
+
+        keep_wl.append(wavelengths[i])
+        keep_fx.append(fluxes[i])
+
+    if removed > 0:
+        _logger.debug(
+            "Removed chip gap artifacts",
+            extra={
+                "data_product_id": data_product_id,
+                "points_removed": removed,
+                "median_step_nm": round(median_step, 4),
+                "gap_threshold_nm": round(gap_threshold, 4),
+            },
+        )
+
+    return keep_wl, keep_fx
+
+
+# ---------------------------------------------------------------------------
+# Remove Interior Dead Runs
+# ---------------------------------------------------------------------------
+
+
+def _remove_interior_dead_runs(
+    wavelengths: list[float],
+    fluxes: list[float],
+    data_product_id: str,
+    min_run: int = 3,
+) -> tuple[list[float], list[float]]:
+    """Remove interior runs of consecutive near-zero flux (chip gaps)."""
+    peak = max(abs(f) for f in fluxes)
+    if peak == 0:
+        return wavelengths, fluxes
+
+    threshold = peak * _RELATIVE_ZERO_FRACTION
+
+    # Mark each point as dead or alive
+    alive = [abs(f) >= threshold for f in fluxes]
+
+    # Keep all points except interior dead runs of length >= min_run
+    keep = [True] * len(fluxes)
+    run_start = None
+    for i, is_alive in enumerate(alive):
+        if not is_alive:
+            if run_start is None:
+                run_start = i
+        else:
+            if run_start is not None:
+                run_len = i - run_start
+                # Only remove interior runs (not touching edges)
+                if run_len >= min_run and run_start > 0:
+                    for j in range(run_start, i):
+                        keep[j] = False
+                run_start = None
+
+    # Filter
+    out_wl = [w for w, k in zip(wavelengths, keep, strict=False) if k]
+    out_fx = [f for f, k in zip(fluxes, keep, strict=False) if k]
+    return out_wl, out_fx
 
 
 # ---------------------------------------------------------------------------
@@ -590,22 +709,17 @@ def _normalize_flux(
     is empty — the caller should skip the spectrum.
 
     After normalization, all values are clamped to ``_FLUX_FLOOR`` to
-    prevent ``log(0)`` on the frontend log-scale toggle.  NaN values
-    (gap sentinels from multi-arm merge) are preserved as-is.
+    prevent ``log(0)`` on the frontend log-scale toggle.
     """
     if not fluxes:
         return [], None
 
-    finite_abs = [abs(f) for f in fluxes if not math.isnan(f)]
-    if not finite_abs:
-        return [], None
-
-    peak = max(finite_abs)
+    peak = max(abs(f) for f in fluxes)
 
     if peak == 0.0:
         return [], None
 
-    normalized = [float("nan") if math.isnan(f) else max(f / peak, _FLUX_FLOOR) for f in fluxes]
+    normalized: list[float] = [max(f / peak, _FLUX_FLOOR) for f in fluxes]
     return normalized, peak
 
 
@@ -762,7 +876,6 @@ def _merge_arm_group(
     merged_wl: list[float] = list(arms[0]["wavelengths"])
     merged_fx: list[float] = list(arms[0]["fluxes"])
     blend_applied = False
-    gap_applied = False
 
     for k in range(1, len(arms)):
         arm_wl = arms[k]["wavelengths"]
@@ -774,13 +887,8 @@ def _merge_arm_group(
             merged_wl, merged_fx = _blend_overlap(merged_wl, merged_fx, arm_wl, arm_fx)
             blend_applied = True
         else:
-            # Check for gap.
-            gap_detected = _detect_gap(merged_wl, arm_wl)
-            if gap_detected:
-                midpoint = (merged_wl[-1] + arm_wl[0]) / 2.0
-                merged_wl.append(midpoint)
-                merged_fx.append(float("nan"))
-                gap_applied = True
+            # No overlap — simple concatenation (gap is acceptable at
+            # waterfall display scale; raw per-arm FITS preserve true coverage).
             merged_wl.extend(arm_wl)
             merged_fx.extend(arm_fx)
 
@@ -793,7 +901,6 @@ def _merge_arm_group(
 
     # --- Build merged record ---
     first = arms[0]["product"]
-    valid_wl = [w for w, f in zip(merged_wl, merged_fx, strict=True) if not math.isnan(f)]
 
     merged_product: dict[str, Any] = {
         "data_product_id": composite_id,
@@ -802,8 +909,8 @@ def _merge_arm_group(
         "provider": first.get("provider", "unknown"),
         "observation_date_mjd": first.get("observation_date_mjd", 0),
         "flux_unit": first.get("flux_unit", "unknown"),
-        "wavelength_min": valid_wl[0] if valid_wl else merged_wl[0],
-        "wavelength_max": valid_wl[-1] if valid_wl else merged_wl[-1],
+        "wavelength_min": merged_wl[0],
+        "wavelength_max": merged_wl[-1],
     }
 
     _logger.info(
@@ -817,7 +924,6 @@ def _merge_arm_group(
             "wavelength_min": merged_product["wavelength_min"],
             "wavelength_max": merged_product["wavelength_max"],
             "blend_applied": blend_applied,
-            "gap_applied": gap_applied,
         },
     )
 
@@ -878,22 +984,6 @@ def _blend_overlap(
     return merged_wl, merged_fx
 
 
-def _detect_gap(wl_a: list[float], wl_b: list[float]) -> bool:
-    """Return True if the jump between the last point of *wl_a* and the first
-    point of *wl_b* exceeds 3× the local median spacing of *wl_a*.
-    """
-    if len(wl_a) < 2:
-        return False
-    # Local median spacing: use the last 50 points of arm A (or all if fewer).
-    tail = wl_a[-50:]
-    spacings = [tail[i + 1] - tail[i] for i in range(len(tail) - 1)]
-    if not spacings:
-        return False
-    median_spacing = statistics.median(spacings)
-    jump = wl_b[0] - wl_a[-1]
-    return jump > _GAP_SPACING_FACTOR * median_spacing
-
-
 def _persist_merged_csv(
     nova_id: str,
     composite_id: str,
@@ -937,62 +1027,13 @@ def _segment_aware_lttb(
     wavelengths: list[float],
     fluxes: list[float],
 ) -> tuple[list[float], list[float]]:
-    """Run LTTB on NaN-separated segments with proportional budget allocation.
-
-    If there are no NaN values, falls through to a single-pass LTTB.
-    """
+    """Run single-pass LTTB downsampling on a contiguous spectrum."""
     if len(wavelengths) <= _LTTB_THRESHOLD:
         return wavelengths, fluxes
 
-    # Check for NaN sentinels.
-    nan_indices = [i for i, f in enumerate(fluxes) if math.isnan(f)]
-
-    if not nan_indices:
-        # Contiguous spectrum — single-pass LTTB.
-        points = list(zip(wavelengths, fluxes, strict=True))
-        downsampled = lttb(points, _LTTB_THRESHOLD)
-        return [p[0] for p in downsampled], [p[1] for p in downsampled]
-
-    # Split into segments at NaN positions.
-    segments: list[list[tuple[float, float]]] = []
-    seg_start = 0
-    for ni in nan_indices:
-        if ni > seg_start:
-            seg = list(zip(wavelengths[seg_start:ni], fluxes[seg_start:ni], strict=True))
-            segments.append(seg)
-        seg_start = ni + 1
-    if seg_start < len(wavelengths):
-        seg = list(zip(wavelengths[seg_start:], fluxes[seg_start:], strict=True))
-        segments.append(seg)
-
-    if not segments:
-        return wavelengths, fluxes
-
-    # Allocate point budget proportional to wavelength span.
-    spans = [seg[-1][0] - seg[0][0] if len(seg) > 1 else 0.0 for seg in segments]
-    total_span = sum(spans)
-    if total_span == 0.0:
-        return wavelengths, fluxes
-
-    budgets: list[int] = []
-    for span in spans:
-        budget = max(int(span / total_span * _LTTB_THRESHOLD), _LTTB_SEGMENT_MIN)
-        budgets.append(budget)
-
-    # Run LTTB per segment and reassemble with NaN separators.
-    out_wl: list[float] = []
-    out_fx: list[float] = []
-    for idx, (seg, budget) in enumerate(zip(segments, budgets, strict=True)):
-        if idx > 0:
-            # NaN separator between segments.
-            midpoint = (segments[idx - 1][-1][0] + seg[0][0]) / 2.0
-            out_wl.append(midpoint)
-            out_fx.append(float("nan"))
-        downsampled = lttb(seg, budget) if len(seg) > budget else seg
-        out_wl.extend(p[0] for p in downsampled)
-        out_fx.extend(p[1] for p in downsampled)
-
-    return out_wl, out_fx
+    points = list(zip(wavelengths, fluxes, strict=True))
+    downsampled = lttb(points, _LTTB_THRESHOLD)
+    return [p[0] for p in downsampled], [p[1] for p in downsampled]
 
 
 # ---------------------------------------------------------------------------

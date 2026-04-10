@@ -10,6 +10,7 @@ This module intentionally avoids any dependency on ``aws_lambda_powertools``
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 import os
@@ -53,6 +54,8 @@ class StructuredJsonFormatter(logging.Formatter):
     identically.
     """
 
+    _seq_counter = itertools.count()
+
     def __init__(self, log_context: LogContext | None = None) -> None:
         super().__init__()
         self._log_context = log_context or LogContext()
@@ -60,6 +63,7 @@ class StructuredJsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         entry: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
+            "seq": next(self._seq_counter),
             "level": record.levelname,
             "message": record.getMessage(),
             "service": "nova-cat",
@@ -130,14 +134,30 @@ def configure_fargate_logging(log_context: LogContext | None = None) -> logging.
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
 
-    # Clear root logger handlers (removes basicConfig residue).
+    # Configure root logger — captures library output (boto3, etc.)
     root = logging.getLogger()
     root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(logging.WARNING)
 
+    # Configure artifact_generator logger
     logger = logging.getLogger("artifact_generator")
     logger.handlers.clear()
     logger.addHandler(handler)
     logger.setLevel(level)
     logger.propagate = False
+
+    # Catch uncaught exceptions in structured format
+    def _structured_excepthook(
+        exc_type: type[BaseException],
+        exc_value: BaseException,
+        exc_tb: Any,
+    ) -> None:
+        logger.critical(
+            "Uncaught exception — process terminating",
+            exc_info=(exc_type, exc_value, exc_tb),
+        )
+
+    sys.excepthook = _structured_excepthook
 
     return logger
