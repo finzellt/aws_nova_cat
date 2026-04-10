@@ -241,12 +241,29 @@ Standard Step Functions workflow with four states:
 
 ## 4.5 Fargate Task (`artifact_generator`)
 
-Container-based ECS Fargate task (2 vCPU / 8 GB). Processes novae sequentially,
-generating up to seven artifacts per nova in dependency order:
+Container-based ECS Fargate task (2 vCPU / 8 GB). Execution proceeds in two phases:
+
+**Pre-processing phase — Spectra compositing (ADR-033).** For each nova in the
+regeneration plan with a `spectra` dirty type, the task checks for same-instrument,
+same-night spectra groups eligible for compositing. Groups of ≥ 2 spectra that pass
+the 2000-point threshold are combined into a single composite spectrum via cleaning,
+resampling onto a common wavelength grid, and averaging. Composite DataProduct items
+and CSV artifacts (full-resolution and LTTB-downsampled) are written to DynamoDB and
+S3. A fingerprint-based check skips recompositing when the underlying data has not
+changed. This phase is a no-op for novae with no compositable groups.
+
+**Artifact generation phase.** Processes novae sequentially, generating up to seven
+artifacts per nova in dependency order:
 
 ```
 references.json → spectra.json → photometry.json → sparkline.svg → nova.json → bundle.zip
 ```
+
+The spectra generator reads both individual and composite DataProducts. Composites
+replace their constituent spectra in the waterfall plot; individual spectra whose
+`data_product_id` appears in a composite's `constituent_data_product_ids` or
+`rejected_data_product_ids` are excluded from the display set. The bundle generator
+includes only individual spectra (original FITS files).
 
 After all per-nova artifacts, a four-phase publication sequence runs:
 1. **Phase 1** — Write swept novae artifacts to `releases/<YYYYMMDD-HHMMSS>/`.
@@ -262,7 +279,7 @@ photometry band offsets), band registry (loaded once per execution).
 | Artifact | Input Sources | Key Computation |
 |----------|---------------|-----------------|
 | `references.json` | NovaReference + Reference items (DDB) | Orphan handling, year-descending sort |
-| `spectra.json` | VALID DataProduct items (DDB) + web-ready CSVs (S3) | Peak-flux normalization, epoch sorting, DPO derivation |
+| `spectra.json` | VALID DataProduct items including composites (DDB) + web-ready CSVs (S3) | Composite filtering (ADR-033), peak-flux normalization, epoch sorting, DPO derivation |
 | `photometry.json` | PhotometryRow items (dedicated DDB table) | Regime grouping, upper limit suppression, LTTB subsampling, kd-tree band offset, DPO derivation |
 | `sparkline.svg` | Optical photometry (in-memory from photometry generator) | Band selection, coordinate transform to 90×55px viewport, SVG polyline + fill |
 | `nova.json` | Nova item (DDB) + in-process counts from spectra/photometry generators | Coordinate formatting (decimal → sexagesimal), discovery date pass-through |
@@ -314,7 +331,8 @@ PK = <nova_id>
 Item types:
 - `NOVA` — core nova metadata (coordinates, status, names, discovery_date,
   observation counts, nova_type)
-- `PRODUCT#...` — data product metadata (spectra, photometry envelope)
+- `PRODUCT#...` — data product metadata (spectra, spectra composites [ADR-033],
+  photometry envelope)
 - `FILE#...` — S3 file references
 - `NOVAREF#...` — nova-to-reference links
 - `JOBRUN#...` — operational execution records

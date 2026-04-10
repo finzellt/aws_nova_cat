@@ -729,6 +729,8 @@ class DataProduct(PersistentBase):
     There are two product types:
     - PHOTOMETRY_TABLE (exactly one per nova)
     - SPECTRA (many per nova; one item per atomic spectra product)
+    - SPECTRA composite (derived; one per same-instrument same-night group;
+      see ADR-033)
 
     This contract is intentionally permissive: fields are type-dependent.
 
@@ -837,14 +839,65 @@ class DataProduct(PersistentBase):
         description="Median signal-to-noise ratio per pixel, from FITS SNR column when available.",
     )
 
+    # --- composite spectra fields (ADR-033) ---
+    # Present only on composite DataProducts (product_type=SPECTRA with
+    # SK containing COMPOSITE). When constituent_data_product_ids is not
+    # None, the item is a composite and acquisition/locator fields are
+    # not required.
+    constituent_data_product_ids: list[UUID] | None = Field(
+        default=None,
+        description=(
+            "DataProduct IDs of the individual spectra that were combined "
+            "into this composite. Sorted deterministically. "
+            "None for non-composite DataProducts."
+        ),
+    )
+    rejected_data_product_ids: list[UUID] | None = Field(
+        default=None,
+        description=(
+            "Same-night, same-instrument spectra considered but excluded "
+            "from this composite (e.g., below 2000-point threshold). "
+            "None for non-composite DataProducts."
+        ),
+    )
+    composite_fingerprint: str | None = Field(
+        default=None,
+        max_length=512,
+        description=(
+            "Deterministic hash of sorted constituent data_product_ids "
+            "and their sha256 fingerprints. Enables idempotent rebuild "
+            "avoidance (ADR-033 Decision 7)."
+        ),
+    )
+    composite_s3_key: str | None = Field(
+        default=None,
+        max_length=2048,
+        description=(
+            "S3 key for the full-resolution composite CSV "
+            "(common grid, pre-LTTB). "
+            "Path: derived/spectra/<nova_id>/<composite_id>/composite_full.csv"
+        ),
+    )
+    web_ready_s3_key: str | None = Field(
+        default=None,
+        max_length=2048,
+        description=(
+            "S3 key for the LTTB-downsampled composite CSV (≤ 2000 points). "
+            "Read by the spectra generator like any other web-ready CSV. "
+            "Path: derived/spectra/<nova_id>/<composite_id>/web_ready.csv"
+        ),
+    )
+
     @model_validator(mode="after")
     def validate_by_product_type(self) -> DataProduct:
         if self.product_type == ProductType.spectra:
             if not self.provider or not self.provider.strip():
                 raise ValueError("SPECTRA DataProduct requires provider.")
-            if not self.locator_identity or not self.locator_identity.strip():
+            if self.constituent_data_product_ids is None and (
+                not self.locator_identity or not self.locator_identity.strip()
+            ):
                 raise ValueError("SPECTRA DataProduct requires locator_identity.")
-            if self.acquisition_status is None:
+            if self.constituent_data_product_ids is None and self.acquisition_status is None:
                 raise ValueError("SPECTRA DataProduct requires acquisition_status.")
             if self.validation_status is None:
                 raise ValueError("SPECTRA DataProduct requires validation_status.")

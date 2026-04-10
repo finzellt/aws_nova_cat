@@ -471,8 +471,167 @@ null indicates the source data did not contain the value.
   "updated_at": "2026-02-23T18:25:00Z"
 }
 ```
+---
+
+#### 3.3 Composite spectra data product (ADR-033)
+
+A composite spectrum is a derived DataProduct that combines multiple
+same-instrument, same-night individual spectra into a single higher-SNR
+spectrum for display in the waterfall plot. Composites are created by the
+Fargate artifact generation task during a pre-processing phase (Phase 1)
+before per-nova artifact generators execute.
+
+Composites are display-only products. They replace their constituent
+spectra in the waterfall plot but do **not** appear in research bundles.
+Individual constituent spectra remain as independent DataProduct items
+with their own lifecycle and metadata.
+
+##### Key
+
+- `PK = "<nova_id>"`
+- `SK = "PRODUCT#SPECTRA#<provider>#COMPOSITE#<composite_id>"`
+
+The `COMPOSITE` segment in the sort key distinguishes composites from
+individual spectra at the key level, without requiring a discriminator
+attribute. The `<composite_id>` is a deterministic UUID v5 derived from
+the sorted constituent `data_product_id` values (using a NovaCat
+namespace).
+
+##### Query patterns
+
+| Pattern | Key condition | Use case |
+|---|---|---|
+| All spectra (individuals + composites) | `begins_with(SK, "PRODUCT#SPECTRA#")` | Spectra generator (waterfall plot input set) |
+| Composites only for a provider | `begins_with(SK, "PRODUCT#SPECTRA#<provider>#COMPOSITE#")` | Compositing sweep fingerprint checks |
+| Individuals only | `begins_with(SK, "PRODUCT#SPECTRA#")` with filter excluding `COMPOSITE` in SK | Bundle generator |
 
 ---
+
+##### Fields
+
+Composite items carry the standard DataProduct identity fields plus
+composite-specific fields. Because composites are derived products created
+by the artifact generator (not by ingestion workflows), many individual
+spectra lifecycle fields do not apply.
+
+###### Identity (standard)
+
+- `entity_type = "DataProduct"`
+- `schema_version` (internal item evolution)
+- `data_product_id` = `<composite_id>` (deterministic UUID v5; see Key above)
+- `product_type = "SPECTRA"`
+- `provider` (string; shared provider of the compositing group)
+
+###### Composite-specific fields
+
+- `constituent_data_product_ids` (list of string)
+  DataProduct IDs of the individual spectra that were combined. Sorted
+  deterministically.
+
+- `rejected_data_product_ids` (list of string)
+  Same-night, same-instrument spectra that were considered for compositing
+  but excluded (e.g., below the 2000-point threshold per ADR-033
+  Decision 1). May be empty.
+
+- `composite_fingerprint` (string)
+  Deterministic hash of sorted constituent `data_product_id` values
+  concatenated with their individual `sha256` content fingerprints.
+  Enables idempotent rebuild avoidance (ADR-033 Decision 7).
+
+###### Spectrum metadata
+
+- `instrument` (string; shared instrument of the compositing group)
+- `telescope` (string | null; from constituents)
+- `observation_date_mjd` (number; mean MJD of the constituent spectra)
+
+###### S3 pointers
+
+- `composite_s3_key`
+  (`derived/spectra/<nova_id>/<composite_id>/composite_full.csv`)
+  Full-resolution composite on the common wavelength grid, pre-LTTB.
+
+- `web_ready_s3_key`
+  (`derived/spectra/<nova_id>/<composite_id>/web_ready.csv`)
+  LTTB-downsampled composite (≤ 2000 points). Read by the spectra
+  generator in the same way as individual spectra web-ready CSVs.
+
+###### Lifecycle (fixed values)
+
+- `validation_status = "VALID"` (composites are always valid by construction)
+- `acquisition_status` — not applicable (omitted)
+- `eligibility = "NONE"` (composites are not eligible for acquisition)
+
+###### Timestamps
+
+- `created_at` (ISO-8601 UTC)
+- `updated_at` (ISO-8601 UTC)
+
+---
+
+##### Lifecycle
+
+Composites are **not** created by ingestion workflows. They are created
+and maintained exclusively by the Fargate artifact generation task:
+
+- **Created** when the compositing sweep (Phase 1) identifies a group of
+  ≥ 2 same-instrument, same-night spectra that passes the 2000-point
+  threshold.
+- **Rebuilt** when the compositing sweep detects that the
+  `composite_fingerprint` has changed (a constituent was re-validated
+  with different content, or a new spectrum joined the group).
+- **Never deleted** by the compositing sweep. A composite whose
+  constituents are all removed would have no matching compositing group
+  and would be orphaned; cleanup of orphaned composites is deferred.
+
+##### Spectra generator filtering
+
+When building the waterfall plot, the spectra generator:
+
+1. Queries with `begins_with(SK, "PRODUCT#SPECTRA#")` to get all spectra.
+2. Identifies composites by the presence of `COMPOSITE` in the SK.
+3. Excludes any individual DataProduct whose `data_product_id` appears in
+   any composite's `constituent_data_product_ids` or
+   `rejected_data_product_ids`.
+
+This prevents both the composite and its constituents from appearing in
+the plot simultaneously, and prevents rejected same-night spectra from
+appearing as though they were independent observations.
+
+---
+
+##### Example (composite):
+```json
+{
+  "PK": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
+  "SK": "PRODUCT#SPECTRA#ESO#COMPOSITE#c9a1b2d3-7e8f-5a6b-4c3d-2e1f0a9b8c7d",
+  "entity_type": "DataProduct",
+  "schema_version": "1",
+  "data_product_id": "c9a1b2d3-7e8f-5a6b-4c3d-2e1f0a9b8c7d",
+  "nova_id": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
+  "product_type": "SPECTRA",
+  "provider": "ESO",
+  "instrument": "UVES",
+  "telescope": "ESO-VLT-U2",
+  "observation_date_mjd": 56082.08,
+  "validation_status": "VALID",
+  "eligibility": "NONE",
+  "constituent_data_product_ids": [
+    "2c7d1f4d-5b7a-4a4d-9f31-8d3b4fd0d4d9",
+    "a1b2c3d4-1234-5678-9abc-def012345678"
+  ],
+  "rejected_data_product_ids": [
+    "f0e1d2c3-4567-89ab-cdef-0123456789ab"
+  ],
+  "composite_fingerprint": "sha256:7f3a...b2c1",
+  "composite_s3_key": "derived/spectra/4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1/c9a1b2d3-7e8f-5a6b-4c3d-2e1f0a9b8c7d/composite_full.csv",
+  "web_ready_s3_key": "derived/spectra/4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1/c9a1b2d3-7e8f-5a6b-4c3d-2e1f0a9b8c7d/web_ready.csv",
+  "created_at": "2026-04-10T12:00:00Z",
+  "updated_at": "2026-04-10T12:00:00Z"
+}
+```
+
+---
+
 
 ### 4) LocatorAlias (provider + locator_identity → data_product_id)
 
