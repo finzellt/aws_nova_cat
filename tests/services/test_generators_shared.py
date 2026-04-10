@@ -14,7 +14,11 @@ from generators.shared import (
     format_coordinates,
     generated_at_timestamp,
     lttb,
+    reject_chip_gap_artifacts,
+    remove_interior_dead_runs,
     resolve_outburst_mjd,
+    segment_aware_lttb,
+    trim_dead_edges,
 )
 
 # ======================================================================
@@ -398,3 +402,53 @@ class TestLttb:
         result = lttb(pts, 20)
         x_values = [p[0] for p in result]
         assert x_values == sorted(x_values)
+
+
+# ======================================================================
+# Spectral cleaning utilities (smoke tests — thorough tests in
+# test_generators_spectra.py and test_spectra_merge.py)
+# ======================================================================
+
+
+class TestTrimDeadEdgesSmoke:
+    """Basic importability and call for trim_dead_edges."""
+
+    def test_callable_and_returns_tuple(self) -> None:
+        wl = [400.0, 401.0, 402.0, 403.0]
+        fx = [0.0, 0.5, 1.0, 0.0]
+        result = trim_dead_edges(wl, fx, "smoke-dp")
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+
+
+class TestRemoveInteriorDeadRunsSmoke:
+    """Basic importability and call for remove_interior_dead_runs."""
+
+    def test_callable_and_returns_tuple(self) -> None:
+        wl = [400.0, 401.0, 402.0, 403.0, 404.0]
+        fx = [1.0, 0.0, 0.0, 0.0, 1.0]
+        result = remove_interior_dead_runs(wl, fx, "smoke-dp")
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+
+
+class TestRejectChipGapArtifactsSmoke:
+    """Basic importability and call for reject_chip_gap_artifacts."""
+
+    def test_callable_and_returns_tuple(self) -> None:
+        wl = [400.0, 401.0, 402.0, 403.0]
+        fx = [1.0, 0.8, 0.9, 1.0]
+        result = reject_chip_gap_artifacts(wl, fx, "smoke-dp")
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+
+
+class TestSegmentAwareLttbSmoke:
+    """Basic importability and call for segment_aware_lttb."""
+
+    def test_callable_and_returns_tuple(self) -> None:
+        wl = [float(i) for i in range(100)]
+        fx = [float(i) for i in range(100)]
+        result = segment_aware_lttb(wl, fx)
+        assert isinstance(result, tuple)
+        assert len(result) == 2

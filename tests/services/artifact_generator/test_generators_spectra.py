@@ -1,7 +1,7 @@
 """Unit tests for generators/spectra.py — edge trimming and flux floor.
 
 Covers:
-  _trim_dead_edges:
+  trim_dead_edges:
   - Blue edge only: consecutive leading zeros trimmed
   - Red edge only: consecutive trailing zeros trimmed
   - Both edges: leading and trailing zeros trimmed
@@ -26,15 +26,17 @@ from unittest.mock import MagicMock
 
 import boto3
 import pytest
-from generators.shared import lttb
+from generators.shared import (
+    LTTB_THRESHOLD,
+    RELATIVE_ZERO_FRACTION,
+    lttb,
+    reject_chip_gap_artifacts,
+    trim_dead_edges,
+)
 from generators.spectra import (
     _FLUX_FLOOR,
-    _LTTB_THRESHOLD,
-    _RELATIVE_ZERO_FRACTION,
     _TRIM_TOLERANCE,
     _normalize_flux,
-    _reject_chip_gap_artifacts,
-    _trim_dead_edges,
     _trim_wavelength_range,
     _trim_wavelength_range_min,
     generate_spectra_json,
@@ -42,7 +44,7 @@ from generators.spectra import (
 from moto import mock_aws
 
 # ---------------------------------------------------------------------------
-# _trim_dead_edges
+# trim_dead_edges
 # ---------------------------------------------------------------------------
 
 
@@ -52,56 +54,56 @@ class TestTrimDeadEdges:
     def test_blue_edge_only(self) -> None:
         wl = [400.0, 401.0, 402.0, 403.0, 404.0, 405.0]
         fx = [0.0, 0.0, 0.0, 0.5, 1.0, 0.8]
-        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-blue")
+        wl_out, fx_out = trim_dead_edges(wl, fx, "dp-blue")
         assert fx_out == [0.5, 1.0, 0.8]
         assert wl_out == [403.0, 404.0, 405.0]
 
     def test_red_edge_only(self) -> None:
         wl = [400.0, 401.0, 402.0, 403.0, 404.0]
         fx = [0.5, 1.0, 0.8, 0.0, 0.0]
-        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-red")
+        wl_out, fx_out = trim_dead_edges(wl, fx, "dp-red")
         assert fx_out == [0.5, 1.0, 0.8]
         assert wl_out == [400.0, 401.0, 402.0]
 
     def test_both_edges(self) -> None:
         wl = [400.0, 401.0, 402.0, 403.0, 404.0, 405.0, 406.0, 407.0]
         fx = [0.0, 0.0, 0.3, 1.0, 0.5, 0.0, 0.0, 0.0]
-        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-both")
+        wl_out, fx_out = trim_dead_edges(wl, fx, "dp-both")
         assert fx_out == [0.3, 1.0, 0.5]
         assert wl_out == [402.0, 403.0, 404.0]
 
     def test_single_zero_at_each_edge_trimmed(self) -> None:
         wl = [400.0, 401.0, 402.0, 403.0, 404.0]
         fx = [0.0, 0.5, 1.0, 0.8, 0.0]
-        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-single")
+        wl_out, fx_out = trim_dead_edges(wl, fx, "dp-single")
         assert fx_out == [0.5, 1.0, 0.8]
         assert wl_out == [401.0, 402.0, 403.0]
 
     def test_no_zeros_unchanged(self) -> None:
         wl = [400.0, 401.0, 402.0]
         fx = [0.5, 1.0, 0.8]
-        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-none")
+        wl_out, fx_out = trim_dead_edges(wl, fx, "dp-none")
         assert fx_out == fx
         assert wl_out == wl
 
     def test_near_zero_below_threshold_treated_as_zero(self) -> None:
-        # Edge values are 1e-8 of peak (1.0), well below _RELATIVE_ZERO_FRACTION (1e-6)
-        tiny = 1.0 * _RELATIVE_ZERO_FRACTION * 0.01  # 1e-8
+        # Edge values are 1e-8 of peak (1.0), well below RELATIVE_ZERO_FRACTION (1e-6)
+        tiny = 1.0 * RELATIVE_ZERO_FRACTION * 0.01  # 1e-8
         wl = [400.0, 401.0, 402.0, 403.0, 404.0]
         fx = [tiny, tiny, 0.5, 1.0, 0.8]
-        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-tiny")
+        wl_out, fx_out = trim_dead_edges(wl, fx, "dp-tiny")
         assert fx_out == [0.5, 1.0, 0.8]
         assert wl_out == [402.0, 403.0, 404.0]
 
     def test_all_zeros_returns_empty(self) -> None:
         wl = [400.0, 401.0, 402.0]
         fx = [0.0, 0.0, 0.0]
-        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-allzero")
+        wl_out, fx_out = trim_dead_edges(wl, fx, "dp-allzero")
         assert fx_out == []
         assert wl_out == []
 
     def test_empty_input(self) -> None:
-        wl_out, fx_out = _trim_dead_edges([], [], "dp-empty")
+        wl_out, fx_out = trim_dead_edges([], [], "dp-empty")
         assert fx_out == []
         assert wl_out == []
 
@@ -110,7 +112,7 @@ class TestTrimDeadEdges:
         wl = [300.0, 301.0, 302.0, 303.0, 304.0, 305.0, 306.0, 307.0]
         # Genuine dead edges (zero), then real signal at ~1e-14, peak ~3e-13
         fx = [0.0, 0.0, 1.2e-14, 8.5e-14, 3.1e-13, 2.7e-13, 0.0, 0.0]
-        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-xshooter")
+        wl_out, fx_out = trim_dead_edges(wl, fx, "dp-xshooter")
         assert wl_out == [302.0, 303.0, 304.0, 305.0]
         assert fx_out == [1.2e-14, 8.5e-14, 3.1e-13, 2.7e-13]
 
@@ -118,7 +120,7 @@ class TestTrimDeadEdges:
         """Edges at 1e-8 of peak (~1.0) are below 1e-6 fraction → trimmed."""
         wl = [400.0, 401.0, 402.0, 403.0, 404.0, 405.0, 406.0]
         fx = [1e-8, 1e-8, 0.4, 1.0, 0.6, 1e-8, 1e-8]
-        wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-rolloff")
+        wl_out, fx_out = trim_dead_edges(wl, fx, "dp-rolloff")
         assert wl_out == [402.0, 403.0, 404.0]
         assert fx_out == [0.4, 1.0, 0.6]
 
@@ -186,9 +188,9 @@ class TestLttbDownsampling:
         fluxes[peak_idx] = peak_flux
 
         points = list(zip(wavelengths, fluxes, strict=True))
-        downsampled = lttb(points, _LTTB_THRESHOLD)
+        downsampled = lttb(points, LTTB_THRESHOLD)
 
-        assert len(downsampled) <= _LTTB_THRESHOLD
+        assert len(downsampled) <= LTTB_THRESHOLD
         # LTTB preserves dominant peaks
         downsampled_fluxes = [p[1] for p in downsampled]
         assert peak_flux in downsampled_fluxes
@@ -200,7 +202,7 @@ class TestLttbDownsampling:
         fluxes = [float(i % 10) for i in range(n)]
 
         points = list(zip(wavelengths, fluxes, strict=True))
-        result = lttb(points, _LTTB_THRESHOLD)
+        result = lttb(points, LTTB_THRESHOLD)
 
         assert len(result) == n
 
@@ -211,7 +213,7 @@ class TestLttbDownsampling:
         fluxes = [1.0 + 50.0 * max(0.0, 1.0 - abs(i - n // 2) / 50.0) for i in range(n)]
 
         points = list(zip(wavelengths, fluxes, strict=True))
-        downsampled = lttb(points, _LTTB_THRESHOLD)
+        downsampled = lttb(points, LTTB_THRESHOLD)
 
         assert downsampled[0][0] == wavelengths[0]
         assert downsampled[-1][0] == wavelengths[-1]
@@ -943,7 +945,7 @@ class TestSpectralVisits:
 
 
 # ---------------------------------------------------------------------------
-# _reject_chip_gap_artifacts
+# reject_chip_gap_artifacts
 # ---------------------------------------------------------------------------
 
 
@@ -970,7 +972,7 @@ class TestRejectChipGapArtifacts:
             wl.append(420.0 + i * 0.1)
             fx.append(1.0)
 
-        result_wl, result_fx = _reject_chip_gap_artifacts(wl, fx, "test-dp")
+        result_wl, result_fx = reject_chip_gap_artifacts(wl, fx, "test-dp")
 
         # The 2 gap points should be removed
         assert len(result_wl) == len(wl) - 2
@@ -984,7 +986,7 @@ class TestRejectChipGapArtifacts:
         fx = [1.0] * 100
         fx[50] = 0.001  # deep absorption line, but normal spacing
 
-        result_wl, result_fx = _reject_chip_gap_artifacts(wl, fx, "test-dp")
+        result_wl, result_fx = reject_chip_gap_artifacts(wl, fx, "test-dp")
 
         # Nothing removed — spacing is normal
         assert len(result_wl) == 100
@@ -1003,7 +1005,7 @@ class TestRejectChipGapArtifacts:
             wl.append(500.0 + i * 0.1)
             fx.append(1.0)
 
-        result_wl, result_fx = _reject_chip_gap_artifacts(wl, fx, "test-dp")
+        result_wl, result_fx = reject_chip_gap_artifacts(wl, fx, "test-dp")
 
         # Nothing removed — flux is normal at the boundary
         assert len(result_wl) == len(wl)
@@ -1023,7 +1025,7 @@ class TestRejectChipGapArtifacts:
             wl.append(430.0 + i * 0.1)
             fx.append(1.0)
 
-        result_wl, result_fx = _reject_chip_gap_artifacts(wl, fx, "test-dp")
+        result_wl, result_fx = reject_chip_gap_artifacts(wl, fx, "test-dp")
 
         assert len(result_wl) == len(wl) - 1
         assert 420.0 not in result_wl
@@ -1032,22 +1034,22 @@ class TestRejectChipGapArtifacts:
         """Arrays with fewer than 3 points are returned as-is."""
         wl_0: list[float] = []
         fx_0: list[float] = []
-        assert _reject_chip_gap_artifacts(wl_0, fx_0, "dp") == ([], [])
+        assert reject_chip_gap_artifacts(wl_0, fx_0, "dp") == ([], [])
 
         wl_1 = [400.0]
         fx_1 = [0.0]
-        assert _reject_chip_gap_artifacts(wl_1, fx_1, "dp") == ([400.0], [0.0])
+        assert reject_chip_gap_artifacts(wl_1, fx_1, "dp") == ([400.0], [0.0])
 
         wl_2 = [400.0, 500.0]
         fx_2 = [0.0, 0.0]
-        assert _reject_chip_gap_artifacts(wl_2, fx_2, "dp") == ([400.0, 500.0], [0.0, 0.0])
+        assert reject_chip_gap_artifacts(wl_2, fx_2, "dp") == ([400.0, 500.0], [0.0, 0.0])
 
     def test_all_zero_array_unchanged(self) -> None:
         """All-zero flux array triggers early return (no median flux to compute)."""
         wl = [400.0 + i * 0.1 for i in range(50)]
         fx = [0.0] * 50
 
-        result_wl, result_fx = _reject_chip_gap_artifacts(wl, fx, "test-dp")
+        result_wl, result_fx = reject_chip_gap_artifacts(wl, fx, "test-dp")
 
         assert result_wl == wl
         assert result_fx == fx
