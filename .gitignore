@@ -75,3 +75,6 @@ tools/novacat-tools/notebooks/novacat.ipynb
 *.ipynb
 /tools/interact_with_fits_files/fits_downloads/V1716_Sco
 /tools/interact_with_fits_files/fits_downloads
+tools/svo-filter-analysis/svo_fps.db-shm
+tools/svo-filter-analysis/svo_fps.db-wal
+tools/svo-filter-analysis/svo_fps.db-wal
