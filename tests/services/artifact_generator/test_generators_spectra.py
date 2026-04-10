@@ -33,6 +33,7 @@ from generators.spectra import (
     _RELATIVE_ZERO_FRACTION,
     _TRIM_TOLERANCE,
     _normalize_flux,
+    _reject_chip_gap_artifacts,
     _trim_dead_edges,
     _trim_wavelength_range,
     _trim_wavelength_range_min,
@@ -69,12 +70,12 @@ class TestTrimDeadEdges:
         assert fx_out == [0.3, 1.0, 0.5]
         assert wl_out == [402.0, 403.0, 404.0]
 
-    def test_single_zero_at_each_edge_preserved(self) -> None:
+    def test_single_zero_at_each_edge_trimmed(self) -> None:
         wl = [400.0, 401.0, 402.0, 403.0, 404.0]
         fx = [0.0, 0.5, 1.0, 0.8, 0.0]
         wl_out, fx_out = _trim_dead_edges(wl, fx, "dp-single")
-        assert fx_out == fx
-        assert wl_out == wl
+        assert fx_out == [0.5, 1.0, 0.8]
+        assert wl_out == [401.0, 402.0, 403.0]
 
     def test_no_zeros_unchanged(self) -> None:
         wl = [400.0, 401.0, 402.0]
@@ -939,3 +940,114 @@ class TestSpectralVisits:
 
         assert ctx["spectra_count"] == 3
         assert ctx["spectral_visits"] == 2
+
+
+# ---------------------------------------------------------------------------
+# _reject_chip_gap_artifacts
+# ---------------------------------------------------------------------------
+
+
+class TestRejectChipGapArtifacts:
+    """Chip gap interpolation artifact rejection."""
+
+    def test_chip_gap_points_removed(self) -> None:
+        """Points with large wavelength gaps AND near-zero flux are removed."""
+        # Normal 0.1nm spacing from 400–405, then 2 gap points at ~410 and ~415
+        # with near-zero flux, then normal spacing from 420–425.
+        wl: list[float] = []
+        fx: list[float] = []
+        # Normal region 1: 400.0 to 405.0 in 0.1nm steps
+        for i in range(51):
+            wl.append(400.0 + i * 0.1)
+            fx.append(1.0)
+        # Chip gap artifact points (5nm jump, near-zero flux)
+        wl.append(410.0)
+        fx.append(0.001)
+        wl.append(415.0)
+        fx.append(0.002)
+        # Normal region 2: 420.0 to 425.0 in 0.1nm steps
+        for i in range(51):
+            wl.append(420.0 + i * 0.1)
+            fx.append(1.0)
+
+        result_wl, result_fx = _reject_chip_gap_artifacts(wl, fx, "test-dp")
+
+        # The 2 gap points should be removed
+        assert len(result_wl) == len(wl) - 2
+        assert 410.0 not in result_wl
+        assert 415.0 not in result_wl
+
+    def test_real_absorption_feature_preserved(self) -> None:
+        """A low-flux point at normal spacing is NOT removed (real absorption)."""
+        # Uniform 0.1nm spacing, one point has very low flux
+        wl = [400.0 + i * 0.1 for i in range(100)]
+        fx = [1.0] * 100
+        fx[50] = 0.001  # deep absorption line, but normal spacing
+
+        result_wl, result_fx = _reject_chip_gap_artifacts(wl, fx, "test-dp")
+
+        # Nothing removed — spacing is normal
+        assert len(result_wl) == 100
+        assert result_fx[50] == 0.001
+
+    def test_arm_boundary_preserved(self) -> None:
+        """A large wavelength jump with normal flux is NOT removed (merge boundary)."""
+        # Region 1: 400–405 at 0.1nm
+        wl: list[float] = []
+        fx: list[float] = []
+        for i in range(51):
+            wl.append(400.0 + i * 0.1)
+            fx.append(1.0)
+        # Region 2: 500–505 at 0.1nm (big jump, but flux is normal)
+        for i in range(51):
+            wl.append(500.0 + i * 0.1)
+            fx.append(1.0)
+
+        result_wl, result_fx = _reject_chip_gap_artifacts(wl, fx, "test-dp")
+
+        # Nothing removed — flux is normal at the boundary
+        assert len(result_wl) == len(wl)
+
+    def test_single_isolated_zero_removed(self) -> None:
+        """One point with both large gap AND near-zero flux is removed."""
+        # Normal region, then one isolated near-zero point, then normal region
+        wl: list[float] = []
+        fx: list[float] = []
+        for i in range(50):
+            wl.append(400.0 + i * 0.1)
+            fx.append(1.0)
+        # Single isolated artifact
+        wl.append(420.0)  # 15nm gap from last point at ~404.9
+        fx.append(0.0001)
+        for i in range(50):
+            wl.append(430.0 + i * 0.1)
+            fx.append(1.0)
+
+        result_wl, result_fx = _reject_chip_gap_artifacts(wl, fx, "test-dp")
+
+        assert len(result_wl) == len(wl) - 1
+        assert 420.0 not in result_wl
+
+    def test_short_arrays_unchanged(self) -> None:
+        """Arrays with fewer than 3 points are returned as-is."""
+        wl_0: list[float] = []
+        fx_0: list[float] = []
+        assert _reject_chip_gap_artifacts(wl_0, fx_0, "dp") == ([], [])
+
+        wl_1 = [400.0]
+        fx_1 = [0.0]
+        assert _reject_chip_gap_artifacts(wl_1, fx_1, "dp") == ([400.0], [0.0])
+
+        wl_2 = [400.0, 500.0]
+        fx_2 = [0.0, 0.0]
+        assert _reject_chip_gap_artifacts(wl_2, fx_2, "dp") == ([400.0, 500.0], [0.0, 0.0])
+
+    def test_all_zero_array_unchanged(self) -> None:
+        """All-zero flux array triggers early return (no median flux to compute)."""
+        wl = [400.0 + i * 0.1 for i in range(50)]
+        fx = [0.0] * 50
+
+        result_wl, result_fx = _reject_chip_gap_artifacts(wl, fx, "test-dp")
+
+        assert result_wl == wl
+        assert result_fx == fx

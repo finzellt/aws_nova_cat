@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import io
 import json
+import warnings
 import zipfile
 from collections.abc import Generator
 from decimal import Decimal
@@ -86,6 +87,7 @@ _NOVA_ITEM: dict[str, Any] = {
 
 _DP_A_ID = "dp-aaaa-1111"
 _DP_B_ID = "dp-bbbb-2222"
+_DP_C_ID = "dp-cccc-3333"
 
 _FAKE_FITS = b"SIMPLE  = T" + b"\x00" * 2869  # minimal FITS-shaped bytes
 
@@ -590,6 +592,149 @@ class TestGenerateBundleZip:
         )
         after = set(glob.glob("/tmp/*.zip"))
         assert after == before
+
+
+# ---------------------------------------------------------------------------
+# Duplicate filename disambiguation (B19)
+# ---------------------------------------------------------------------------
+
+
+class TestDuplicateFilenameDisambiguation:
+    """Multi-arm instruments with identical provider/telescope/instrument/MJD."""
+
+    _UVES_KWARGS: dict[str, Any] = {
+        "provider": "ESO",
+        "telescope": "ESO-VLT-U2",
+        "instrument": "UVES",
+        "epoch_mjd": Decimal("57172.1372"),
+    }
+
+    def test_no_collision_distinct_mjds(self, aws: tuple[Any, Any]) -> None:
+        """Two DataProducts with different MJDs produce distinct filenames."""
+        table, s3 = aws
+        _seed_data_product(
+            table,
+            _NOVA_ID,
+            _DP_A_ID,
+            **self._UVES_KWARGS,
+        )
+        _seed_data_product(
+            table,
+            _NOVA_ID,
+            _DP_B_ID,
+            provider="ESO",
+            telescope="ESO-VLT-U2",
+            instrument="UVES",
+            epoch_mjd=Decimal("57173.2000"),
+        )
+        _upload_fits(s3, _NOVA_ID, _DP_A_ID, body=b"arm1" * 720, provider="ESO")
+        _upload_fits(s3, _NOVA_ID, _DP_B_ID, body=b"arm2" * 720, provider="ESO")
+
+        ctx = _base_nova_context()
+        result = generate_bundle_zip(
+            nova_id=_NOVA_ID,
+            table=table,
+            s3_client=s3,
+            private_bucket=_PRIVATE_BUCKET,
+            public_bucket=_PUBLIC_BUCKET,
+            nova_context=ctx,
+        )
+
+        obj = s3.get_object(Bucket=_PUBLIC_BUCKET, Key=result["s3_key"])
+        with zipfile.ZipFile(io.BytesIO(obj["Body"].read())) as zf:
+            spectra = [n for n in zf.namelist() if n.startswith("spectra/")]
+            assert len(spectra) == 2
+            # No suffix appended — filenames are naturally distinct
+            assert all("_2" not in n for n in spectra)
+
+    def test_two_arm_collision_produces_suffix(self, aws: tuple[Any, Any]) -> None:
+        """Two DataProducts with identical fields: first keeps original, second gets _2."""
+        table, s3 = aws
+        arm1_bytes = b"blue_arm" * 360
+        arm2_bytes = b"red__arm" * 360
+
+        _seed_data_product(table, _NOVA_ID, _DP_A_ID, **self._UVES_KWARGS)
+        _seed_data_product(table, _NOVA_ID, _DP_B_ID, **self._UVES_KWARGS)
+        _upload_fits(s3, _NOVA_ID, _DP_A_ID, body=arm1_bytes, provider="ESO")
+        _upload_fits(s3, _NOVA_ID, _DP_B_ID, body=arm2_bytes, provider="ESO")
+
+        ctx = _base_nova_context()
+        result = generate_bundle_zip(
+            nova_id=_NOVA_ID,
+            table=table,
+            s3_client=s3,
+            private_bucket=_PRIVATE_BUCKET,
+            public_bucket=_PUBLIC_BUCKET,
+            nova_context=ctx,
+        )
+
+        assert result["spectra_included"] == 2
+        obj = s3.get_object(Bucket=_PUBLIC_BUCKET, Key=result["s3_key"])
+        with zipfile.ZipFile(io.BytesIO(obj["Body"].read())) as zf:
+            spectra = sorted(n for n in zf.namelist() if n.startswith("spectra/"))
+            assert len(spectra) == 2
+            # One original, one with _2 suffix
+            original = "spectra/GK-Per_spectrum_ESO_ESO-VLT-U2_UVES_57172.1372.fits"
+            suffixed = "spectra/GK-Per_spectrum_ESO_ESO-VLT-U2_UVES_57172.1372_2.fits"
+            assert original in spectra
+            assert suffixed in spectra
+            # Contents are distinct
+            content_a = zf.read(original)
+            content_b = zf.read(suffixed)
+            assert content_a != content_b
+
+    def test_three_arm_collision_produces_2_and_3(self, aws: tuple[Any, Any]) -> None:
+        """Three DataProducts with identical fields: original, _2, _3."""
+        table, s3 = aws
+        for dp_id, body in [
+            (_DP_A_ID, b"arm_A__" * 411),
+            (_DP_B_ID, b"arm_B__" * 411),
+            (_DP_C_ID, b"arm_C__" * 411),
+        ]:
+            _seed_data_product(table, _NOVA_ID, dp_id, **self._UVES_KWARGS)
+            _upload_fits(s3, _NOVA_ID, dp_id, body=body, provider="ESO")
+
+        ctx = _base_nova_context()
+        result = generate_bundle_zip(
+            nova_id=_NOVA_ID,
+            table=table,
+            s3_client=s3,
+            private_bucket=_PRIVATE_BUCKET,
+            public_bucket=_PUBLIC_BUCKET,
+            nova_context=ctx,
+        )
+
+        assert result["spectra_included"] == 3
+        obj = s3.get_object(Bucket=_PUBLIC_BUCKET, Key=result["s3_key"])
+        with zipfile.ZipFile(io.BytesIO(obj["Body"].read())) as zf:
+            spectra = sorted(n for n in zf.namelist() if n.startswith("spectra/"))
+            assert len(spectra) == 3
+            base = "spectra/GK-Per_spectrum_ESO_ESO-VLT-U2_UVES_57172.1372"
+            assert f"{base}.fits" in spectra
+            assert f"{base}_2.fits" in spectra
+            assert f"{base}_3.fits" in spectra
+
+    def test_no_zipfile_duplicate_warning(self, aws: tuple[Any, Any]) -> None:
+        """ZIP creation must not emit duplicate-name warnings."""
+        table, s3 = aws
+        _seed_data_product(table, _NOVA_ID, _DP_A_ID, **self._UVES_KWARGS)
+        _seed_data_product(table, _NOVA_ID, _DP_B_ID, **self._UVES_KWARGS)
+        _upload_fits(s3, _NOVA_ID, _DP_A_ID, body=b"x" * 2880, provider="ESO")
+        _upload_fits(s3, _NOVA_ID, _DP_B_ID, body=b"y" * 2880, provider="ESO")
+
+        ctx = _base_nova_context()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            generate_bundle_zip(
+                nova_id=_NOVA_ID,
+                table=table,
+                s3_client=s3,
+                private_bucket=_PRIVATE_BUCKET,
+                public_bucket=_PUBLIC_BUCKET,
+                nova_context=ctx,
+            )
+        zip_warnings = [w for w in caught if "Duplicate name" in str(w.message)]
+        assert zip_warnings == []
 
 
 # ---------------------------------------------------------------------------
