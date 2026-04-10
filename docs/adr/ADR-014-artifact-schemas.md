@@ -15,6 +15,19 @@ Date: 2026-03-17
 >
 > See: `docs/adr/ADR-031-data-layer-readiness-for-artifact-generation.md`
 
+> **⚠ Amended by ADR-033** (2026-04-10)
+> ADR-033 (Spectra Compositing Pipeline) amends this ADR as follows:
+>
+> - **Spectrum record type:** `spectrum_id` may now refer to either an individual
+>   DataProduct or a composite DataProduct. A new optional `is_composite` boolean
+>   field distinguishes composites in the artifact. The `spectra.json` schema
+>   version is bumped from `"1.1"` to `"1.2"`.
+> - **Display filtering:** Composite spectra replace their constituent individual
+>   spectra in the `spectra` array. The frontend never sees both a composite and
+>   its constituents in the same artifact.
+>
+> See: `docs/adr/ADR-033-spectra-compositing-pipeline.md`
+
 ---
 
 ## Context
