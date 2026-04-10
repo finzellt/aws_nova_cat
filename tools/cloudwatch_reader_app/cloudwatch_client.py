@@ -115,14 +115,14 @@ def _build_default_query(limit: int = 2000) -> str:
     """
     return "\n".join(
         [
-            "fields @timestamp, @logStream, @log, @message,",
+            "fields @timestamp, @logStream, @log, @message, timestamp,",
             "  level, levelname, message, function_name, state_name,",
             "  workflow_name, correlation_id, job_run_id, nova_id,",
             "  error_classification, error_fingerprint, duration_ms,",
             "  attempt_number, candidate_name,",
             "  plan_id, phase, artifact, release_id",
             "| filter @message not like /^(START|END) RequestId/",
-            "| sort @timestamp desc",
+            "| sort timestamp desc",
             f"| limit {limit}",
         ]
     )
@@ -135,7 +135,7 @@ def _build_trace_query(correlation_id: str) -> str:
     safe_id = correlation_id.replace("'", "\\'")
     return "\n".join(
         [
-            "fields @timestamp, @logStream, @log, @message,",
+            "fields @timestamp, @logStream, @log, @message, timestamp,",
             "  level, levelname, message, function_name, state_name,",
             "  workflow_name, correlation_id, job_run_id, nova_id,",
             "  error_classification, error_fingerprint, duration_ms,",
@@ -143,7 +143,7 @@ def _build_trace_query(correlation_id: str) -> str:
             "  plan_id, phase, artifact, release_id",
             f"| filter correlation_id = '{safe_id}'",
             "| filter @message not like /^(START|END) RequestId/",
-            "| sort @timestamp asc",
+            "| sort timestamp asc",
             "| limit 5000",
         ]
     )
@@ -249,6 +249,19 @@ def _enrich_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
         # 4. Parse REPORT lines.
         if msg.startswith("REPORT RequestId:"):
             _parse_report_line(row, msg)
+
+        # 5. Fallback: if `message` is still empty, use @message.
+        if not row.get("message") and row.get("@message"):
+            raw = row["@message"].strip()
+            row["message"] = raw
+
+            # Try to detect log level from raw text.
+            if not row.get("level"):
+                upper = raw[:200].upper()
+                if "TRACEBACK" in upper or "EXCEPTION" in upper or "ERROR" in upper:
+                    row["level"] = "ERROR"
+                elif "WARNING" in upper or "WARN" in upper:
+                    row["level"] = "WARNING"
 
         enriched.append(row)
 
