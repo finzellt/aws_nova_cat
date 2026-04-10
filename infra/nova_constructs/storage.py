@@ -88,6 +88,7 @@ class NovaCatStorage(Construct):
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             point_in_time_recovery=enable_pitr,
             removal_policy=removal_policy,
+            time_to_live_attribute="ttl",
         )
 
         self.table.add_global_secondary_index(
@@ -140,6 +141,7 @@ class NovaCatStorage(Construct):
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             point_in_time_recovery=enable_pitr,
             removal_policy=removal_policy,
+            time_to_live_attribute="ttl",
         )
 
         # ------------------------------------------------------------------

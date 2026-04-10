@@ -414,6 +414,131 @@ batch plan are deleted — not any that arrived during execution.
 
 ---
 
+## Spectra compositing sweep (ADR-033)
+
+Purpose: During the Fargate artifact generation task (Phase 1), identify
+same-instrument, same-night spectra groups, build or rebuild composites,
+and persist composite DataProduct items and S3 artifacts.
+
+Runs once per nova in the regeneration plan that has a `spectra` dirty
+type. Phase 1 executes before per-nova artifact generators (Phase 2).
+
+### Reads
+
+#### Query all VALID individual spectra for a nova
+
+```
+Query:
+  PK = "<nova_id>"
+  SK begins_with "PRODUCT#SPECTRA#"
+  FilterExpression: validation_status = "VALID"
+  ProjectionExpression: data_product_id, SK, provider, instrument,
+                        observation_date_mjd, sha256, raw_s3_key
+```
+
+Returns both individual and composite DataProduct items. The compositing
+sweep separates them in application code: items whose SK contains
+`COMPOSITE` are existing composites; all others are individual spectra
+eligible for compositing group formation.
+
+Used for: night clustering (Decision 2), point-count threshold checks
+(Decision 1), and fingerprint computation (Decision 7).
+
+#### Query existing composites for a provider (fingerprint check)
+
+```
+Query:
+  PK = "<nova_id>"
+  SK begins_with "PRODUCT#SPECTRA#<provider>#COMPOSITE#"
+```
+
+Returns only composite DataProduct items for the provider. The
+`composite_fingerprint` field on each item is compared against the
+expected fingerprint computed from the current compositing group. If
+fingerprints match, the composite is up to date and the group is
+skipped.
+
+#### Read individual spectrum FITS from S3 (composite build)
+
+```
+S3 GetObject:
+  Bucket: private data bucket
+  Key: raw_s3_key (from the DataProduct item)
+```
+
+Only performed when a composite must be built or rebuilt (fingerprint
+mismatch or new group). Reads the full-resolution FITS file for each
+constituent spectrum in the compositing group.
+
+### Writes
+
+#### Persist composite DataProduct item
+
+```
+PutItem:
+  PK = "<nova_id>"
+  SK = "PRODUCT#SPECTRA#<provider>#COMPOSITE#<composite_id>"
+```
+
+Written on new composite creation or rebuild. Uses unconditional
+`PutItem` (last writer wins) because the compositing sweep is the sole
+writer of composite items and runs sequentially within a single Fargate
+task.
+
+See `dynamodb-item-model.md` §3.3 for the full item schema including
+`constituent_data_product_ids`, `rejected_data_product_ids`, and
+`composite_fingerprint`.
+
+#### Write composite CSV artifacts to S3
+
+```
+S3 PutObject:
+  Bucket: private data bucket
+  Key: derived/spectra/<nova_id>/<composite_id>/composite_full.csv
+
+S3 PutObject:
+  Bucket: private data bucket
+  Key: derived/spectra/<nova_id>/<composite_id>/web_ready.csv
+```
+
+`composite_full.csv` is the full-resolution composite on the common
+wavelength grid (pre-LTTB). `web_ready.csv` is the LTTB-downsampled
+version (≤ 2000 points) consumed by the spectra generator in Phase 2.
+
+---
+
+## Spectra generator filtering (ADR-033 amendment)
+
+The spectra generator (Phase 2) queries all spectra DataProducts using
+the existing pattern:
+
+```
+Query:
+  PK = "<nova_id>"
+  SK begins_with "PRODUCT#SPECTRA#"
+  FilterExpression: validation_status = "VALID"
+```
+
+This now returns both individual and composite DataProduct items.
+Post-query, the generator applies a filtering step:
+
+1. Identify composites (SK contains `COMPOSITE`).
+2. Collect all `data_product_id` values from every composite's
+   `constituent_data_product_ids` and `rejected_data_product_ids`.
+3. Exclude any individual DataProduct whose `data_product_id` appears
+   in that collected set.
+
+The result is a display set where each compositing group is represented
+by its composite, non-composited spectra pass through unchanged, and
+rejected same-night spectra are suppressed.
+
+The **bundle generator** uses the same query but applies the inverse
+filter: it excludes composites (SK contains `COMPOSITE`) and includes
+only individual spectra, since bundles contain original data products
+only.
+
+---
+
 ## Operational access patterns (debug/admin)
 
 ### List all data products for a nova (photometry + spectra)

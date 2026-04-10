@@ -16,6 +16,7 @@ tools/svo-filter-analysis/checkpoints/
 tools/filter_band_reg/vizier_data/
 frontend/.next/
 frontend/node_modules/
+tools/contract-patching
 
 .DS_Store
 .idea/
