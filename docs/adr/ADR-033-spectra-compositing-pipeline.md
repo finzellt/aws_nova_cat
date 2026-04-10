@@ -66,6 +66,9 @@ from "not yet seen."
 A compositing group of size 1 (a single spectrum that passed all criteria but has no
 companions) produces no composite — the original spectrum passes through unchanged.
 
+When a group has multiple spectra but all but one are rejected, a degenerate composite
+record is created (Decision 10) to prevent repeated evaluation on subsequent sweeps.
+
 ### Decision 2 — Night Clustering via Gap Detection
 
 Spectra are grouped into observing nights using single-linkage clustering on
@@ -200,7 +203,7 @@ This key structure supports the following query patterns:
 |-------|------|-------------|
 | `constituent_data_product_ids` | `list[UUID] \| None` | DataProduct IDs of the spectra that were combined. Sorted deterministically. `None` for non-composite DataProducts. |
 | `rejected_data_product_ids` | `list[UUID] \| None` | Same-night, same-instrument spectra that were considered but excluded (e.g., below 2000-point threshold). `None` for non-composite DataProducts. |
-| `composite_fingerprint` | `str \| None` | Deterministic hash of sorted constituent IDs and their individual `sha256` content fingerprints. |
+| `composite_fingerprint` | `str \| None` | Deterministic hash of sorted evaluated (constituent + rejected) data_product_ids and their `sha256` fingerprints. Covers the full evaluated set so rejected spectra don't trigger spurious rebuilds. |
 | `composite_s3_key` | `str \| None` | S3 key for the full-resolution composite CSV (common grid, pre-LTTB). Path: `derived/spectra/<nova_id>/<composite_id>/composite_full.csv`. |
 | `web_ready_s3_key` | `str \| None` | S3 key for the LTTB-downsampled composite CSV (≤ 2000 points). Read by the spectra generator like any other web-ready CSV. Path: `derived/spectra/<nova_id>/<composite_id>/web_ready.csv`. |
 | `instrument` | `str` | Shared instrument of the compositing group. |
@@ -235,9 +238,11 @@ combination). The composite fingerprint prevents unnecessary recomputation.
 
 1. Identify the compositing group: all VALID spectra for this nova with the same
    instrument and observation night (per Decision 2).
-2. Compute the expected composite fingerprint: deterministic hash of sorted
-   constituent `data_product_id` values concatenated with their `sha256` content
-   fingerprints.
+2. Compute the expected composite fingerprint: deterministic hash of **all evaluated**
+   `data_product_id` values (both potential constituents and those that will be
+   rejected) concatenated with their `sha256` content fingerprints. The fingerprint
+   covers the entire evaluated set so that rejected spectra (e.g., those below the
+   2000-point threshold) do not appear as "new" on subsequent sweeps.
 3. Check if a composite DataProduct already exists with this fingerprint → **skip**.
 4. If a composite exists with a **different** fingerprint (a new spectrum arrived,
    or a constituent was re-validated with different content) → **rebuild**, replacing
@@ -287,6 +292,28 @@ the same infrastructure access as artifact generation (S3, DynamoDB, astropy). A
 separate task would add operational complexity (new task definition, new Step Functions
 state, new IAM role) for no functional benefit. The compositing sweep is lightweight
 for most novae and only expensive for the minority with dense same-night coverage.
+
+### Decision 10 — Degenerate Composites (Single-Spectrum Groups)
+
+When a compositing group has multiple spectra on the same night but all but one are
+rejected (e.g., below the 2000-point threshold), no actual composite CSV is produced —
+there is nothing to combine. However, a **degenerate composite DataProduct** is still
+written to DynamoDB with:
+
+- `constituent_data_product_ids` containing the single surviving spectrum's ID
+- `rejected_data_product_ids` containing the rejected spectra
+- `composite_fingerprint` covering all evaluated spectra (same as Decision 7)
+- `composite_s3_key` and `web_ready_s3_key` set to `None` (no composite CSVs exist)
+
+This prevents the system from re-evaluating the same group on every subsequent sweep.
+Without the degenerate record, the sweep would see multiple same-night spectra, attempt
+to build a composite, reject all but one, produce nothing, and repeat this wasted work
+on the next sweep.
+
+The spectra generator identifies degenerate composites by
+`len(constituent_data_product_ids) == 1` and treats the single constituent as a
+pass-through — it reads the original spectrum's web-ready CSV as usual. Rejected
+spectra are still excluded from the waterfall plot per Decision 5.
 
 ---
 

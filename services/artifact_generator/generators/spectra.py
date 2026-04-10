@@ -33,7 +33,13 @@ from typing import Any
 import numpy as np
 from boto3.dynamodb.conditions import Attr, Key
 
-from generators.shared import generated_at_timestamp, lttb
+from generators.shared import (
+    generated_at_timestamp,
+    reject_chip_gap_artifacts,
+    remove_interior_dead_runs,
+    segment_aware_lttb,
+    trim_dead_edges,
+)
 
 _logger = logging.getLogger("artifact_generator")
 
@@ -41,13 +47,7 @@ _SCHEMA_VERSION = "1.1"  # §7.8: outburst_mjd_is_estimated addition
 _WAVELENGTH_UNIT = "nm"
 
 _FLUX_FLOOR = 1e-4  # minimum normalized flux; prevents log(0) in frontend
-_RELATIVE_ZERO_FRACTION = 1e-6  # fraction of peak flux below which values are "dead"
-
-_LTTB_THRESHOLD = 2000  # max points per spectrum (DESIGN-003 §7.9, P-4)
 _TRIM_TOLERANCE = 1.1  # 10% beyond median before wavelength trim kicks in
-
-_GAP_FACTOR: float = 5.0  # wavelength step multiplier to detect chip gap isolation
-_CHIP_GAP_FLUX_FRACTION: float = 0.1  # fraction of median abs flux below which flux is "near zero"
 
 _ARM_MJD_TOLERANCE = 0.333  # days (~8 hr) — grouping tolerance for arms
 _ARM_OVERLAP_MAX_NM = 100.0  # nm — max overlap before we reject a merge
@@ -345,7 +345,7 @@ def _process_spectrum_stage1(
         return None
 
     # --- Edge trimming (strip detector rolloff artifacts) ---
-    wavelengths, fluxes = _trim_dead_edges(wavelengths, fluxes, data_product_id)
+    wavelengths, fluxes = trim_dead_edges(wavelengths, fluxes, data_product_id)
 
     if not wavelengths:
         _logger.warning(
@@ -355,10 +355,10 @@ def _process_spectrum_stage1(
         return None
 
     # --- Interior dead runs (chip gaps) ---
-    wavelengths, fluxes = _remove_interior_dead_runs(wavelengths, fluxes, data_product_id)
+    wavelengths, fluxes = remove_interior_dead_runs(wavelengths, fluxes, data_product_id)
 
     # --- Chip gap artifact rejection ---
-    wavelengths, fluxes = _reject_chip_gap_artifacts(wavelengths, fluxes, data_product_id)
+    wavelengths, fluxes = reject_chip_gap_artifacts(wavelengths, fluxes, data_product_id)
 
     if not wavelengths:
         _logger.warning(
@@ -460,7 +460,7 @@ def _process_spectrum_stage2(
         return None
 
     # --- LTTB downsampling (§7.9) — preserve peaks within point budget ---
-    wavelengths, fluxes = _segment_aware_lttb(wavelengths, fluxes)
+    wavelengths, fluxes = segment_aware_lttb(wavelengths, fluxes)
 
     # --- Flux normalization (§7.3) ---
     flux_normalized, normalization_scale = _normalize_flux(fluxes)
@@ -521,177 +521,6 @@ def _parse_web_ready_csv(body: str) -> tuple[list[float], list[float]]:
                 continue  # skip malformed rows silently
 
     return wavelengths, fluxes
-
-
-# ---------------------------------------------------------------------------
-# Edge trimming
-# ---------------------------------------------------------------------------
-
-
-def _trim_dead_edges(
-    wavelengths: list[float],
-    fluxes: list[float],
-    data_product_id: str,
-) -> tuple[list[float], list[float]]:
-    """Remove runs of >1 consecutive near-zero flux from each edge.
-
-    Detector sensitivity roll-off produces dead edges where flux drops
-    to zero and stays there for several nm.  A single zero at the edge
-    is left alone — it could be legitimate signal.
-
-    Both arrays are trimmed together to stay aligned.
-    """
-    n = len(fluxes)
-    if n == 0:
-        return wavelengths, fluxes
-
-    peak = max(abs(f) for f in fluxes)
-    if peak == 0.0:
-        return [], []
-
-    threshold = peak * _RELATIVE_ZERO_FRACTION
-
-    # --- blue (low-wavelength) edge ---
-    blue_zeros = 0
-    for f in fluxes:
-        if abs(f) < threshold:
-            blue_zeros += 1
-        else:
-            break
-    blue_trim = blue_zeros if blue_zeros >= 1 else 0
-
-    # --- red (high-wavelength) edge ---
-    red_zeros = 0
-    for f in reversed(fluxes):
-        if abs(f) < threshold:
-            red_zeros += 1
-        else:
-            break
-    red_trim = red_zeros if red_zeros >= 1 else 0
-
-    if blue_trim or red_trim:
-        _logger.debug(
-            "Trimmed dead spectral edges",
-            extra={
-                "data_product_id": data_product_id,
-                "blue_points_removed": blue_trim,
-                "red_points_removed": red_trim,
-            },
-        )
-
-    end = n - red_trim if red_trim else n
-    return wavelengths[blue_trim:end], fluxes[blue_trim:end]
-
-
-# ---------------------------------------------------------------------------
-# Chip gap artifact rejection
-# ---------------------------------------------------------------------------
-
-
-def _reject_chip_gap_artifacts(
-    wavelengths: list[float],
-    fluxes: list[float],
-    data_product_id: str,
-) -> tuple[list[float], list[float]]:
-    """Remove interpolated chip gap artifacts.
-
-    Chip gaps produce isolated points at irregular wavelength spacing
-    with near-zero flux. These are reduction pipeline artifacts, not
-    real spectral data.
-    """
-    n = len(wavelengths)
-    if n < 3:
-        return wavelengths, fluxes
-
-    # Compute median wavelength step
-    steps = [wavelengths[i + 1] - wavelengths[i] for i in range(n - 1)]
-    median_step = sorted(steps)[len(steps) // 2]  # simple median
-
-    # Compute median absolute flux (excluding zeros)
-    abs_fluxes = [abs(f) for f in fluxes if f != 0.0]
-    if not abs_fluxes:
-        return wavelengths, fluxes
-    median_flux = sorted(abs_fluxes)[len(abs_fluxes) // 2]
-
-    flux_threshold = median_flux * _CHIP_GAP_FLUX_FRACTION
-    gap_threshold = median_step * _GAP_FACTOR
-
-    # Identify chip gap artifacts
-    keep_wl: list[float] = []
-    keep_fx: list[float] = []
-    removed = 0
-
-    for i in range(n):
-        # Check wavelength isolation
-        gap_left = (wavelengths[i] - wavelengths[i - 1]) if i > 0 else 0.0
-        gap_right = (wavelengths[i + 1] - wavelengths[i]) if i < n - 1 else 0.0
-        is_isolated = gap_left > gap_threshold or gap_right > gap_threshold
-
-        # Check near-zero flux
-        is_near_zero = abs(fluxes[i]) < flux_threshold
-
-        if is_isolated and is_near_zero:
-            removed += 1
-            continue
-
-        keep_wl.append(wavelengths[i])
-        keep_fx.append(fluxes[i])
-
-    if removed > 0:
-        _logger.debug(
-            "Removed chip gap artifacts",
-            extra={
-                "data_product_id": data_product_id,
-                "points_removed": removed,
-                "median_step_nm": round(median_step, 4),
-                "gap_threshold_nm": round(gap_threshold, 4),
-            },
-        )
-
-    return keep_wl, keep_fx
-
-
-# ---------------------------------------------------------------------------
-# Remove Interior Dead Runs
-# ---------------------------------------------------------------------------
-
-
-def _remove_interior_dead_runs(
-    wavelengths: list[float],
-    fluxes: list[float],
-    data_product_id: str,
-    min_run: int = 3,
-) -> tuple[list[float], list[float]]:
-    """Remove interior runs of consecutive near-zero flux (chip gaps)."""
-    peak = max(abs(f) for f in fluxes)
-    if peak == 0:
-        return wavelengths, fluxes
-
-    threshold = peak * _RELATIVE_ZERO_FRACTION
-
-    # Mark each point as dead or alive
-    alive = [abs(f) >= threshold for f in fluxes]
-
-    # Keep all points except interior dead runs of length >= min_run
-    keep = [True] * len(fluxes)
-    run_start = None
-    for i, is_alive in enumerate(alive):
-        if not is_alive:
-            if run_start is None:
-                run_start = i
-        else:
-            if run_start is not None:
-                run_len = i - run_start
-                # Only remove interior runs (not touching edges)
-                if run_len >= min_run and run_start > 0:
-                    for j in range(run_start, i):
-                        keep[j] = False
-                run_start = None
-
-    # Filter
-    out_wl = [w for w, k in zip(wavelengths, keep, strict=False) if k]
-    out_fx = [f for f, k in zip(fluxes, keep, strict=False) if k]
-    return out_wl, out_fx
 
 
 # ---------------------------------------------------------------------------
@@ -1016,24 +845,6 @@ def _persist_merged_csv(
             extra={"nova_id": nova_id, "composite_id": composite_id, "s3_key": s3_key},
             exc_info=True,
         )
-
-
-# ---------------------------------------------------------------------------
-# Segment-aware LTTB (S4)
-# ---------------------------------------------------------------------------
-
-
-def _segment_aware_lttb(
-    wavelengths: list[float],
-    fluxes: list[float],
-) -> tuple[list[float], list[float]]:
-    """Run single-pass LTTB downsampling on a contiguous spectrum."""
-    if len(wavelengths) <= _LTTB_THRESHOLD:
-        return wavelengths, fluxes
-
-    points = list(zip(wavelengths, fluxes, strict=True))
-    downsampled = lttb(points, _LTTB_THRESHOLD)
-    return [p[0] for p in downsampled], [p[1] for p in downsampled]
 
 
 # ---------------------------------------------------------------------------

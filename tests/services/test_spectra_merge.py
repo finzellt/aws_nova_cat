@@ -5,7 +5,7 @@ Groups:
   2 — Merge validation (overlap rejection in _merge_arm_group)
   3 — Overlap blending (_blend_overlap)
   4 — Gap handling (no NaN sentinels — simple concatenation)
-  5 — LTTB downsampling (_segment_aware_lttb)
+  5 — LTTB downsampling (segment_aware_lttb)
   6 — Composite spectrum identity (deterministic, order-independent)
   7 — Merged CSV round-trip
   8 — End-to-end merge in generate_spectra_json
@@ -23,13 +23,12 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from generators.shared import LTTB_THRESHOLD, segment_aware_lttb
 from generators.spectra import (
-    _LTTB_THRESHOLD,
     _blend_overlap,
     _merge_arm_group,
     _merge_multi_arm_spectra,
     _parse_web_ready_csv,
-    _segment_aware_lttb,
     generate_spectra_json,
 )
 
@@ -362,14 +361,14 @@ class TestSegmentAwareLttb:
     """Single-pass LTTB downsampling (no NaN segmentation)."""
 
     def test_downsampled_when_over_threshold(self) -> None:
-        """3000-point spectrum reduced to ≤ _LTTB_THRESHOLD."""
+        """3000-point spectrum reduced to ≤ LTTB_THRESHOLD."""
         n = 3000
         wl = [400.0 + i * 0.1 for i in range(n)]
         fx = [1.0] * n
 
-        out_wl, out_fx = _segment_aware_lttb(wl, fx)
+        out_wl, out_fx = segment_aware_lttb(wl, fx)
 
-        assert len(out_wl) <= _LTTB_THRESHOLD
+        assert len(out_wl) <= LTTB_THRESHOLD
         assert len(out_wl) == len(out_fx)
         assert not any(math.isnan(f) for f in out_fx)
 
@@ -379,7 +378,7 @@ class TestSegmentAwareLttb:
         wl = [400.0 + i * 0.1 for i in range(n)]
         fx = [1.0] * n
 
-        out_wl, out_fx = _segment_aware_lttb(wl, fx)
+        out_wl, out_fx = segment_aware_lttb(wl, fx)
 
         assert len(out_wl) == n
         assert out_wl == wl
@@ -391,7 +390,7 @@ class TestSegmentAwareLttb:
         wl = [400.0 + i * 0.1 for i in range(n)]
         fx = [1.0 + 50.0 * max(0.0, 1.0 - abs(i - n // 2) / 50.0) for i in range(n)]
 
-        out_wl, out_fx = _segment_aware_lttb(wl, fx)
+        out_wl, out_fx = segment_aware_lttb(wl, fx)
 
         assert out_wl[0] == pytest.approx(wl[0])
         assert out_wl[-1] == pytest.approx(wl[-1])
@@ -534,7 +533,7 @@ class TestEndToEndMerge:
         assert spec["spectrum_id"] != "dp-nir"
 
         # Point budget respected.
-        assert len(spec["wavelengths"]) <= _LTTB_THRESHOLD + 10  # margin for rounding
+        assert len(spec["wavelengths"]) <= LTTB_THRESHOLD + 10  # margin for rounding
 
         # No NaN or None values in the output arrays.
         assert all(isinstance(f, float) for f in spec["flux_normalized"])
