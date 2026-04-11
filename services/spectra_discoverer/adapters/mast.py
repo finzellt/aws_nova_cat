@@ -290,7 +290,7 @@ class MASTAdapter:
                         _QUERY_RETRY_DELAY_S,
                         extra={
                             "nova_id": nova_id,
-                            "name": name,
+                            "query_name": name,
                             "error": str(exc),
                         },
                     )

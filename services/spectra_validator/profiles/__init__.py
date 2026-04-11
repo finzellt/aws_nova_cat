@@ -25,6 +25,7 @@ from .base import FitsProfile, NormalizedSpectrum, ProfileResult
 from .eso_fallback import EsoFallbackProfile
 from .eso_uves import EsoUvesProfile
 from .eso_xshooter import EsoXShooterProfile
+from .mast_stis_hasp import MastStisHaspProfile
 
 # ---------------------------------------------------------------------------
 # Profile registry
@@ -33,9 +34,12 @@ from .eso_xshooter import EsoXShooterProfile
 # Instrument-specific profiles must appear before provider-level fallbacks.
 
 _PROFILE_REGISTRY: list[FitsProfile] = [
+    # ESO profiles
     EsoUvesProfile(),
     EsoXShooterProfile(),
-    EsoFallbackProfile(),  # catch-all — must be last
+    EsoFallbackProfile(),  # ESO catch-all — must be last among ESO profiles
+    # MAST profiles
+    MastStisHaspProfile(),
 ]
 
 # ---------------------------------------------------------------------------
