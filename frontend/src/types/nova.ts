@@ -65,11 +65,34 @@ export interface ObservationRecord {
   snr?: number;
 }
 
+// ── Spectra regime metadata (ADR-034) ─────────────────────────────────────────
+
+/**
+ * One entry in the top-level `regimes` array of spectra.json.
+ *
+ * Drives tab creation in the spectra viewer. Simpler than the photometry
+ * RegimeRecord — no Y-axis config because all spectra regimes share the
+ * same axis semantics (normalized flux, standard orientation, linear scale).
+ */
+export interface SpectraRegimeRecord {
+  /** Regime identifier ("xuv", "optical", "nir", "mir"). */
+  id: string;
+  /** Human-readable tab label (e.g. "X-ray / UV", "Optical"). */
+  label: string;
+  /**
+   * Nominal wavelength boundaries in nm.
+   * Second element is null for the open-ended MIR regime.
+   */
+  wavelength_range_nm: [number, number | null];
+}
+
 // ── Spectra artifact (spectra.json) ───────────────────────────────────────────
 
 /** One spectrum's data and metadata, as pre-processed by the backend. */
 export interface SpectrumRecord {
   spectrum_id: string;
+  /** Wavelength regime this spectrum belongs to (ADR-034). */
+  regime: string;
   epoch_mjd: number;
   /** Null when outburst date is unresolved. */
   days_since_outburst: number | null;
@@ -97,6 +120,12 @@ export interface SpectraArtifact {
   outburst_mjd: number | null;
   /** Wavelength unit for all spectra in this artifact (always "nm"). */
   wavelength_unit: string;
+  /**
+   * Regime metadata records; one per regime present in the data.
+   * Drives tab creation — absent or empty means single implicit optical regime.
+   * ADR-034.
+   */
+  regimes?: SpectraRegimeRecord[];
   /** Total number of raw DataProduct files (may exceed spectra.length after merging). */
   total_data_products?: number;
   /** Per-DataProduct observation records (pre-merge), for the observations table. */
