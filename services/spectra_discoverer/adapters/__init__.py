@@ -15,9 +15,11 @@ To register a new provider:
 
 from .base import SpectraDiscoveryAdapter
 from .eso import ESOAdapter
+from .mast import MASTAdapter
 
 _PROVIDER_ADAPTERS: dict[str, SpectraDiscoveryAdapter] = {
     "ESO": ESOAdapter(),
+    "MAST": MASTAdapter(),
 }
 
 __all__ = ["SpectraDiscoveryAdapter", "_PROVIDER_ADAPTERS"]

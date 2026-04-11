@@ -243,6 +243,8 @@ class TestQueryProviderForProducts:
             nova_id=_NOVA_ID,
             ra_deg=pytest.approx(271.5755),
             dec_deg=pytest.approx(-30.6558),
+            primary_name="unknown",
+            aliases=[],
         )
 
     def test_raises_value_error_when_nova_not_found(
