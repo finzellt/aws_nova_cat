@@ -438,6 +438,32 @@ def _process_nova(
                 nova_id, _table, _dynamodb
             )
 
+        # --- Phase 1: Spectra compositing sweep (ADR-033) ---
+        dirty_types: list[str] = manifest.get("dirty_types", [])
+        if "spectra" in dirty_types:
+            try:
+                from generators.compositing import run_compositing_sweep
+
+                sweep_result = run_compositing_sweep(nova_id, _table, _s3, _PRIVATE_BUCKET)
+                _logger.info(
+                    "Compositing sweep completed",
+                    extra={
+                        "nova_id": nova_id,
+                        "primary_name": primary_name,
+                        "groups_found": sweep_result["groups_found"],
+                        "skipped": sweep_result["skipped"],
+                        "built": sweep_result["built"],
+                        "degenerate": sweep_result["degenerate"],
+                        "errors": sweep_result["errors"],
+                    },
+                )
+            except Exception:
+                _logger.warning(
+                    "Compositing sweep failed — continuing with artifact generation",
+                    extra={"nova_id": nova_id, "primary_name": primary_name},
+                    exc_info=True,
+                )
+
         # --- Generate and publish artifacts in dependency order ---
         generated_artifacts: set[str] = set()
         failed_artifacts: list[str] = []

@@ -199,6 +199,25 @@ def _build_nova_context(
 # ---------------------------------------------------------------------------
 
 
+def _print_sweep_summary(result: dict) -> None:
+    """Print a one-line compositing sweep summary."""
+    parts = []
+    if result.get("groups_found", 0):
+        parts.append(f"{result['groups_found']} groups")
+    if result.get("built", 0):
+        parts.append(f"{result['built']} built")
+    if result.get("degenerate", 0):
+        parts.append(f"{result['degenerate']} degenerate")
+    if result.get("skipped", 0):
+        parts.append(f"{result['skipped']} skipped")
+    if result.get("errors", 0):
+        parts.append(f"{result['errors']} errors")
+    if parts:
+        print(f"    [compositing] {', '.join(parts)}")
+    else:
+        print("    [compositing] no compositable groups")
+
+
 def _generate_and_upload(
     nova_item: dict,
     artifacts: list[str],
@@ -215,6 +234,18 @@ def _generate_and_upload(
     stats = {"generated": 0, "failed": 0}
 
     ctx = _build_nova_context(nova_item, table, aws["photometry_table"])
+
+    # --- Phase 1: Compositing sweep (ADR-033) ---
+    # Run before the spectra generator so composites are available.
+    if "spectra" in artifacts and not dry_run:
+        try:
+            from generators.compositing import run_compositing_sweep
+
+            sweep_result = run_compositing_sweep(nova_id, table, s3, private_bucket)
+            _print_sweep_summary(sweep_result)
+        except Exception as exc:
+            print(f"    [WARN] Compositing sweep failed: {exc}")
+            print("    Continuing with individual spectra...")
 
     prefix = f"releases/{release_id}/nova/{nova_id}/"
 
@@ -494,6 +525,21 @@ def main() -> None:
         print()
 
     print(f"Done. Generated: {totals['generated']}, Failed: {totals['failed']}")
+    # Invalidate CloudFront cache for refreshed artifacts
+    if not args.dry_run:
+        dist_id = os.environ.get("NOVACAT_CF_DISTRIBUTION_ID")
+        if dist_id:
+            cf = boto3.client("cloudfront")
+            cf.create_invalidation(
+                DistributionId=dist_id,
+                InvalidationBatch={
+                    "Paths": {"Quantity": 1, "Items": ["/*"]},
+                    "CallerReference": release_id,
+                },
+            )
+            print(f"CloudFront invalidation submitted for {dist_id}")
+        else:
+            print("Skipping CloudFront invalidation (NOVACAT_CF_DISTRIBUTION_ID not set)")
 
 
 if __name__ == "__main__":
