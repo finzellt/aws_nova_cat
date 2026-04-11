@@ -1,0 +1,4 @@
+## New Bugs
+1. Need to check our logic for finding references. We currently have multiple references for V5668 Sgr from the 1880s, with names like "The 1886 Princeton Scientific Expedition" and "Ely's Labor Movement in America". How did we get these?
+2. The wavelength range for speectra are now missing. No real good idea why?
+3. We need to do something clever with how `discover_spectra` launches `acquire_and_validate`. In the past we tried to just fire them all off at once, but AWS got mad at us for creating so many new lambda in such a short amount of time, so we added a delay. But there's something somewhere that is throttling us. It's almost always the case that, when you have >60 spectra to deal with, all of them will be downloaded but only the first ~60 be validated. I think we should switch `discover_spectra` to STANDARD (unless this is where the majority of the state transitions are coming from, which now seems likely?). But five minutes just isn't enough.

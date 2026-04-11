@@ -19,7 +19,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { LineChart, CircleAlert } from 'lucide-react';
-import type { SpectraArtifact, SpectrumRecord } from '@/types/nova';
+import type { SpectraArtifact, SpectraRegimeRecord, SpectrumRecord } from '@/types/nova';
 
 // ── Dynamic Plotly import ─────────────────────────────────────────────────────
 
@@ -683,6 +683,48 @@ function LegendStrip({ spectra, selectedId, onSelect }: LegendStripProps) {
   );
 }
 
+// ── Spectra regime tab bar (ADR-034) ─────────────────────────────────────────
+
+interface SpectraRegimeTabBarProps {
+  regimes: SpectraRegimeRecord[];
+  activeRegimeId: string;
+  onSelect: (regimeId: string) => void;
+}
+
+function SpectraRegimeTabBar({ regimes, activeRegimeId, onSelect }: SpectraRegimeTabBarProps) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Wavelength regime"
+      className="flex gap-1 border-b border-[var(--color-border-subtle)]"
+    >
+      {regimes.map((regime) => {
+        const isActive = regime.id === activeRegimeId;
+        return (
+          <button
+            key={regime.id}
+            role="tab"
+            aria-selected={isActive}
+            aria-controls={`tabpanel-${regime.id}`}
+            onClick={() => onSelect(regime.id)}
+            className={[
+              'px-4 py-2 text-sm font-medium transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2',
+              'focus-visible:ring-inset focus-visible:ring-[var(--color-focus-ring)]',
+              'rounded-t-md',
+              isActive
+                ? 'text-[var(--color-interactive)] shadow-[inset_0_-2px_0_var(--color-interactive)]'
+                : 'text-[var(--color-text-secondary)] hover:text-[var(--color-interactive-hover)] hover:bg-[var(--color-interactive-subtle)]',
+            ].join(' ')}
+          >
+            {regime.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
@@ -693,6 +735,34 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
   const [selectedSpectrumId, setSelectedSpectrumId] = useState<string | null>(null);
   const [logFluxY, setLogFluxY] = useState(false);
   const [fluxScale, setFluxScale] = useState<FluxScale>('sqrt');
+
+  // ── Regime state (ADR-034) ──────────────────────────────────────────────
+  const regimes = data.regimes ?? [];
+  const showRegimeTabs = regimes.length > 1;
+
+  const REGIME_ORDER: Record<string, number> = { xuv: 0, optical: 1, nir: 2, mir: 3 };
+  const defaultRegimeId = useMemo(() => {
+    if (regimes.length === 0) return 'optical';
+    const counts = new Map<string, number>();
+    for (const sp of data.spectra) {
+      const r = sp.regime ?? 'optical';
+      counts.set(r, (counts.get(r) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || (REGIME_ORDER[a[0]] ?? 99) - (REGIME_ORDER[b[0]] ?? 99))
+      .at(0)?.[0] ?? 'optical';
+  }, [data.spectra, regimes]);
+
+  const [activeRegimeId, setActiveRegimeId] = useState<string>(defaultRegimeId);
+
+  const resolvedRegimeId = regimes.length > 0 && regimes.some(r => r.id === activeRegimeId)
+    ? activeRegimeId
+    : regimes[0]?.id ?? 'optical';
+
+  const regimeSpectra = useMemo(
+    () => data.spectra.filter(sp => (sp.regime ?? 'optical') === resolvedRegimeId),
+    [data.spectra, resolvedRegimeId],
+  );
 
   // ── Feature marker state ──────────────────────────────────────────────────
   //
@@ -744,6 +814,16 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
     });
   };
 
+  const handleRegimeSwitch = useCallback((regimeId: string) => {
+    setActiveRegimeId(regimeId);
+    setSelectedSpectrumId(null);
+    setUserXRange(null);
+    setUserYRange(null);
+    if (regimeId !== 'optical') {
+      setActiveFeatureGroups(new Set());
+    }
+  }, []);
+
   const isSingleMode = selectedSpectrumId !== null;
 
   if (data.spectra.length === 0) {
@@ -754,7 +834,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
   const plotData = useMemo(() => {
     try {
       return buildPlotData(
-        data, epochFormat,
+        data, regimeSpectra, epochFormat,
         selectedSpectrumId, logFluxY, fluxScale, activeFeatureGroups,
         userXRange, userYRange,
       );
@@ -762,7 +842,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
       setRenderError(true);
       return null;
     }
-  }, [data, epochFormat, selectedSpectrumId, logFluxY, fluxScale, activeFeatureGroups, userXRange, userYRange]);
+  }, [data, regimeSpectra, epochFormat, selectedSpectrumId, logFluxY, fluxScale, activeFeatureGroups, userXRange, userYRange]);
 
   if (renderError || plotData === null) {
     return <ErrorState onRetry={onRetry} />;
@@ -772,6 +852,15 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
 
   return (
     <div className="rounded-md border border-[var(--color-border-subtle)] overflow-hidden bg-[var(--color-surface-primary)]">
+
+      {/* ── Regime tabs (ADR-034) ──────────────────────────────────────── */}
+      {showRegimeTabs && (
+        <SpectraRegimeTabBar
+          regimes={regimes}
+          activeRegimeId={resolvedRegimeId}
+          onSelect={handleRegimeSwitch}
+        />
+      )}
 
       {/* ── Viewer header ──────────────────────────────────────────────── */}
       <div
@@ -832,11 +921,13 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
           </div>
         )}
 
-        {/* ── Feature marker toggles ──────────────────────────────────── */}
-        <FeatureToggles
-          activeGroups={activeFeatureGroups}
-          onToggle={handleFeatureToggle}
-        />
+        {/* ── Feature marker toggles (optical only) ──────────────────── */}
+        {resolvedRegimeId === 'optical' && (
+          <FeatureToggles
+            activeGroups={activeFeatureGroups}
+            onToggle={handleFeatureToggle}
+          />
+        )}
       </div>
 
       {/* ── Merge info note ──────────────────────────────────────────── */}
@@ -870,6 +961,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
 
 function buildPlotData(
   data: SpectraArtifact,
+  spectra: SpectrumRecord[],
   epochFormat: EpochFormat,
   selectedSpectrumId: string | null,
   logFluxY: boolean,
@@ -878,7 +970,7 @@ function buildPlotData(
   userXRange: [number, number] | null,
   userYRange: [number, number] | null,
 ) {
-  const { spectra, outburst_mjd } = data;
+  const { outburst_mjd } = data;
   const hasDpo = outburst_mjd !== null;
   const sorted = [...spectra].sort((a, b) => a.epoch_mjd - b.epoch_mjd);
 

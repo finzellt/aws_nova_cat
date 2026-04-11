@@ -16,6 +16,19 @@ Date: 2026-03-17
 >
 > See: `docs/adr/ADR-031-data-layer-readiness-for-artifact-generation.md`
 
+> **⚠ Amended by ADR-034** (2026-04-11)
+> ADR-034 (Spectra Wavelength Regime Model) amends this ADR as follows:
+>
+> - **Spectra viewer regime tabs:** The spectra viewer now supports wavelength
+>   regime tabs, following the same pattern as the light curve panel. When
+>   spectra span multiple regimes (X-ray/UV, Optical, Near-IR, Mid-IR), a
+>   tab bar appears and all controls are scoped to the active regime.
+> - **Feature marker visibility:** Spectral feature marker toggles (Fe II,
+>   He/N, Nebular) are hidden for non-optical regimes. UV feature markers
+>   are deferred.
+>
+> See: `docs/adr/ADR-034-spectra-wavelength-regime-model.md`
+
 ---
 
 ## Context

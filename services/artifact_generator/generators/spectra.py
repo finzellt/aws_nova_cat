@@ -43,7 +43,7 @@ from generators.shared import (
 
 _logger = logging.getLogger("artifact_generator")
 
-_SCHEMA_VERSION = "1.1"  # §7.8: outburst_mjd_is_estimated addition
+_SCHEMA_VERSION = "1.3"  # ADR-034: spectra wavelength regimes (1.2 was ADR-033)
 _WAVELENGTH_UNIT = "nm"
 
 _FLUX_FLOOR = 1e-4  # minimum normalized flux; prevents log(0) in frontend
@@ -51,6 +51,59 @@ _TRIM_TOLERANCE = 1.1  # 10% beyond median before wavelength trim kicks in
 
 _ARM_MJD_TOLERANCE = 0.333  # days (~8 hr) — grouping tolerance for arms
 _ARM_OVERLAP_MAX_NM = 100.0  # nm — max overlap before we reject a merge
+
+# ADR-034 spectra wavelength regime boundaries (nm).
+# Assignment is by wavelength midpoint: (wavelength_min + wavelength_max) / 2.
+_SPECTRA_REGIME_BOUNDARIES: list[tuple[str, float]] = [
+    ("xuv", 320.0),  # λ_mid < 320 nm
+    ("optical", 1000.0),  # 320 ≤ λ_mid < 1000 nm
+    ("nir", 5000.0),  # 1000 ≤ λ_mid < 5000 nm
+    # ("mir", ∞)  # λ_mid ≥ 5000 nm — fallback
+]
+
+_SPECTRA_REGIME_SORT_ORDER: dict[str, int] = {
+    "xuv": 0,
+    "optical": 1,
+    "nir": 2,
+    "mir": 3,
+}
+
+_SPECTRA_REGIME_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "xuv": {
+        "id": "xuv",
+        "label": "X-ray / UV",
+        "wavelength_range_nm": [0, 320],
+    },
+    "optical": {
+        "id": "optical",
+        "label": "Optical",
+        "wavelength_range_nm": [320, 1000],
+    },
+    "nir": {
+        "id": "nir",
+        "label": "Near-IR",
+        "wavelength_range_nm": [1000, 5000],
+    },
+    "mir": {
+        "id": "mir",
+        "label": "Mid-IR",
+        "wavelength_range_nm": [5000, None],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# ADR-034: Regime assignment
+# ---------------------------------------------------------------------------
+
+
+def _assign_spectra_regime(wavelength_min: float, wavelength_max: float) -> str:
+    """Assign a spectrum to a wavelength regime by midpoint (ADR-034 Decision 2)."""
+    midpoint = (wavelength_min + wavelength_max) / 2.0
+    for regime_id, upper_bound in _SPECTRA_REGIME_BOUNDARIES:
+        if midpoint < upper_bound:
+            return regime_id
+    return "mir"
 
 
 # ---------------------------------------------------------------------------
@@ -198,8 +251,25 @@ def generate_spectra_json(
         if record is not None:
             spectra.append(record)
 
-    # Step 3 — Sort by epoch ascending (oldest at bottom of waterfall).
-    spectra.sort(key=lambda s: s["epoch_mjd"])
+    # --- ADR-034: Build regime metadata and sort by regime ---
+    present_regimes: dict[str, dict[str, Any]] = {}
+    for sp in spectra:
+        rid = sp["regime"]
+        if rid not in present_regimes:
+            present_regimes[rid] = dict(_SPECTRA_REGIME_DEFINITIONS[rid])
+
+    regime_records = sorted(
+        present_regimes.values(),
+        key=lambda r: _SPECTRA_REGIME_SORT_ORDER.get(r["id"], 99),
+    )
+
+    # Step 3 — Sort spectra: regime order first, then epoch_mjd within each regime.
+    spectra.sort(
+        key=lambda s: (
+            _SPECTRA_REGIME_SORT_ORDER.get(s["regime"], 99),
+            s["epoch_mjd"],
+        )
+    )
 
     # Step 4 — Build observations list from individual (pre-filter) products.
     # ADR-033 Decision 5: individual spectra remain visible in the observation
@@ -257,6 +327,7 @@ def generate_spectra_json(
         "outburst_mjd": outburst_mjd,
         "outburst_mjd_is_estimated": outburst_mjd_is_estimated,
         "wavelength_unit": _WAVELENGTH_UNIT,
+        "regimes": regime_records,
         "total_data_products": len(individual_products),
         "observations": observations_list,
         "spectra": spectra,
@@ -522,6 +593,7 @@ def _process_spectrum_stage2(
 
     return {
         "spectrum_id": data_product_id,
+        "regime": _assign_spectra_regime(min(wavelengths), max(wavelengths)),
         "epoch_mjd": epoch_mjd,
         "days_since_outburst": days_since_outburst,
         "instrument": product.get("instrument", "unknown"),
