@@ -293,7 +293,7 @@ separate task would add operational complexity (new task definition, new Step Fu
 state, new IAM role) for no functional benefit. The compositing sweep is lightweight
 for most novae and only expensive for the minority with dense same-night coverage.
 
-### Decision 10 — Degenerate Composites (Single-Spectrum Groups)
+## Decision 10 — Degenerate Composites (Single-Spectrum Groups)
 
 When a compositing group has multiple spectra on the same night but all but one are
 rejected (e.g., below the 2000-point threshold), no actual composite CSV is produced —
@@ -302,18 +302,25 @@ written to DynamoDB with:
 
 - `constituent_data_product_ids` containing the single surviving spectrum's ID
 - `rejected_data_product_ids` containing the rejected spectra
-- `composite_fingerprint` covering all evaluated spectra (same as Decision 7)
-- `composite_s3_key` and `web_ready_s3_key` set to `None` (no composite CSVs exist)
+- `composite_fingerprint` covering the constituent and its content hash
+- `composite_s3_key` set to `None` (no full-resolution composite CSV exists)
+- `web_ready_s3_key` set to the **surviving spectrum's existing web-ready CSV path**
+  (e.g., `derived/spectra/<nova_id>/<data_product_id>/web_ready.csv`)
 
-This prevents the system from re-evaluating the same group on every subsequent sweep.
-Without the degenerate record, the sweep would see multiple same-night spectra, attempt
-to build a composite, reject all but one, produce nothing, and repeat this wasted work
-on the next sweep.
+This design serves two purposes:
 
-The spectra generator identifies degenerate composites by
-`len(constituent_data_product_ids) == 1` and treats the single constituent as a
-pass-through — it reads the original spectrum's web-ready CSV as usual. Rejected
-spectra are still excluded from the waterfall plot per Decision 5.
+1. **Prevents repeated evaluation.** Without the degenerate record, the sweep would
+   see multiple same-night spectra, attempt to build a composite, reject all but one,
+   produce nothing, and repeat this wasted work on the next sweep.
+
+2. **Eliminates special-case logic in the spectra generator.** The generator treats all
+   composites uniformly: see composite → fetch `web_ready_s3_key` → use it. There is
+   no need to check `len(constituent_data_product_ids) == 1` or implement a
+   pass-through path. The suppression of rejected spectra works identically for
+   degenerate and non-degenerate composites.
+
+No CSV data is copied or duplicated — the degenerate composite's `web_ready_s3_key`
+references the original spectrum's existing file in place.
 
 ---
 

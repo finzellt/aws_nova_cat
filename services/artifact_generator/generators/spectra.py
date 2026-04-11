@@ -93,6 +93,13 @@ def generate_spectra_json(
     # Step 1 — Query VALID spectra DataProduct items.
     products = _query_valid_spectra(nova_id, table)
 
+    # Capture individual (non-composite) products before filtering.
+    # Used for the observation table, which shows all original spectra.
+    individual_products = [p for p in products if "COMPOSITE" not in p.get("SK", "")]
+
+    # Step 1b — Post-query filtering: composites replace their constituents.
+    products = _filter_composites(products)
+
     # Step 2a — First pass: parse CSV + trim dead edges for each spectrum.
     parsed: list[dict[str, Any]] = []
     for product in products:
@@ -194,9 +201,11 @@ def generate_spectra_json(
     # Step 3 — Sort by epoch ascending (oldest at bottom of waterfall).
     spectra.sort(key=lambda s: s["epoch_mjd"])
 
-    # Step 4 — Build observations list from raw products.
+    # Step 4 — Build observations list from individual (pre-filter) products.
+    # ADR-033 Decision 5: individual spectra remain visible in the observation
+    # table even when replaced by composites in the waterfall plot.
     observations_list: list[dict[str, Any]] = []
-    for product in products:
+    for product in individual_products:
         obs: dict[str, Any] = {
             "data_product_id": product["data_product_id"],
             "instrument": product.get("instrument") or "Unknown",
@@ -219,13 +228,13 @@ def generate_spectra_json(
     observations_list.sort(key=lambda o: o["epoch_mjd"])
 
     # Step 5 — Update context.
-    nova_context["spectra_count"] = len(products)
+    nova_context["spectra_count"] = len(individual_products)
 
     # Group by integer MJD (floor) to count distinct nights.
     distinct_nights = len(
         {
             int(float(p["observation_date_mjd"]))
-            for p in products
+            for p in individual_products
             if p.get("observation_date_mjd") is not None
         }
     )
@@ -235,7 +244,7 @@ def generate_spectra_json(
         "Generated spectra.json",
         extra={
             "nova_id": nova_id,
-            "valid_products": len(products),
+            "valid_products": len(individual_products),
             "spectra_output": len(spectra),
             "phase": "generate_spectra",
         },
@@ -248,7 +257,7 @@ def generate_spectra_json(
         "outburst_mjd": outburst_mjd,
         "outburst_mjd_is_estimated": outburst_mjd_is_estimated,
         "wavelength_unit": _WAVELENGTH_UNIT,
-        "total_data_products": len(products),
+        "total_data_products": len(individual_products),
         "observations": observations_list,
         "spectra": spectra,
     }
@@ -288,6 +297,35 @@ def _query_valid_spectra(
 
 
 # ---------------------------------------------------------------------------
+# Composite filtering
+# ---------------------------------------------------------------------------
+
+
+def _filter_composites(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Filter products so composites replace their constituent/rejected spectra.
+
+    Composites are identified by having ``"COMPOSITE"`` in their ``SK`` field.
+    Their ``constituent_data_product_ids`` and ``rejected_data_product_ids``
+    lists define a suppression set — individual spectra in that set are excluded
+    from the display set.
+    """
+    composites = [p for p in products if "COMPOSITE" in p.get("SK", "")]
+    if not composites:
+        return products
+
+    suppression_set: set[str] = set()
+    for comp in composites:
+        suppression_set.update(comp.get("constituent_data_product_ids", []))
+        suppression_set.update(comp.get("rejected_data_product_ids", []))
+
+    return [
+        p
+        for p in products
+        if "COMPOSITE" in p.get("SK", "") or p["data_product_id"] not in suppression_set
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Per-spectrum processing
 # ---------------------------------------------------------------------------
 
@@ -304,7 +342,11 @@ def _process_spectrum_stage1(
     original product metadata, or ``None`` to skip this spectrum.
     """
     data_product_id: str = product["data_product_id"]
-    s3_key = f"derived/spectra/{nova_id}/{data_product_id}/web_ready.csv"
+    # Composites store their S3 key directly; individuals use the convention.
+    if "COMPOSITE" in product.get("SK", ""):
+        s3_key = product["web_ready_s3_key"]
+    else:
+        s3_key = f"derived/spectra/{nova_id}/{data_product_id}/web_ready.csv"
 
     # --- S3 read ---
     try:
