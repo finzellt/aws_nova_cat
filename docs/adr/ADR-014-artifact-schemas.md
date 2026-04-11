@@ -28,6 +28,19 @@ Date: 2026-03-17
 >
 > See: `docs/adr/ADR-033-spectra-compositing-pipeline.md`
 
+> **⚠ Amended by ADR-034** (2026-04-11)
+> ADR-034 (Spectra Wavelength Regime Model) amends this ADR as follows:
+>
+> - **Spectra regime metadata:** A new top-level `regimes` array is added to
+>   `spectra.json`, containing regime metadata records that drive tab creation
+>   in the spectra viewer. Each spectrum record gains a `regime` field
+>   assigned by wavelength midpoint. The `spectra.json` schema version is
+>   bumped from `"1.2"` to `"1.3"`.
+> - **Sort order:** The `spectra` array is sorted by regime group order, then
+>   by `epoch_mjd` within each regime.
+>
+> See: `docs/adr/ADR-034-spectra-wavelength-regime-model.md`
+
 ---
 
 ## Context
