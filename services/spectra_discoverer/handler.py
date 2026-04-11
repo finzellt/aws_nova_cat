@@ -148,7 +148,11 @@ def _handle_query_provider_for_products(event: dict[str, Any], context: object) 
     ra_deg = float(str(ra_deg_raw))
     dec_deg = float(str(dec_deg_raw))
 
-    primary_name: str = event.get("primary_name", "unknown")
+    # Read names from the Nova DDB item (authoritative source).
+    # Falls back to event for logging if Nova item lacks primary_name.
+    primary_name: str = str(nova_item.get("primary_name") or event.get("primary_name") or "unknown")
+    raw_aliases: Any = nova_item.get("aliases")
+    aliases: list[str] = [str(a) for a in raw_aliases] if isinstance(raw_aliases, list) else []
 
     logger.info(
         "Querying provider for spectra products",
@@ -156,12 +160,19 @@ def _handle_query_provider_for_products(event: dict[str, Any], context: object) 
             "provider": provider,
             "nova_id": nova_id,
             "primary_name": primary_name,
+            "alias_count": len(aliases),
             "ra_deg": ra_deg,
             "dec_deg": dec_deg,
         },
     )
 
-    raw_products = adapter.query(nova_id=nova_id, ra_deg=ra_deg, dec_deg=dec_deg)
+    raw_products = adapter.query(
+        nova_id=nova_id,
+        ra_deg=ra_deg,
+        dec_deg=dec_deg,
+        primary_name=primary_name,
+        aliases=aliases,
+    )
 
     logger.info(
         "Provider query complete",

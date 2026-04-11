@@ -104,10 +104,13 @@
         },
         "PrepareProviderList": {
             "Type": "Pass",
-            "Comment": "Inject the hardcoded provider list into state. To onboard a new provider (e.g. MAST), add an entry here \u2014 no other ASL changes required.",
+            "Comment": "Inject the hardcoded provider list into state. To onboard a new provider, add an entry here \u2014 no other ASL changes required.",
             "Result": [
                 {
                     "provider": "ESO"
+                },
+                {
+                    "provider": "MAST"
                 }
             ],
             "ResultPath": "$.providers",

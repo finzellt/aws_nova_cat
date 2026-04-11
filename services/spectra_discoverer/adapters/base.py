@@ -67,7 +67,7 @@ class SpectraDiscoveryAdapter(Protocol):
       - DataProduct.provider
       - LocatorAlias PK construction ("LOCATOR#<provider>#...")
       - DataProduct SK construction ("PRODUCT#SPECTRA#<provider>#...")
-    Example: "ESO"
+    Example: "ESO", "MAST"
     """
 
     def query(
@@ -76,16 +76,25 @@ class SpectraDiscoveryAdapter(Protocol):
         nova_id: str,
         ra_deg: float,
         dec_deg: float,
+        primary_name: str | None = None,
+        aliases: list[str] | None = None,
     ) -> list[dict]:
         """
         Query the provider archive for spectra products associated with
-        the given sky position.
+        the given sky position and/or target names.
 
         Args:
-            nova_id:  Nova UUID string (for logging/tracing only — not sent
-                      to the provider; the provider does not know nova_ids).
-            ra_deg:   Right ascension in decimal degrees (ICRS).
-            dec_deg:  Declination in decimal degrees (ICRS).
+            nova_id:      Nova UUID string (for logging/tracing only — not sent
+                          to the provider; the provider does not know nova_ids).
+            ra_deg:       Right ascension in decimal degrees (ICRS).
+            dec_deg:      Declination in decimal degrees (ICRS).
+            primary_name: Nova primary name (e.g. "V339 Del"). Optional —
+                          coordinate-based adapters (ESO) ignore this.
+                          Name-based adapters (MAST) use it for query_object.
+            aliases:      Additional known names / designations for the nova
+                          (e.g. ["Nova Del 2013", "NOVADEL2013"]). Used as
+                          fallback query terms when primary_name yields no
+                          results. Optional — may be None or empty.
 
         Returns:
             List of raw provider-native record dicts. Each dict contains

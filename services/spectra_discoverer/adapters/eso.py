@@ -104,9 +104,14 @@ class ESOAdapter:
         nova_id: str,
         ra_deg: float,
         dec_deg: float,
+        primary_name: str | None = None,
+        aliases: list[str] | None = None,
     ) -> list[dict]:
         """
         Execute an ESO SSAP cone search and return raw result records.
+
+        ESO uses coordinate-based cone search exclusively; primary_name and
+        aliases are accepted for Protocol compatibility but not used.
 
         Raises RetryableError on any network or service failure so the
         handler's retry policy can engage.
@@ -227,10 +232,10 @@ def _sanitize_value(value: Any) -> Any:
     """
     Convert a pyvo/astropy SSAP field value to a JSON-safe Python type.
 
-      bytes        → decode to str (strip whitespace)
-      numpy scalar → .item() to Python native
-      nan/inf      → None (not JSON-serializable)
-      everything else → unchanged
+    bytes        → decode to str (strip whitespace)
+    numpy scalar → .item() to Python native
+    nan/inf      → None (not JSON-serializable)
+    everything else → unchanged
     """
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace").strip() or None
