@@ -968,7 +968,13 @@ def _process_compositing_group(
         if not raw_key:
             _logger.warning(
                 "No raw_s3_key on DataProduct, skipping for compositing",
-                extra={"data_product_id": dp_id},
+                extra={
+                    "nova_id": nova_id,
+                    "data_product_id": dp_id,
+                    "instrument": product.get("instrument", "unknown"),
+                    "telescope": product.get("telescope", "unknown"),
+                    "provider": product.get("provider", "unknown"),
+                },
             )
             rejected.append(product)
             continue
@@ -978,7 +984,12 @@ def _process_compositing_group(
         if fits_result is None:
             _logger.warning(
                 "Could not read FITS for compositing",
-                extra={"data_product_id": dp_id},
+                extra={
+                    "nova_id": nova_id,
+                    "data_product_id": dp_id,
+                    "instrument": product.get("instrument", "unknown"),
+                    "provider": product.get("provider", "unknown"),
+                },
             )
             rejected.append(product)
             continue

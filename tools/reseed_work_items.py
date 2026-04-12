@@ -7,28 +7,28 @@ their artifacts.
 
 Usage:
     # Reseed spectra WorkItem for V906 Car (by nova_id)
-    python reseed_work_items.py --nova-id 64c5c516-... --dirty spectra
+    python tools/reseed_work_items.py --nova-id 64c5c516-... --dirty spectra
 
     # Reseed both spectra and photometry
-    python reseed_work_items.py --nova-id 64c5c516-... --dirty spectra photometry
+    python tools/reseed_work_items.py --nova-id 64c5c516-... --dirty spectra photometry
 
     # Reseed all dirty types for a single nova
-    python reseed_work_items.py --nova-id 64c5c516-... --dirty all
+    python tools/reseed_work_items.py --nova-id 64c5c516-... --dirty all
 
     # Resolve by name instead of nova_id
-    python reseed_work_items.py --name "V906 Car" --dirty spectra
+    python tools/reseed_work_items.py --name "V906 Car" --dirty spectra
 
     # Reseed ALL ACTIVE novae with all dirty types (full catalog rebuild)
-    python reseed_work_items.py --all --dirty all
+    python tools/reseed_work_items.py --all --dirty all
 
     # Reseed ALL ACTIVE novae for spectra only
-    python reseed_work_items.py --all --dirty spectra
+    python tools/reseed_work_items.py --all --dirty spectra
 
     # Dry run — show what would be written
-    python reseed_work_items.py --all --dirty all --dry-run
+    python tools/reseed_work_items.py --all --dirty all --dry-run
 
     # Use a specific table (default: reads NOVACAT_TABLE_NAME from env)
-    python reseed_work_items.py --nova-id abc123 --dirty spectra --table NovaCat
+    python tools/reseed_work_items.py --nova-id abc123 --dirty spectra --table NovaCat
 
 Operator tooling — no CI requirements.
 """

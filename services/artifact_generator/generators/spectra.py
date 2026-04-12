@@ -621,6 +621,8 @@ def _process_spectrum_stage1(
             extra={
                 "nova_id": nova_id,
                 "data_product_id": data_product_id,
+                "instrument": product.get("instrument", "unknown"),
+                "provider": product.get("provider", "unknown"),
                 "s3_key": s3_key,
                 "error": str(exc),
             },
@@ -633,7 +635,12 @@ def _process_spectrum_stage1(
     if not wavelengths:
         _logger.warning(
             "Empty web-ready CSV — skipping spectrum",
-            extra={"nova_id": nova_id, "data_product_id": data_product_id},
+            extra={
+                "nova_id": nova_id,
+                "data_product_id": data_product_id,
+                "instrument": product.get("instrument", "unknown"),
+                "provider": product.get("provider", "unknown"),
+            },
         )
         return None
 
@@ -643,7 +650,12 @@ def _process_spectrum_stage1(
     if not wavelengths:
         _logger.warning(
             "All-zero spectrum after edge trimming — skipping",
-            extra={"nova_id": nova_id, "data_product_id": data_product_id},
+            extra={
+                "nova_id": nova_id,
+                "data_product_id": data_product_id,
+                "instrument": product.get("instrument", "unknown"),
+                "provider": product.get("provider", "unknown"),
+            },
         )
         return None
 
@@ -656,7 +668,12 @@ def _process_spectrum_stage1(
     if not wavelengths:
         _logger.warning(
             "Empty spectrum after chip gap rejection — skipping",
-            extra={"nova_id": nova_id, "data_product_id": data_product_id},
+            extra={
+                "nova_id": nova_id,
+                "data_product_id": data_product_id,
+                "instrument": product.get("instrument", "unknown"),
+                "provider": product.get("provider", "unknown"),
+            },
         )
         return None
 
@@ -760,7 +777,12 @@ def _process_spectrum_stage2(
     if normalization_scale is None:
         _logger.warning(
             "Zero peak flux — skipping spectrum",
-            extra={"nova_id": nova_id, "data_product_id": data_product_id},
+            extra={
+                "nova_id": nova_id,
+                "data_product_id": data_product_id,
+                "instrument": product.get("instrument", "unknown"),
+                "provider": product.get("provider", "unknown"),
+            },
         )
         return None
 

@@ -784,10 +784,16 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
   const [userXRange, setUserXRange] = useState<[number, number] | null>(null);
   const [userYRange, setUserYRange] = useState<[number, number] | null>(null);
 
+  // Revision counter — incremented on every explicit range reset.
+  // Fed into layout.uirevision so Plotly drops cached zoom/pan state
+  // and re-applies our computed default ranges from scratch.
+  const [plotRevision, setPlotRevision] = useState(0);
+
   const handleRelayout = useCallback((update: Record<string, unknown>) => {
     if ('xaxis.autorange' in update || 'yaxis.autorange' in update) {
       setUserXRange(null);
       setUserYRange(null);
+      setPlotRevision(r => r + 1);
       return;
     }
     const x0 = update['xaxis.range[0]'] as number | undefined;
@@ -819,6 +825,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
     setSelectedSpectrumId(null);
     setUserXRange(null);
     setUserYRange(null);
+    setPlotRevision(r => r + 1);
     if (regimeId !== 'optical') {
       setActiveFeatureGroups(new Set());
     }
@@ -848,7 +855,14 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
     return <ErrorState onRetry={onRetry} />;
   }
 
-  const { traces, layout, config, preparedSpectra } = plotData;
+  const { traces, layout: plotLayout, config, preparedSpectra } = plotData;
+
+  // Plotly caches zoom/pan state internally and may restore stale ranges
+  // after React re-renders (e.g., toggling feature markers after a reset,
+  // or clicking 'reset axes' in single-spectrum mode).  Setting uirevision
+  // to a counter that increments on every explicit reset forces Plotly to
+  // drop its cached UI state and re-apply our layout ranges.
+  const layout = { ...plotLayout, uirevision: plotRevision };
 
   return (
     <div className="rounded-md border border-[var(--color-border-subtle)] overflow-hidden bg-[var(--color-surface-primary)]">
@@ -876,7 +890,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
           <ToggleGroup<EpochFormat>
             ariaLabel="Epoch label format"
             value={epochFormat}
-            onChange={(v) => { setEpochFormat(v); setUserXRange(null); setUserYRange(null); }}
+            onChange={(v) => { setEpochFormat(v); setUserXRange(null); setUserYRange(null); setPlotRevision(r => r + 1); }}
             options={[
               {
                 value: 'dpo', label: 'DPO',
@@ -951,7 +965,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
       <LegendStrip
         spectra={preparedSpectra}
         selectedId={selectedSpectrumId}
-        onSelect={(id) => { setSelectedSpectrumId(id); setUserXRange(null); setUserYRange(null); }}
+        onSelect={(id) => { setSelectedSpectrumId(id); setUserXRange(null); setUserYRange(null); setPlotRevision(r => r + 1); }}
       />
     </div>
   );
@@ -1077,6 +1091,7 @@ function buildPlotData(
       xaxis: {
         title: { text: 'Wavelength (nm)', font: { size: 12, color: 'var(--color-text-secondary)', family: 'DM Sans, sans-serif' } },
         range: userXRange ?? defaultXRange,
+        autorange: !userXRange,
         gridcolor: 'var(--color-border-subtle)',
         zerolinecolor: 'var(--color-border-subtle)',
         tickfont: { size: 10, color: 'var(--color-text-tertiary)', family: 'DM Mono, monospace' },
@@ -1089,6 +1104,7 @@ function buildPlotData(
         zerolinecolor: 'var(--color-border-subtle)',
         tickfont: { size: 10, color: 'var(--color-text-tertiary)', family: 'DM Mono, monospace' },
         range: userYRange ?? defaultYRange,
+        autorange: !userYRange,
       },
       annotations: allAnnotations,
       shapes,
@@ -1102,7 +1118,11 @@ function buildPlotData(
     const config = {
       displayModeBar: 'hover' as const,
       responsive: true,
-      modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d', 'toImage'] as const,
+      // Use autoScale2d (live autorange) instead of resetScale2d (cached
+      // _initialRange) — Plotly's _initialRange can retain stale waterfall
+      // y-ranges after transitioning to single-spectrum mode, causing the
+      // "Reset axes" button to shrink the spectrum to ~10% of the y-axis.
+      modeBarButtonsToRemove: ['select2d', 'lasso2d', 'resetScale2d', 'toImage'] as const,
       displaylogo: false,
     };
 

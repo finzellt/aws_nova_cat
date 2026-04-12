@@ -103,6 +103,10 @@ def generate_bundle_zip(
                         extra={
                             "nova_id": nova_id,
                             "data_product_id": dp_id,
+                            "instrument": dp.get("instrument", "unknown"),
+                            "telescope": dp.get("telescope", "unknown"),
+                            "provider": dp.get("provider", "unknown"),
+                            "observation_date_mjd": str(dp.get("observation_date_mjd", "")),
                         },
                     )
                     spectra_skipped += 1
@@ -117,6 +121,8 @@ def generate_bundle_zip(
                         extra={
                             "nova_id": nova_id,
                             "data_product_id": dp_id,
+                            "instrument": dp.get("instrument", "unknown"),
+                            "provider": dp.get("provider", "unknown"),
                             "fits_bucket": fits_bucket,
                             "fits_key": fits_key,
                             "error": str(exc),
