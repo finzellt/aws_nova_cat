@@ -383,7 +383,7 @@ class TestDisplayWavelengthFields:
         }
 
     def test_display_fields_present(self) -> None:
-        """Artifact includes display_wavelength_min and display_wavelength_max."""
+        """ADR-035: display_wavelength_min/max removed; artifact has regimes instead."""
         csvs = {
             "dp-1": self._make_csv(400, 900),
             "dp-2": self._make_csv(410, 920),
@@ -415,10 +415,10 @@ class TestDisplayWavelengthFields:
         ctx: dict[str, Any] = {"outburst_mjd": 58000.0, "outburst_mjd_is_estimated": False}
         artifact = generate_spectra_json("nova-test", FakeTable(), FakeS3(), "bucket", ctx)
 
-        assert "display_wavelength_min" in artifact
-        assert "display_wavelength_max" in artifact
-        assert isinstance(artifact["display_wavelength_min"], float)
-        assert isinstance(artifact["display_wavelength_max"], float)
+        # ADR-035: global display bounds removed, per-regime trimming instead.
+        assert "display_wavelength_min" not in artifact
+        assert "display_wavelength_max" not in artifact
+        assert "regimes" in artifact
         assert "total_data_products" in artifact
         assert artifact["total_data_products"] == 3
         assert "observations" in artifact
@@ -435,7 +435,7 @@ class TestDisplayWavelengthFields:
             assert "provider" in obs
 
     def test_display_min_trims_blue_outlier(self) -> None:
-        """End-to-end: blue outlier at 200nm trimmed to near median min (~400)."""
+        """ADR-035: per-regime trimming trims outlier within the optical regime."""
         csvs = {
             "dp-1": self._make_csv(390, 900),
             "dp-2": self._make_csv(400, 900),
@@ -468,14 +468,15 @@ class TestDisplayWavelengthFields:
         ctx: dict[str, Any] = {"outburst_mjd": 58000.0, "outburst_mjd_is_estimated": False}
         artifact = generate_spectra_json("nova-test", FakeTable(), FakeS3(), "bucket", ctx)
 
-        # median min of [390, 400, 410, 200] = (390+400)/2 = 395
-        display_min = artifact["display_wavelength_min"]
-
-        # Find the outlier spectrum (originally started at 200nm)
-        outlier = [s for s in artifact["spectra"] if s["spectrum_id"] == "dp-outlier"]
-        assert len(outlier) == 1
-        # Its wavelength_min should now be at or near the display_min, not 200
-        assert outlier[0]["wavelength_min"] >= display_min - 1.0
+        # ADR-035: dp-outlier (200–900nm) crosses the 320nm boundary and is
+        # split into uv (200–320) and optical (320–900) fragments.
+        # The optical fragment's spectrum_id has a ::optical suffix.
+        outlier_optical = [
+            s for s in artifact["spectra"] if s["spectrum_id"] == "dp-outlier::optical"
+        ]
+        assert len(outlier_optical) == 1
+        # The optical fragment starts at ~320nm, not 200nm.
+        assert outlier_optical[0]["wavelength_min"] >= 319.0
 
     def test_no_display_fields_for_single_spectrum(self) -> None:
         """Single spectrum: no display bounds in artifact."""
@@ -549,8 +550,8 @@ class TestDisplayWavelengthFields:
         assert obs_ids == {"dp-a", "dp-b", "dp-c"}
 
     def test_red_side_trim_empty_wavelengths_no_crash(self) -> None:
-        """Spectrum entirely above display max is dropped, not IndexError."""
-        # 3 normal spectra (400–900) + 1 entirely above the median max (~900).
+        """ADR-035: dp-bad is in a different regime (nir), so it survives per-regime trimming."""
+        # 3 normal spectra (400–900, optical) + 1 in NIR (5000–6000).
         csvs = {
             "dp-1": self._make_csv(400, 900),
             "dp-2": self._make_csv(400, 910),
@@ -583,13 +584,15 @@ class TestDisplayWavelengthFields:
         ctx: dict[str, Any] = {"outburst_mjd": 58000.0, "outburst_mjd_is_estimated": False}
         artifact = generate_spectra_json("nova-test", FakeTable(), FakeS3(), "bucket", ctx)
 
-        # dp-bad should be excluded — its entire range is above display max.
+        # ADR-035: dp-bad is alone in nir regime — no per-regime trimming applies.
+        # It survives and appears in the output.
         spectrum_ids = [s["spectrum_id"] for s in artifact["spectra"]]
-        assert "dp-bad" not in spectrum_ids
+        assert "dp-bad" in spectrum_ids
+        assert len(artifact["spectra"]) == 4
 
     def test_blue_side_trim_empty_wavelengths_no_crash(self) -> None:
-        """Spectrum entirely below display min is dropped, not IndexError."""
-        # 3 normal spectra (400–900) + 1 entirely below the median min (~400).
+        """ADR-035: dp-bad is in uv regime, optical spectra are separate — no cross-regime trim."""
+        # 3 normal spectra (400–900, optical) + 1 in UV (100–200).
         csvs = {
             "dp-1": self._make_csv(400, 900),
             "dp-2": self._make_csv(410, 900),
@@ -622,12 +625,14 @@ class TestDisplayWavelengthFields:
         ctx: dict[str, Any] = {"outburst_mjd": 58000.0, "outburst_mjd_is_estimated": False}
         artifact = generate_spectra_json("nova-test", FakeTable(), FakeS3(), "bucket", ctx)
 
-        # dp-bad should be excluded — its entire range is below display min.
+        # ADR-035: dp-bad is alone in uv regime — no per-regime trimming applies.
+        # It survives and appears in the output.
         spectrum_ids = [s["spectrum_id"] for s in artifact["spectra"]]
-        assert "dp-bad" not in spectrum_ids
+        assert "dp-bad" in spectrum_ids
+        assert len(artifact["spectra"]) == 4
 
     def test_single_bad_spectrum_does_not_block_others(self) -> None:
-        """One fully-trimmed spectrum doesn't prevent other spectra from appearing."""
+        """ADR-035: dp-bad in nir regime survives; good optical spectra unaffected."""
         csvs = {
             "dp-good-1": self._make_csv(400, 900),
             "dp-good-2": self._make_csv(410, 920),
@@ -658,11 +663,12 @@ class TestDisplayWavelengthFields:
         ctx: dict[str, Any] = {"outburst_mjd": 58000.0, "outburst_mjd_is_estimated": False}
         artifact = generate_spectra_json("nova-test", FakeTable(), FakeS3(), "bucket", ctx)
 
+        # ADR-035: dp-bad is alone in nir regime — survives per-regime trimming.
         spectrum_ids = {s["spectrum_id"] for s in artifact["spectra"]}
         assert "dp-good-1" in spectrum_ids
         assert "dp-good-2" in spectrum_ids
-        assert "dp-bad" not in spectrum_ids
-        assert len(artifact["spectra"]) == 2
+        assert "dp-bad" in spectrum_ids
+        assert len(artifact["spectra"]) == 3
 
 
 # ---------------------------------------------------------------------------

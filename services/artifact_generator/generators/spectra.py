@@ -27,6 +27,7 @@ import logging
 import statistics
 import time
 import uuid
+from collections import defaultdict
 from decimal import Decimal
 from typing import Any
 
@@ -43,7 +44,7 @@ from generators.shared import (
 
 _logger = logging.getLogger("artifact_generator")
 
-_SCHEMA_VERSION = "1.3"  # ADR-034: spectra wavelength regimes (1.2 was ADR-033)
+_SCHEMA_VERSION = "1.4"  # ADR-035: xray/uv split, per-regime trimming
 _WAVELENGTH_UNIT = "nm"
 
 _FLUX_FLOOR = 1e-4  # minimum normalized flux; prevents log(0) in frontend
@@ -52,27 +53,34 @@ _TRIM_TOLERANCE = 1.1  # 10% beyond median before wavelength trim kicks in
 _ARM_MJD_TOLERANCE = 0.333  # days (~8 hr) — grouping tolerance for arms
 _ARM_OVERLAP_MAX_NM = 100.0  # nm — max overlap before we reject a merge
 
-# ADR-034 spectra wavelength regime boundaries (nm).
+# ADR-035 spectra wavelength regime boundaries (nm).
 # Assignment is by wavelength midpoint: (wavelength_min + wavelength_max) / 2.
 _SPECTRA_REGIME_BOUNDARIES: list[tuple[str, float]] = [
-    ("xuv", 320.0),  # λ_mid < 320 nm
+    ("xray", 91.0),  # λ_mid < 91 nm  (Lyman limit)
+    ("uv", 320.0),  # 91 ≤ λ_mid < 320 nm
     ("optical", 1000.0),  # 320 ≤ λ_mid < 1000 nm
     ("nir", 5000.0),  # 1000 ≤ λ_mid < 5000 nm
-    # ("mir", ∞)  # λ_mid ≥ 5000 nm — fallback
+    # ("mir", ∞)        # λ_mid ≥ 5000 nm — fallback
 ]
 
 _SPECTRA_REGIME_SORT_ORDER: dict[str, int] = {
-    "xuv": 0,
-    "optical": 1,
-    "nir": 2,
-    "mir": 3,
+    "xray": 0,
+    "uv": 1,
+    "optical": 2,
+    "nir": 3,
+    "mir": 4,
 }
 
 _SPECTRA_REGIME_DEFINITIONS: dict[str, dict[str, Any]] = {
-    "xuv": {
-        "id": "xuv",
-        "label": "X-ray / UV",
-        "wavelength_range_nm": [0, 320],
+    "xray": {
+        "id": "xray",
+        "label": "X-ray",
+        "wavelength_range_nm": [0, 91],
+    },
+    "uv": {
+        "id": "uv",
+        "label": "Ultraviolet",
+        "wavelength_range_nm": [91, 320],
     },
     "optical": {
         "id": "optical",
@@ -91,6 +99,13 @@ _SPECTRA_REGIME_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
 }
 
+# ADR-035: Cross-boundary spectrum splitting thresholds.
+_SPLIT_FRACTION_THRESHOLD = 0.15  # minor side must be ≥15% of total span
+_SPLIT_ABSOLUTE_MIN_NM = 45.0  # minor side must be ≥45 nm
+
+# Ordered list of regime boundary wavelengths for splitting checks.
+_REGIME_SPLIT_BOUNDARIES: list[float] = [91.0, 320.0, 1000.0, 5000.0]
+
 
 # ---------------------------------------------------------------------------
 # ADR-034: Regime assignment
@@ -104,6 +119,246 @@ def _assign_spectra_regime(wavelength_min: float, wavelength_max: float) -> str:
         if midpoint < upper_bound:
             return regime_id
     return "mir"
+
+
+# ---------------------------------------------------------------------------
+# ADR-035: Cross-boundary splitting and per-regime trimming
+# ---------------------------------------------------------------------------
+
+
+def _split_cross_boundary_spectrum(
+    rec: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Split a parsed stage-1 record at regime boundaries (ADR-035 Decision 2).
+
+    Returns a list of 1+ records. If no split is needed, returns a
+    single-element list containing the original record (unmodified).
+    When a split occurs, each fragment gets:
+      - Its own sliced wavelength/flux arrays
+      - A ``_regime`` key set by midpoint classification of the fragment
+      - A ``_split_suffix`` key with the regime id (for spectrum_id construction)
+
+    Boundary-point rule: a data point at exactly a boundary wavelength
+    goes to the redder (longer-wavelength) regime.
+    """
+    wavelengths: list[float] = rec["wavelengths"]
+    if not wavelengths:
+        return [rec]
+
+    wl_min = wavelengths[0]
+    wl_max = wavelengths[-1]
+    total_span = wl_max - wl_min
+
+    if total_span <= 0:
+        return [rec]
+
+    # Find all boundaries that fall strictly inside the spectrum's range.
+    # "Strictly inside" means wl_min < boundary < wl_max (a boundary at
+    # the edge doesn't create a split).
+    active_boundaries: list[float] = [b for b in _REGIME_SPLIT_BOUNDARIES if wl_min < b < wl_max]
+
+    if not active_boundaries:
+        return [rec]
+
+    # Check each boundary for splitting eligibility.
+    split_points: list[float] = []
+    for boundary in sorted(active_boundaries):
+        # Minor side is the smaller portion.
+        left_span = boundary - wl_min
+        right_span = wl_max - boundary
+        minor_span = min(left_span, right_span)
+
+        if (
+            minor_span >= _SPLIT_ABSOLUTE_MIN_NM
+            and minor_span / total_span >= _SPLIT_FRACTION_THRESHOLD
+        ):
+            split_points.append(boundary)
+
+    if not split_points:
+        return [rec]
+
+    # Perform the split. Build ordered list of cut points including edges.
+    cuts = [wl_min] + split_points + [wl_max + 1.0]  # +1 so last segment includes wl_max
+
+    fragments: list[dict[str, Any]] = []
+    for seg_idx in range(len(cuts) - 1):
+        seg_min = cuts[seg_idx]
+        seg_max = cuts[seg_idx + 1]
+
+        seg_wl: list[float] = []
+        seg_fx: list[float] = []
+        for wl, fx in zip(wavelengths, rec["fluxes"], strict=True):
+            # Boundary point goes to the redder regime: use >= for lower bound
+            # on all segments except the first (which owns the original blue edge).
+            if seg_idx == 0:
+                in_segment = wl >= seg_min and wl < seg_max
+            else:
+                in_segment = wl >= seg_min and wl < seg_max
+            if in_segment:
+                seg_wl.append(wl)
+                seg_fx.append(fx)
+
+        if not seg_wl:
+            continue
+
+        frag_regime = _assign_spectra_regime(seg_wl[0], seg_wl[-1])
+        fragment: dict[str, Any] = {
+            "wavelengths": seg_wl,
+            "fluxes": seg_fx,
+            "product": rec["product"],
+            "nova_id": rec["nova_id"],
+            "_regime": frag_regime,
+            "_split_suffix": frag_regime,
+        }
+        fragments.append(fragment)
+
+    dp_id = rec["product"]["data_product_id"]
+    _logger.info(
+        "Split cross-boundary spectrum",
+        extra={
+            "data_product_id": dp_id,
+            "nova_id": rec["nova_id"],
+            "original_range_nm": [wl_min, wl_max],
+            "split_points_nm": split_points,
+            "fragment_count": len(fragments),
+            "fragment_regimes": [f["_regime"] for f in fragments],
+        },
+    )
+
+    return fragments if fragments else [rec]
+
+
+def _assign_and_split_regimes(
+    parsed: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Classify each parsed spectrum by regime and split cross-boundary spectra.
+
+    ADR-035 Decision 4 steps 5–6. After this function:
+      - Every record has a ``_regime`` key.
+      - Records that were split have a ``_split_suffix`` key.
+      - Records that were NOT split have ``_regime`` set and no ``_split_suffix``.
+    """
+    result: list[dict[str, Any]] = []
+
+    for rec in parsed:
+        wavelengths = rec["wavelengths"]
+        if not wavelengths:
+            continue
+
+        # Try splitting first.
+        fragments = _split_cross_boundary_spectrum(rec)
+
+        if len(fragments) == 1 and "_regime" not in fragments[0]:
+            # No split occurred — assign regime to the original record.
+            wl_min = wavelengths[0]
+            wl_max = wavelengths[-1]
+            fragments[0]["_regime"] = _assign_spectra_regime(wl_min, wl_max)
+
+        result.extend(fragments)
+
+    return result
+
+
+def _trim_per_regime(
+    parsed: list[dict[str, Any]],
+    nova_id: str,
+) -> list[dict[str, Any]]:
+    """Apply median-based wavelength trimming independently per regime group.
+
+    ADR-035 Decision 3. This replaces the old global Step 2b trimming.
+    For each regime group with ≥ 2 spectra, compute the median blue/red
+    edges and trim outliers using the same tolerance as before.
+    """
+    by_regime: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for rec in parsed:
+        by_regime[rec["_regime"]].append(rec)
+
+    result: list[dict[str, Any]] = []
+
+    for regime_id, group in by_regime.items():
+        if len(group) < 2:
+            # Single spectrum or empty — no trimming, pass through.
+            result.extend(group)
+            continue
+
+        wl_mins = [s["wavelengths"][0] for s in group if s["wavelengths"]]
+        wl_maxes = [s["wavelengths"][-1] for s in group if s["wavelengths"]]
+
+        if not wl_mins or not wl_maxes:
+            result.extend(group)
+            continue
+
+        display_min = statistics.median(wl_mins)
+        display_max = statistics.median(wl_maxes)
+
+        # Warn if trim would affect >50% of spectra in this regime.
+        trim_count_red = sum(1 for wmax in wl_maxes if wmax > display_max * _TRIM_TOLERANCE)
+        if trim_count_red > len(group) / 2:
+            _logger.warning(
+                "Red-side wavelength trim affects >50%% of spectra in regime — data may be bimodal",
+                extra={
+                    "nova_id": nova_id,
+                    "regime": regime_id,
+                    "trim_count": trim_count_red,
+                    "total": len(group),
+                },
+            )
+
+        trim_count_blue = sum(1 for wmin in wl_mins if wmin < display_min / _TRIM_TOLERANCE)
+        if trim_count_blue > len(group) / 2:
+            _logger.warning(
+                "Blue-side wavelength trim affects >50%% of spectra in regime — data may be bimodal",
+                extra={
+                    "nova_id": nova_id,
+                    "regime": regime_id,
+                    "trim_count": trim_count_blue,
+                    "total": len(group),
+                },
+            )
+
+        # Red-side trim.
+        for rec in group:
+            if not rec["wavelengths"]:
+                continue
+            if rec["wavelengths"][-1] > display_max * _TRIM_TOLERANCE:
+                _trim_wavelength_range(rec, display_max)
+
+        # Drop empties after red-side trim.
+        for rec in group:
+            if not rec["wavelengths"]:
+                _logger.warning(
+                    "Spectrum empty after red-side wavelength trim — dropping",
+                    extra={
+                        "nova_id": nova_id,
+                        "regime": regime_id,
+                        "data_product_id": rec["product"]["data_product_id"],
+                    },
+                )
+        group = [rec for rec in group if rec["wavelengths"]]
+
+        # Blue-side trim.
+        for rec in group:
+            if not rec["wavelengths"]:
+                continue
+            if rec["wavelengths"][0] < display_min / _TRIM_TOLERANCE:
+                _trim_wavelength_range_min(rec, display_min)
+
+        # Drop empties after blue-side trim.
+        for rec in group:
+            if not rec["wavelengths"]:
+                _logger.warning(
+                    "Spectrum empty after blue-side wavelength trim — dropping",
+                    extra={
+                        "nova_id": nova_id,
+                        "regime": regime_id,
+                        "data_product_id": rec["product"]["data_product_id"],
+                    },
+                )
+        group = [rec for rec in group if rec["wavelengths"]]
+
+        result.extend(group)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -168,81 +423,11 @@ def generate_spectra_json(
     # Step 2a½ — Detect multi-arm groups and merge.
     parsed = _merge_multi_arm_spectra(parsed, nova_id, s3_client, private_bucket)
 
-    # Step 2b — Compute display wavelength range from median bounds.
-    display_wavelength_min: float | None = None
-    display_wavelength_max: float | None = None
+    # Step 2b — Regime classification and cross-boundary splitting (ADR-035).
+    parsed = _assign_and_split_regimes(parsed)
 
-    if len(parsed) >= 2:
-        wl_mins = [s["wavelengths"][0] for s in parsed]
-        wl_maxes = [s["wavelengths"][-1] for s in parsed]
-        display_wavelength_min = statistics.median(wl_mins)
-        display_wavelength_max = statistics.median(wl_maxes)
-        assert display_wavelength_min is not None  # nosec: narrowing for mypy
-        assert display_wavelength_max is not None  # nosec: narrowing for mypy
-
-        # Warn if trim would affect >50% of spectra (bimodal data).
-        trim_count = sum(1 for wmax in wl_maxes if wmax > display_wavelength_max * _TRIM_TOLERANCE)
-        if trim_count > len(parsed) / 2:
-            _logger.warning(
-                "Wavelength trim affects >50%% of spectra — data may be bimodal",
-                extra={
-                    "nova_id": nova_id,
-                    "trim_count": trim_count,
-                    "total": len(parsed),
-                },
-            )
-
-        # Warn if blue-side trim would affect >50% of spectra (bimodal data).
-        trim_count_min = sum(
-            1 for wmin in wl_mins if wmin < display_wavelength_min / _TRIM_TOLERANCE
-        )
-        if trim_count_min > len(parsed) / 2:
-            _logger.warning(
-                "Blue-side wavelength trim affects >50%% of spectra — data may be bimodal",
-                extra={
-                    "nova_id": nova_id,
-                    "trim_count": trim_count_min,
-                    "total": len(parsed),
-                },
-            )
-
-        # Trim outlier spectra to the display range (red side).
-        for rec in parsed:
-            if not rec["wavelengths"]:
-                continue
-            if rec["wavelengths"][-1] > display_wavelength_max * _TRIM_TOLERANCE:
-                _trim_wavelength_range(rec, display_wavelength_max)
-
-        # Drop records that became empty after red-side trim.
-        for rec in parsed:
-            if not rec["wavelengths"]:
-                _logger.warning(
-                    "Spectrum empty after red-side wavelength trim — dropping",
-                    extra={
-                        "nova_id": nova_id,
-                        "data_product_id": rec["product"]["data_product_id"],
-                    },
-                )
-        parsed = [rec for rec in parsed if rec["wavelengths"]]
-
-        # Trim outlier spectra to the display range (blue side).
-        for rec in parsed:
-            if not rec["wavelengths"]:
-                continue
-            if rec["wavelengths"][0] < display_wavelength_min / _TRIM_TOLERANCE:
-                _trim_wavelength_range_min(rec, display_wavelength_min)
-
-        # Drop records that became empty after blue-side trim.
-        for rec in parsed:
-            if not rec["wavelengths"]:
-                _logger.warning(
-                    "Spectrum empty after blue-side wavelength trim — dropping",
-                    extra={
-                        "nova_id": nova_id,
-                        "data_product_id": rec["product"]["data_product_id"],
-                    },
-                )
-        parsed = [rec for rec in parsed if rec["wavelengths"]]
+    # Step 2b½ — Per-regime median display range computation and trimming (ADR-035).
+    parsed = _trim_per_regime(parsed, nova_id)
 
     # Step 2c — Second pass: LTTB downsampling + normalization.
     spectra: list[dict[str, Any]] = []
@@ -332,11 +517,6 @@ def generate_spectra_json(
         "observations": observations_list,
         "spectra": spectra,
     }
-    if display_wavelength_min is not None:
-        artifact["display_wavelength_min"] = display_wavelength_min
-    if display_wavelength_max is not None:
-        artifact["display_wavelength_max"] = display_wavelength_max
-
     return artifact
 
 
@@ -592,8 +772,10 @@ def _process_spectrum_stage2(
         days_since_outburst = round(epoch_mjd - outburst_mjd, 4)
 
     return {
-        "spectrum_id": data_product_id,
-        "regime": _assign_spectra_regime(min(wavelengths), max(wavelengths)),
+        "spectrum_id": f"{data_product_id}::{rec['_split_suffix']}"
+        if "_split_suffix" in rec
+        else data_product_id,
+        "regime": rec["_regime"],
         "epoch_mjd": epoch_mjd,
         "days_since_outburst": days_since_outburst,
         "instrument": product.get("instrument", "unknown"),

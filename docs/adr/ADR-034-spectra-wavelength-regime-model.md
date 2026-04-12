@@ -4,7 +4,7 @@
 **Date:** 2026-04-11
 **Author:** TF
 **Supersedes:** —
-**Superseded by:** —
+**Superseded by:** -
 **Amends:** ADR-013 (adds regime tabs to spectra viewer), ADR-014 (restructures
 `spectra.json` artifact schema to include regime metadata)
 **Relates to:**
@@ -14,6 +14,23 @@
   structural template)
 - `DESIGN-003` — Artifact regeneration pipeline (spectra generator §7)
 - `ADR-033` — Spectra Compositing Pipeline (composites carry regime like any spectrum)
+
+> **⚠ Amended by ADR-035** (2026-04-12)
+> ADR-035 (Spectra Regime Splitting and Per-Regime Display Range) amends this ADR
+> as follows:
+>
+> - **Regime split:** The combined `xuv` regime is replaced by two regimes:
+>   `xray` (λ_mid < 91 nm, Lyman limit) and `uv` (91 ≤ λ_mid < 320 nm).
+> - **Spectrum splitting:** Cross-boundary spectra (e.g., X-Shooter 350–2500 nm)
+>   are split at regime boundaries when the minor-side coverage meets both a
+>   15% fractional and 45 nm absolute threshold. Deferred in §5 of this ADR;
+>   now decided in ADR-035 Decision 2.
+> - **Per-regime trimming:** The median-based display wavelength range is computed
+>   independently per regime group, fixing a bug where UV spectra were truncated
+>   by the optical-dominated global median.
+> - **Schema version:** Bumped from `"1.3"` to `"1.4"`.
+>
+> See: `docs/adr/ADR-035-spectra-regime-splitting-and-per-regime-display-range.md`
 
 ---
 

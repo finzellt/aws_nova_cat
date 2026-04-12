@@ -740,7 +740,7 @@ export default function SpectraViewer({ data, onRetry }: SpectraViewerProps) {
   const regimes = data.regimes ?? [];
   const showRegimeTabs = regimes.length > 1;
 
-  const REGIME_ORDER: Record<string, number> = { xuv: 0, optical: 1, nir: 2, mir: 3 };
+  const REGIME_ORDER: Record<string, number> = { xray: 0, uv: 1, optical: 2, nir: 3, mir: 4 };
   const defaultRegimeId = useMemo(() => {
     if (regimes.length === 0) return 'optical';
     const counts = new Map<string, number>();
