@@ -519,24 +519,34 @@ class TestEndToEndMerge:
         artifact = generate_spectra_json("nova-e2e", table, s3, "bucket", ctx)
 
         spectra = artifact["spectra"]
-        # Should be 1 merged spectrum, not 3 separate ones.
-        assert len(spectra) == 1
+        # ADR-035: merged 300–2480nm spectrum is split at 1000nm boundary
+        # into optical (300–1000) and nir (1000–2480) fragments.
+        assert len(spectra) == 2
 
-        spec = spectra[0]
-        # Wavelength range spans all 3 arms.
-        assert spec["wavelength_min"] < 310
-        assert spec["wavelength_max"] > 2400
+        # Sort by wavelength_min to get optical first, nir second.
+        spectra.sort(key=lambda s: s["wavelength_min"])
+        optical_spec = spectra[0]
+        nir_spec = spectra[1]
 
-        # Composite ID — not any of the input IDs.
-        assert spec["spectrum_id"] != "dp-uvb"
-        assert spec["spectrum_id"] != "dp-vis"
-        assert spec["spectrum_id"] != "dp-nir"
+        assert optical_spec["regime"] == "optical"
+        assert nir_spec["regime"] == "nir"
 
-        # Point budget respected.
-        assert len(spec["wavelengths"]) <= LTTB_THRESHOLD + 10  # margin for rounding
+        assert optical_spec["wavelength_min"] < 310
+        assert nir_spec["wavelength_max"] > 2400
+
+        # Composite IDs — not any of the input IDs (split adds ::regime suffix).
+        for spec in spectra:
+            assert spec["spectrum_id"] != "dp-uvb"
+            assert spec["spectrum_id"] != "dp-vis"
+            assert spec["spectrum_id"] != "dp-nir"
+
+        # Point budget respected per fragment.
+        for spec in spectra:
+            assert len(spec["wavelengths"]) <= LTTB_THRESHOLD + 10  # margin for rounding
 
         # No NaN or None values in the output arrays.
-        assert all(isinstance(f, float) for f in spec["flux_normalized"])
-        assert all(isinstance(w, float) for w in spec["wavelengths"])
-        assert not any(math.isnan(f) for f in spec["flux_normalized"])
-        assert len(spec["flux_normalized"]) == len(spec["wavelengths"])
+        for spec in spectra:
+            assert all(isinstance(f, float) for f in spec["flux_normalized"])
+            assert all(isinstance(w, float) for w in spec["wavelengths"])
+            assert not any(math.isnan(f) for f in spec["flux_normalized"])
+            assert len(spec["flux_normalized"]) == len(spec["wavelengths"])
