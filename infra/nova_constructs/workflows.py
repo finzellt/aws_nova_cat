@@ -352,6 +352,13 @@ class NovaCatWorkflows(Construct):
         # Container — builds from services/artifact_generator/Dockerfile.
         # The build context is services/ (same pattern as Docker Lambdas).
         services_root = os.path.join(os.path.dirname(__file__), "../../services")
+        artifact_generator_log_group = logs.LogGroup(
+            self,
+            "ArtifactGeneratorLogGroup",
+            log_group_name=f"/ecs/{env_prefix}-artifact-generator",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=removal_policy,
+        )
         task_def.add_container(
             "artifact-generator",
             image=ecs.ContainerImage.from_asset(
@@ -361,6 +368,7 @@ class NovaCatWorkflows(Construct):
             ),
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix="artifact-generator",
+                log_group=artifact_generator_log_group,
             ),
             environment={
                 "NOVA_CAT_TABLE_NAME": table.table_name,
