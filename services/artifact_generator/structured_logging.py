@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 # Fields that ``clear_nova_context()`` removes between per-nova iterations.
-_NOVA_CONTEXT_KEYS = frozenset({"nova_id", "artifact", "phase"})
+_NOVA_CONTEXT_KEYS = frozenset({"nova_id", "artifact", "phase", "primary_name"})
 
 
 class LogContext:

@@ -33,6 +33,8 @@ REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 LOG_GROUP_PREFIXES = [
     "/aws/lambda/nova-cat",  # Lambda functions
     "/aws/vendedlogs/states/nova-cat",  # Step Functions (Express)
+    "/aws/states/nova-cat",  # Step Functions (Standard)
+    "/ecs/nova-cat",  # Fargate tasks
 ]
 
 # Additional prefixes for ECS/Fargate log groups. CDK auto-generates
@@ -42,9 +44,6 @@ LOG_GROUP_PREFIXES = [
 #
 # You can also set the LOG_VIEWER_EXTRA_PREFIXES env var to a
 # comma-separated list of additional prefixes to discover.
-ECS_LOG_PREFIXES = [
-    "NovaCat",  # Catches CDK-generated names like NovaCatStack-Workflows...
-]
 
 POLL_INTERVAL_SECONDS = 0.5
 QUERY_TIMEOUT_SECONDS = 30
@@ -76,7 +75,7 @@ def discover_log_groups() -> list[str]:
     client = _get_client()
     groups: list[str] = []
 
-    all_prefixes = list(LOG_GROUP_PREFIXES) + list(ECS_LOG_PREFIXES)
+    all_prefixes = list(LOG_GROUP_PREFIXES)
 
     # Extra prefixes from env var (comma-separated).
     extra = os.environ.get("LOG_VIEWER_EXTRA_PREFIXES", "")
@@ -301,7 +300,7 @@ def _extract_source(log_field: str) -> str:
         fn_name = group_name.replace("/aws/lambda/", "")
         return f"lambda:{fn_name}"
 
-    # Step Functions logs
+    # Step Functions logs (Express — vendedlogs)
     if group_name.startswith("/aws/vendedlogs/states/nova-cat-"):
         sfn_name = group_name.replace("/aws/vendedlogs/states/nova-cat-", "")
         return f"sfn:{sfn_name}"
@@ -309,15 +308,21 @@ def _extract_source(log_field: str) -> str:
         sfn_name = group_name.replace("/aws/vendedlogs/states/", "")
         return f"sfn:{sfn_name}"
 
-    # ECS/Fargate logs — CDK-generated names contain "ArtifactGenerator"
-    # or the task family name.
-    lower = group_name.lower()
-    if "artifactgenerator" in lower or "artifact-generator" in lower:
-        return "fargate:artifact-generator"
+    # Step Functions logs (Standard — /aws/states/)
+    if group_name.startswith("/aws/states/nova-cat-"):
+        sfn_name = group_name.replace("/aws/states/nova-cat-", "")
+        return f"sfn:{sfn_name}"
+    if group_name.startswith("/aws/states/"):
+        sfn_name = group_name.replace("/aws/states/", "")
+        return f"sfn:{sfn_name}"
 
-    # Generic ECS
-    if "ecs" in lower or "fargate" in lower:
-        return f"fargate:{group_name.split('/')[-1][:30]}"
+    # ECS/Fargate logs (explicit /ecs/ prefix)
+    if group_name.startswith("/ecs/nova-cat-"):
+        task_name = group_name.replace("/ecs/nova-cat-", "")
+        return f"fargate:{task_name}"
+    if group_name.startswith("/ecs/"):
+        task_name = group_name.replace("/ecs/", "")
+        return f"fargate:{task_name}"
 
     return f"other:{group_name.split('/')[-1][:30]}"
 

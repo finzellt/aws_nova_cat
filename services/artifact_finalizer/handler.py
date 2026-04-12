@@ -146,6 +146,17 @@ def _fail_handler(event: dict[str, Any], context: object) -> dict[str, Any]:
     logger.append_keys(workflow_name="artifact_finalizer", plan_id=plan_id)
     logger.info("FailHandler invoked — Fargate task crashed or timed out")
 
+    error_info = event.get("error", {})
+    error_type = error_info.get("Error", "Unknown")
+    error_cause = error_info.get("Cause", "")
+    logger.error(
+        "Fargate task failure details",
+        extra={
+            "error_type": error_type,
+            "error_cause": error_cause[:1000],
+        },
+    )
+
     plan = _load_batch_plan(plan_id)
     _update_plan_status(plan["SK"], PlanStatus.failed)
 
@@ -156,6 +167,7 @@ def _fail_handler(event: dict[str, Any], context: object) -> dict[str, Any]:
     return {
         "plan_id": plan_id,
         "status": PlanStatus.failed.value,
+        "error_type": error_type,
     }
 
 
