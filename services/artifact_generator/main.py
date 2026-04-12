@@ -397,6 +397,7 @@ def _process_nova(
 
         nova_context["nova_item"] = nova_item
         primary_name = nova_item.get("primary_name", "unknown")
+        _log_context.set_context(nova_id=nova_id, primary_name=primary_name)
 
         _logger.info(
             "Processing nova",

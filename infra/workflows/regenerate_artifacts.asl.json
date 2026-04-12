@@ -106,7 +106,8 @@
             "Resource": "${ArtifactFinalizerFunctionArn}",
             "Parameters": {
                 "task_name": "FailHandler",
-                "plan_id.$": "$.plan_id"
+                "plan_id.$": "$.plan_id",
+                "error.$": "$.error"
             },
             "ResultPath": "$.fail_handler",
             "TimeoutSeconds": 30,
