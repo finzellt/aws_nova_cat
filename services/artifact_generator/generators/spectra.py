@@ -48,7 +48,7 @@ _SCHEMA_VERSION = "1.4"  # ADR-035: xray/uv split, per-regime trimming
 _WAVELENGTH_UNIT = "nm"
 
 _FLUX_FLOOR = 1e-4  # minimum normalized flux; prevents log(0) in frontend
-_TRIM_TOLERANCE = 1.1  # 10% beyond median before wavelength trim kicks in
+_TRIM_TOLERANCE = 1.001  # 0.1% beyond median before wavelength trim kicks in
 
 _ARM_MJD_TOLERANCE = 0.333  # days (~8 hr) — grouping tolerance for arms
 _ARM_OVERLAP_MAX_NM = 100.0  # nm — max overlap before we reject a merge

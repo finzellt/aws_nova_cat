@@ -382,6 +382,7 @@ function interpolateToGrid(
 
 const PACKING_PADDING = 0.096;
 const PACKING_MIN_GAP = 0.05;
+const PACKING_GAP_CAP_RATIO = 2.5;  // max gap = 2.5× median gap
 const GRID_POINTS = 500;
 
 interface PackingResult {
@@ -451,6 +452,33 @@ function computeWaterfallPacking(
     if (maxSep === -Infinity) maxSep = 0;
     const rawGap = maxSep + padding;
     baselines[i] = baselines[i - 1] + Math.max(rawGap, PACKING_MIN_GAP);
+  }
+
+  // ── Gap capping — equitable vertical spacing ────────────────────────
+  // Collision-aware packing can produce extreme gaps when two adjacent
+  // spectra have very different flux profiles.  Cap any gap that exceeds
+  // GAP_CAP_RATIO × median to prevent a few spectra from dominating the
+  // y-range while the rest are compressed into a sliver.
+  if (N >= 3) {
+    const gaps: number[] = [];
+    for (let i = 1; i < N; i++) {
+      gaps.push(baselines[i] - baselines[i - 1]);
+    }
+    const sortedGaps = [...gaps].sort((a, b) => a - b);
+    const medianGap = sortedGaps[Math.floor((sortedGaps.length - 1) / 2)];
+    const maxAllowedGap = PACKING_GAP_CAP_RATIO * medianGap;
+
+    let needsRebuild = false;
+    for (const g of gaps) {
+      if (g > maxAllowedGap) { needsRebuild = true; break; }
+    }
+
+    if (needsRebuild) {
+      for (let i = 1; i < N; i++) {
+        const gap = baselines[i] - baselines[i - 1];
+        baselines[i] = baselines[i - 1] + Math.min(gap, maxAllowedGap);
+      }
+    }
   }
 
   // Rescale to fill plot: total extent is top baseline + top peak
