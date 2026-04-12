@@ -275,17 +275,17 @@ class TestWavelengthRangeTrim:
     def test_no_trimming_when_similar_ranges(self) -> None:
         """All spectra with similar ranges are left untouched."""
         recs = [
-            _make_stage1_rec(400, 900, dp_id="dp-a"),
-            _make_stage1_rec(400, 920, dp_id="dp-b"),
-            _make_stage1_rec(400, 910, dp_id="dp-c"),
+            _make_stage1_rec(400, 910.0, dp_id="dp-a"),
+            _make_stage1_rec(400, 910.2, dp_id="dp-b"),
+            _make_stage1_rec(400, 910.5, dp_id="dp-c"),
         ]
 
         wl_maxes = [r["wavelengths"][-1] for r in recs]
-        display_max = statistics.median(wl_maxes)  # 910
+        display_max = statistics.median(wl_maxes)  # 910.2
 
         for rec in recs:
             original_wl = list(rec["wavelengths"])
-            # None exceed 910 * 1.1 = 1001
+            # None exceed 910.2 * 1.001 ≈ 911.1
             if rec["wavelengths"][-1] > display_max * _TRIM_TOLERANCE:
                 _trim_wavelength_range(rec, display_max)
             assert rec["wavelengths"] == original_wl
@@ -329,17 +329,17 @@ class TestWavelengthRangeTrim:
     def test_blue_no_trimming_when_similar_ranges(self) -> None:
         """All spectra with similar blue starts are left untouched."""
         recs = [
-            _make_stage1_rec(390, 900, dp_id="dp-a"),
-            _make_stage1_rec(400, 900, dp_id="dp-b"),
-            _make_stage1_rec(410, 900, dp_id="dp-c"),
+            _make_stage1_rec(399.8, 900, dp_id="dp-a"),
+            _make_stage1_rec(400.0, 900, dp_id="dp-b"),
+            _make_stage1_rec(400.2, 900, dp_id="dp-c"),
         ]
 
         wl_mins = [r["wavelengths"][0] for r in recs]
-        display_min = statistics.median(wl_mins)  # 400
+        display_min = statistics.median(wl_mins)  # 400.0
 
         for rec in recs:
             original_wl = list(rec["wavelengths"])
-            # None below 400 / 1.1 ≈ 363.6
+            # None below 400.0 / 1.001 ≈ 399.6
             if rec["wavelengths"][0] < display_min / _TRIM_TOLERANCE:
                 _trim_wavelength_range_min(rec, display_min)
             assert rec["wavelengths"] == original_wl
