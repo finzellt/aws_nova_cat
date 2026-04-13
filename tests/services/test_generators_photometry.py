@@ -152,6 +152,7 @@ def _seed_phot_row(
     flux_density: float | None = None,
     flux_density_err: float | None = None,
     is_upper_limit: bool = False,
+    limiting_value: float | None = None,
     telescope: str | None = "CTIO 1.3m",
     instrument: str | None = "ANDICAM",
     observer: str | None = None,
@@ -188,6 +189,8 @@ def _seed_phot_row(
         item["bibcode"] = bibcode
     if band_name is not None:
         item["band_name"] = band_name
+    if limiting_value is not None:
+        item["limiting_value"] = Decimal(str(limiting_value))
     table.put_item(Item=item)
 
 
@@ -596,6 +599,86 @@ class TestValueRouting:
         )
         obs = artifact["observations"][0]
         assert obs["photon_flux"] == pytest.approx(1.2e-7)
+
+
+# ---------------------------------------------------------------------------
+# Radio upper limit routing
+# ---------------------------------------------------------------------------
+
+
+class TestRadioUpperLimitRouting:
+    """Radio upper limits (flux_density=None, limiting_value=<val>) must survive
+    classification and appear in the output with flux_density populated."""
+
+    def test_radio_upper_limit_included_in_output(self, phot_table: Any, main_table: Any) -> None:
+        """A radio upper limit with only limiting_value set must appear in output."""
+        _seed_phot_row(
+            phot_table,
+            _NOVA_ID,
+            "rul1",
+            regime="radio",
+            band_id="Radio_34.8_GHz",
+            magnitude=None,
+            mag_err=None,
+            flux_density=None,
+            flux_density_err=None,
+            is_upper_limit=True,
+            limiting_value=0.13,
+        )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        assert len(artifact["observations"]) == 1
+        obs = artifact["observations"][0]
+        assert obs["is_upper_limit"] is True
+        assert obs["flux_density"] == pytest.approx(0.13)
+        assert obs["regime"] == "radio"
+        assert obs["magnitude"] is None
+        assert obs["count_rate"] is None
+        assert obs["photon_flux"] is None
+
+    def test_optical_upper_limit_with_only_limiting_value(
+        self, phot_table: Any, main_table: Any
+    ) -> None:
+        """An optical upper limit with magnitude=None, limiting_value set."""
+        _seed_phot_row(
+            phot_table,
+            _NOVA_ID,
+            "oul1",
+            regime="optical",
+            band_id="Generic_V",
+            magnitude=None,
+            mag_err=None,
+            is_upper_limit=True,
+            limiting_value=18.5,
+        )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        assert len(artifact["observations"]) == 1
+        obs = artifact["observations"][0]
+        assert obs["is_upper_limit"] is True
+        assert obs["magnitude"] == pytest.approx(18.5)
+        assert obs["flux_density"] is None
+
+    def test_radio_detection_unchanged(self, phot_table: Any, main_table: Any) -> None:
+        """A normal radio detection (flux_density set, no limiting_value) is unaffected."""
+        _seed_phot_row(
+            phot_table,
+            _NOVA_ID,
+            "rd1",
+            regime="radio",
+            band_id="Radio_34.8_GHz",
+            magnitude=None,
+            mag_err=None,
+            flux_density=0.5,
+            flux_density_err=0.05,
+            is_upper_limit=False,
+        )
+        ctx = _base_context()
+        artifact = generate_photometry_json(_NOVA_ID, phot_table, main_table, _REGISTRY, ctx)
+        assert len(artifact["observations"]) == 1
+        obs = artifact["observations"][0]
+        assert obs["is_upper_limit"] is False
+        assert obs["flux_density"] == pytest.approx(0.5)
 
 
 # ---------------------------------------------------------------------------

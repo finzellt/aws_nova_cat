@@ -361,7 +361,7 @@ def _classify_rows(
 
 def _has_measurement(item: dict[str, Any]) -> bool:
     """Return True if the item has at least one non-null measurement field."""
-    for field in ("magnitude", "flux_density", "count_rate", "photon_flux"):
+    for field in ("magnitude", "flux_density", "count_rate", "photon_flux", "limiting_value"):
         val = item.get(field)
         if val is not None:
             return True
@@ -845,6 +845,21 @@ def _build_observation_record(
     elif regime == "radio":
         flux = _to_float_or_none(row.get("flux_density"))
         flux_err = _to_float_or_none(row.get("flux_density_err"))
+
+    # Upper-limit fallback: populate the regime's primary field from
+    # limiting_value when the normal source field is NULL (non-optical
+    # upper limits store the value only in limiting_value).
+    if row.get("is_upper_limit", False):
+        lv = _to_float_or_none(row.get("limiting_value"))
+        if lv is not None:
+            if regime == "optical" and mag is None:
+                mag = lv
+            elif regime == "radio" and flux is None:
+                flux = lv
+            elif regime == "xray" and count is None:
+                count = lv
+            elif regime == "gamma" and photon is None:
+                photon = lv
 
     # Provider fallback chain (§8.9): orig_catalog → bibcode → "unknown".
     provider = row.get("orig_catalog") or row.get("bibcode") or "unknown"

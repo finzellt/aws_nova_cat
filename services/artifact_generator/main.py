@@ -707,8 +707,6 @@ def main() -> None:
             )
 
     # Step 8 — Write results back to the plan.
-    # TODO: Add spectral_visits to Finalize Lambda writeback
-    # (services/artifact_finalizer/handler.py — _write_observation_counts)
     _write_results_to_plan(plan, nova_results)
 
     _logger.info(

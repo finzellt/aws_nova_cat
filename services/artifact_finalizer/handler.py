@@ -287,7 +287,7 @@ def _write_observation_counts(
     """Write observation counts to the Nova DDB item (§4.5, §11.10).
 
     Fields written: ``spectra_count``, ``photometry_count``,
-    ``references_count``, ``has_sparkline``.
+    ``references_count``, ``has_sparkline``, ``spectral_visits``.
     """
     _table.update_item(
         Key={"PK": nova_id, "SK": "NOVA"},
@@ -295,13 +295,15 @@ def _write_observation_counts(
             "SET spectra_count = :sc, "
             "photometry_count = :pc, "
             "references_count = :rc, "
-            "has_sparkline = :hs"
+            "has_sparkline = :hs, "
+            "spectral_visits = :sv"
         ),
         ExpressionAttributeValues={
             ":sc": result.get("spectra_count", 0),
             ":pc": result.get("photometry_count", 0),
             ":rc": result.get("references_count", 0),
             ":hs": result.get("has_sparkline", False),
+            ":sv": result.get("spectral_visits", 0),
         },
     )
 

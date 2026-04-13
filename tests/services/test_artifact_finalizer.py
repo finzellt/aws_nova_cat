@@ -204,6 +204,7 @@ def _success_result(
     photometry_count: int = 12,
     references_count: int = 3,
     has_sparkline: bool = True,
+    spectral_visits: int = 0,
 ) -> dict[str, Any]:
     return {
         "nova_id": nova_id,
@@ -213,6 +214,7 @@ def _success_result(
         "photometry_count": photometry_count,
         "references_count": references_count,
         "has_sparkline": has_sparkline,
+        "spectral_visits": spectral_visits,
     }
 
 
@@ -293,6 +295,7 @@ class TestFinalizeAllSucceed:
                         photometry_count=42,
                         references_count=3,
                         has_sparkline=True,
+                        spectral_visits=4,
                     )
                 ],
                 workitem_sks=[],
@@ -303,6 +306,7 @@ class TestFinalizeAllSucceed:
         assert nova["photometry_count"] == 42
         assert nova["references_count"] == 3
         assert nova["has_sparkline"] is True
+        assert nova["spectral_visits"] == 4
 
     def test_sets_plan_status_completed(self, table: Any) -> None:
         with mock_aws():

@@ -24,9 +24,13 @@ export interface NovaMetadata {
    * Examples: "1901-02-22", "1901-02-00", "1901-00-00"
    */
   discovery_date: string;
+  /** Discovery date as MJD; null when discovery_date is absent. */
+  discovery_date_mjd: number | null;
   nova_type: string;
   spectra_count: number;
   photometry_count: number;
+  /** Count of distinct observing nights with spectra. */
+  spectral_visits: number;
 }
 
 // ── References artifact (references.json) ─────────────────────────────────────
