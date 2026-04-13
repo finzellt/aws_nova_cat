@@ -277,6 +277,7 @@ class TestCreatedAndLaunched:
                 "resolved_epoch": "J2000",
                 "resolver_source": "SIMBAD",
                 "aliases": ["NOVA Test 2026", "Gaia DR3 1234567890"],
+                "simbad_main_id": "V1324 Sco",
             }
 
             with (
@@ -365,6 +366,7 @@ class TestCreatedAndLaunched:
                         "resolved_epoch": resolution["resolved_epoch"],
                         "resolver_source": resolution["resolver_source"],
                         "aliases": resolution.get("aliases", []),
+                        "simbad_main_id": resolution.get("simbad_main_id"),
                         "correlation_id": state["job_run"]["correlation_id"],
                         "job_run_id": state["job_run"]["job_run_id"],
                     },
@@ -420,6 +422,168 @@ class TestCreatedAndLaunched:
             assert len(alias2) == 1
             assert alias2[0]["name_kind"] == "ALIAS"
             assert alias2[0]["name_raw"] == "Gaia DR3 1234567890"
+
+
+# ---------------------------------------------------------------------------
+# Path 1b: CREATED_AND_LAUNCHED — SIMBAD name override
+# ---------------------------------------------------------------------------
+
+
+class TestSimbadNameOverride:
+    def test_simbad_main_id_overrides_primary_name(self, table: Any) -> None:
+        """When SIMBAD main_id differs from candidate_name, primary_name
+        is overridden and candidate_name becomes an alias."""
+        with mock_aws():
+            h = _load_handlers()
+
+            simbad_result = {
+                "is_nova": True,
+                "is_classical_nova": "true",
+                "resolved_ra": 271.5,
+                "resolved_dec": -31.5,
+                "resolved_epoch": "J2000",
+                "resolver_source": "SIMBAD",
+                "aliases": ["NOVA Sco 2012"],
+                "simbad_main_id": "V1324 Sco",
+            }
+
+            with (
+                patch.object(h["archive_resolver"], "_query_simbad", return_value=simbad_result),
+                patch.object(h["archive_resolver"], "_query_tns", return_value=None),
+                patch.object(h["workflow_launcher"], "_sfn") as mock_sfn,
+            ):
+                mock_sfn.exceptions.ExecutionAlreadyExists = type(
+                    "ExecutionAlreadyExists", (Exception,), {}
+                )
+                mock_sfn.start_execution.return_value = {"executionArn": _FAKE_EXECUTION_ARN}
+
+                state = _run_prefix(h, candidate_name="Nova Sco 2024")
+
+                name_check = h["nova_resolver"].handle(
+                    {
+                        "task_name": "CheckExistingNovaByName",
+                        "workflow_name": "initialize_nova",
+                        "normalized_candidate_name": state["normalization"][
+                            "normalized_candidate_name"
+                        ],
+                        "correlation_id": state["job_run"]["correlation_id"],
+                        "job_run_id": state["job_run"]["job_run_id"],
+                    },
+                    None,
+                )
+                assert name_check["exists"] is False
+
+                resolution = h["archive_resolver"].handle(
+                    {
+                        "task_name": "ResolveCandidateAgainstPublicArchives",
+                        "workflow_name": "initialize_nova",
+                        "candidate_name": state["candidate_name"],
+                        "normalized_candidate_name": state["normalization"][
+                            "normalized_candidate_name"
+                        ],
+                        "correlation_id": state["job_run"]["correlation_id"],
+                        "job_run_id": state["job_run"]["job_run_id"],
+                    },
+                    None,
+                )
+                assert resolution["is_nova"] is True
+
+                coord_check = h["nova_resolver"].handle(
+                    {
+                        "task_name": "CheckExistingNovaByCoordinates",
+                        "workflow_name": "initialize_nova",
+                        "resolved_ra": resolution["resolved_ra"],
+                        "resolved_dec": resolution["resolved_dec"],
+                        "resolved_epoch": resolution["resolved_epoch"],
+                        "correlation_id": state["job_run"]["correlation_id"],
+                        "job_run_id": state["job_run"]["job_run_id"],
+                    },
+                    None,
+                )
+                assert coord_check["match_outcome"] == "NONE"
+
+                nova_creation = h["nova_resolver"].handle(
+                    {
+                        "task_name": "CreateNovaId",
+                        "workflow_name": "initialize_nova",
+                        "candidate_name": state["candidate_name"],
+                        "normalized_candidate_name": state["normalization"][
+                            "normalized_candidate_name"
+                        ],
+                        "correlation_id": state["job_run"]["correlation_id"],
+                        "job_run_id": state["job_run"]["job_run_id"],
+                    },
+                    None,
+                )
+                nova_id = nova_creation["nova_id"]
+
+                h["nova_resolver"].handle(
+                    {
+                        "task_name": "UpsertMinimalNovaMetadata",
+                        "workflow_name": "initialize_nova",
+                        "nova_id": nova_id,
+                        "candidate_name": state["candidate_name"],
+                        "normalized_candidate_name": state["normalization"][
+                            "normalized_candidate_name"
+                        ],
+                        "resolved_ra": resolution["resolved_ra"],
+                        "resolved_dec": resolution["resolved_dec"],
+                        "resolved_epoch": resolution["resolved_epoch"],
+                        "resolver_source": resolution["resolver_source"],
+                        "aliases": resolution.get("aliases", []),
+                        "simbad_main_id": resolution.get("simbad_main_id"),
+                        "correlation_id": state["job_run"]["correlation_id"],
+                        "job_run_id": state["job_run"]["job_run_id"],
+                    },
+                    None,
+                )
+
+                h["workflow_launcher"].handle(
+                    {
+                        "task_name": "PublishIngestNewNova",
+                        "workflow_name": "initialize_nova",
+                        "outcome": "CREATED_AND_LAUNCHED",
+                        "nova_id": nova_id,
+                        "correlation_id": state["job_run"]["correlation_id"],
+                        "job_run_id": state["job_run"]["job_run_id"],
+                    },
+                    None,
+                )
+
+                _finalize_success(h, state, "CREATED_AND_LAUNCHED", nova_id=nova_id)
+
+            # Nova item has SIMBAD name as primary_name
+            nova_item = table.get_item(Key={"PK": nova_id, "SK": "NOVA"}).get("Item")
+            assert nova_item is not None
+            assert nova_item["primary_name"] == "V1324 Sco"
+            assert nova_item["primary_name_normalized"] == "v1324 sco"
+
+            # PRIMARY NameMapping uses SIMBAD name
+            primary = table.get_item(Key={"PK": "NAME#v1324 sco", "SK": f"NOVA#{nova_id}"}).get(
+                "Item"
+            )
+            assert primary is not None
+            assert primary["name_kind"] == "PRIMARY"
+            assert primary["name_raw"] == "V1324 Sco"
+            assert primary["source"] == "SIMBAD"
+
+            # Original candidate_name demoted to ALIAS
+            demoted_items = table.query(KeyConditionExpression=Key("PK").eq("NAME#nova sco 2024"))[
+                "Items"
+            ]
+            assert len(demoted_items) == 1
+            assert demoted_items[0]["name_kind"] == "ALIAS"
+            assert demoted_items[0]["name_raw"] == "Nova Sco 2024"
+            assert demoted_items[0]["source"] == "INGESTION"
+
+            # SIMBAD alias also written
+            alias_items = table.query(KeyConditionExpression=Key("PK").eq("NAME#nova sco 2012"))[
+                "Items"
+            ]
+            assert len(alias_items) == 1
+            assert alias_items[0]["name_kind"] == "ALIAS"
+            assert alias_items[0]["name_raw"] == "NOVA Sco 2012"
+            assert alias_items[0]["source"] == "SIMBAD"
 
 
 # ---------------------------------------------------------------------------

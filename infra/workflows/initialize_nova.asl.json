@@ -379,7 +379,7 @@
         },
         "UpsertMinimalNovaMetadata": {
             "Type": "Task",
-            "Comment": "Persist minimal nova metadata: nova_id, candidate_name, resolved coordinates, resolver_source, aliases.",
+            "Comment": "Persist minimal nova metadata: nova_id, candidate_name, resolved coordinates, resolver_source, aliases, simbad_main_id.",
             "Resource": "${UpsertMinimalNovaMetadataFunctionArn}",
             "Parameters": {
                 "task_name": "UpsertMinimalNovaMetadata",
@@ -392,6 +392,7 @@
                 "resolved_epoch.$": "$.resolution.resolved_epoch",
                 "resolver_source.$": "$.resolution.resolver_source",
                 "aliases.$": "$.resolution.aliases",
+                "simbad_main_id.$": "$.resolution.simbad_main_id",
                 "correlation_id.$": "$.job_run.correlation_id",
                 "job_run_id.$": "$.job_run.job_run_id"
             },

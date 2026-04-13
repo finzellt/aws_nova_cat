@@ -140,6 +140,7 @@ TASK_RETURN_SHAPES: dict[str, set[str]] = {
         "resolved_ra",
         "resolved_dec",
         "resolved_epoch",
+        "simbad_main_id",
     },
     # -- ticket_parser (services/ticket_parser/handler.py) -------------------
     "ParseTicket": {"ticket_type", "object_name", "ticket"},

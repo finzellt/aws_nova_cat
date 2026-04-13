@@ -151,6 +151,7 @@ def _resolve_candidate_against_public_archives(
             "is_classical_nova": "false",
             "resolver_source": "NONE",
             "aliases": [],
+            "simbad_main_id": None,
         }
 
     if simbad_result is not None and tns_result is not None:
@@ -163,6 +164,7 @@ def _resolve_candidate_against_public_archives(
         result = cast(dict[str, Any], tns_result)
         result["resolver_source"] = "TNS"
         result.setdefault("aliases", [])
+        result.setdefault("simbad_main_id", None)
 
     logger.info(
         "Archive resolution complete",
@@ -221,6 +223,14 @@ def _query_simbad(candidate_name: str) -> dict[str, Any] | None:
     ra = _raw("ra")
     dec = _raw("dec")
     ids_raw = _raw("ids")
+    main_id_raw = _raw("main_id")
+
+    simbad_main_id: str | None = None
+    if main_id_raw:
+        cleaned = str(main_id_raw).strip()
+        if cleaned.startswith("V* "):
+            cleaned = cleaned[3:].strip()
+        simbad_main_id = cleaned if cleaned else None
 
     is_nova, is_classical_nova = _classify_otypes(all_otypes)
 
@@ -229,6 +239,7 @@ def _query_simbad(candidate_name: str) -> dict[str, Any] | None:
         "is_classical_nova": is_classical_nova,
         "resolved_epoch": "J2000",
         "aliases": _parse_simbad_ids(ids_raw),
+        "simbad_main_id": simbad_main_id,
     }
 
     if is_nova and ra is not None and dec is not None:
