@@ -23,7 +23,7 @@ import logging
 from decimal import Decimal
 from typing import Any
 
-from generators.shared import format_coordinates, generated_at_timestamp
+from generators.shared import discovery_date_to_mjd, format_coordinates, generated_at_timestamp
 
 _logger = logging.getLogger("artifact_generator")
 
@@ -74,9 +74,17 @@ def generate_nova_json(
     # Nova type (§5.3) — null until post-MVP enrichment.
     nova_type: str | None = nova_item.get("nova_type")
 
+    # Discovery date as MJD (null when discovery_date is absent).
+    discovery_date_mjd: float | None = None
+    if discovery_date is not None:
+        discovery_date_mjd = round(discovery_date_to_mjd(discovery_date), 1)
+
     # Observation counts from upstream generators (§5.4).
     spectra_count: int = nova_context.get("spectra_count", 0)
     photometry_count: int = nova_context.get("photometry_count", 0)
+
+    # Spectral visits (distinct observing nights with spectra).
+    spectral_visits: int = nova_context.get("spectral_visits", 0)
 
     return {
         "schema_version": _SCHEMA_VERSION,
@@ -88,8 +96,10 @@ def generate_nova_json(
         "dec": dec_str,
         "discovery_date": discovery_date,
         "nova_type": nova_type,
+        "discovery_date_mjd": discovery_date_mjd,
         "spectra_count": spectra_count,
         "photometry_count": photometry_count,
+        "spectral_visits": spectral_visits,
     }
 
 

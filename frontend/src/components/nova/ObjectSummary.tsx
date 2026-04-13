@@ -133,6 +133,11 @@ export default function ObjectSummary({ nova, bundleHref }: ObjectSummaryProps) 
         <MetaRow label="Discovery">
           <span className="text-[var(--color-text-primary)]">
             {formatDiscoveryDate(nova.discovery_date)}
+            {nova.discovery_date_mjd != null && (
+              <span className="text-[var(--color-text-tertiary)]">
+                {' '}(MJD {nova.discovery_date_mjd.toFixed(1)})
+              </span>
+            )}
           </span>
         </MetaRow>
 
@@ -153,6 +158,14 @@ export default function ObjectSummary({ nova, bundleHref }: ObjectSummaryProps) 
         <MetaRow label="Spectra">
           <span className="font-mono tabular-nums text-[var(--color-text-primary)]">
             {nova.spectra_count}
+          </span>
+        </MetaRow>
+
+        <MetaRow label="Spectral visits">
+          <span className="font-mono tabular-nums text-[var(--color-text-primary)]">
+            {nova.spectral_visits > 0
+              ? `${nova.spectral_visits} night${nova.spectral_visits !== 1 ? 's' : ''}`
+              : '—'}
           </span>
         </MetaRow>
 

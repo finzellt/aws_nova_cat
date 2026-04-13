@@ -109,6 +109,16 @@ def resolve_outburst_mjd(
     return None, False
 
 
+def discovery_date_to_mjd(discovery_date: str) -> float:
+    """Convert a ``YYYY-MM-DD`` discovery date string to MJD.
+
+    Handles the ``00`` convention for imprecise dates (same as
+    ``resolve_outburst_mjd``): day ``00`` → 1st, month+day ``00-00``
+    → January 1st.
+    """
+    return _outburst_from_discovery_date(discovery_date)
+
+
 def _outburst_from_discovery_date(discovery_date: str) -> float:
     """Parse a ``YYYY-MM-DD`` discovery date to MJD.
 

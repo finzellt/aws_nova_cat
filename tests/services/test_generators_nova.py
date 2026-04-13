@@ -37,6 +37,7 @@ import re
 from decimal import Decimal
 from typing import Any
 
+import pytest
 from generators.nova import generate_nova_json
 
 # ---------------------------------------------------------------------------
@@ -77,6 +78,7 @@ def _make_context(
     *,
     spectra_count: int = 24,
     photometry_count: int = 1840,
+    spectral_visits: int = 3,
 ) -> dict[str, Any]:
     return {
         "nova_item": nova,
@@ -84,6 +86,7 @@ def _make_context(
         "outburst_mjd_is_estimated": False,
         "spectra_count": spectra_count,
         "photometry_count": photometry_count,
+        "spectral_visits": spectral_visits,
     }
 
 
@@ -126,6 +129,31 @@ class TestCoordinateFormatting:
 # ---------------------------------------------------------------------------
 # Discovery date
 # ---------------------------------------------------------------------------
+
+
+class TestDiscoveryDateMjd:
+    def test_precise_date_converted_to_mjd(self) -> None:
+        ctx = _make_context(_nova_item(discovery_date="2021-06-12"))
+        artifact = generate_nova_json(_NOVA_ID, ctx)
+        # 2021-06-12 = MJD 59377.0
+        assert artifact["discovery_date_mjd"] == pytest.approx(59377.0, abs=0.5)
+
+    def test_imprecise_month_defaults_day_to_first(self) -> None:
+        ctx = _make_context(_nova_item(discovery_date="2021-06-00"))
+        artifact = generate_nova_json(_NOVA_ID, ctx)
+        # 2021-06-01 = MJD 59366.0
+        assert artifact["discovery_date_mjd"] == pytest.approx(59366.0, abs=0.5)
+
+    def test_imprecise_year_defaults_to_jan_first(self) -> None:
+        ctx = _make_context(_nova_item(discovery_date="2021-00-00"))
+        artifact = generate_nova_json(_NOVA_ID, ctx)
+        # 2021-01-01 = MJD 59215.0
+        assert artifact["discovery_date_mjd"] == pytest.approx(59215.0, abs=0.5)
+
+    def test_null_when_no_discovery_date(self) -> None:
+        ctx = _make_context(_nova_item(discovery_date=None))
+        artifact = generate_nova_json(_NOVA_ID, ctx)
+        assert artifact["discovery_date_mjd"] is None
 
 
 class TestDiscoveryDate:
@@ -184,6 +212,16 @@ class TestObservationCounts:
         artifact = generate_nova_json(_NOVA_ID, ctx)
         assert artifact["spectra_count"] == 0
         assert artifact["photometry_count"] == 0
+
+    def test_spectral_visits_from_context(self) -> None:
+        ctx = _make_context(_nova_item(), spectral_visits=5)
+        artifact = generate_nova_json(_NOVA_ID, ctx)
+        assert artifact["spectral_visits"] == 5
+
+    def test_missing_spectral_visits_defaults_to_zero(self) -> None:
+        ctx = {"nova_item": _nova_item()}
+        artifact = generate_nova_json(_NOVA_ID, ctx)
+        assert artifact["spectral_visits"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -246,8 +284,10 @@ class TestSchema:
             "ra",
             "dec",
             "discovery_date",
+            "discovery_date_mjd",
             "nova_type",
             "spectra_count",
             "photometry_count",
+            "spectral_visits",
         }
         assert set(artifact.keys()) == expected
