@@ -904,13 +904,13 @@ class TestSpectralVisits:
             yield tbl
 
     def test_three_nights_from_six_spectra(self, ddb_table: Any) -> None:
-        """6 spectra across 3 distinct integer-MJD nights → spectral_visits = 3."""
+        """6 spectra across 3 distinct nights (gap-based clustering) → spectral_visits = 3."""
         _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p1", observation_date_mjd=Decimal("59234.1"))
-        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p2", observation_date_mjd=Decimal("59234.8"))
-        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p3", observation_date_mjd=Decimal("59235.3"))
-        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p4", observation_date_mjd=Decimal("59235.9"))
-        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p5", observation_date_mjd=Decimal("59240.2"))
-        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p6", observation_date_mjd=Decimal("59240.7"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p2", observation_date_mjd=Decimal("59234.4"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p3", observation_date_mjd=Decimal("59235.1"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p4", observation_date_mjd=Decimal("59235.4"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p5", observation_date_mjd=Decimal("59240.1"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p6", observation_date_mjd=Decimal("59240.4"))
 
         ctx = _make_sv_context()
         generate_spectra_json(_SV_NOVA_ID, ddb_table, _stub_s3(), "test-bucket", ctx)
@@ -919,14 +919,31 @@ class TestSpectralVisits:
         assert ctx["spectral_visits"] == 3
 
     def test_same_night_counts_as_one(self, ddb_table: Any) -> None:
-        """2 spectra on the same night (MJD 59234.1 and 59234.8) → spectral_visits = 1."""
+        """2 spectra on the same night (gap < 0.5d) → spectral_visits = 1."""
         _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p1", observation_date_mjd=Decimal("59234.1"))
-        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p2", observation_date_mjd=Decimal("59234.8"))
+        _seed_spectra_product(ddb_table, _SV_NOVA_ID, "p2", observation_date_mjd=Decimal("59234.4"))
 
         ctx = _make_sv_context()
         generate_spectra_json(_SV_NOVA_ID, ddb_table, _stub_s3(), "test-bucket", ctx)
 
         assert ctx["spectra_count"] == 2
+        assert ctx["spectral_visits"] == 1
+
+    def test_midnight_spanning_run_counts_as_one_night(self, ddb_table: Any) -> None:
+        """Two spectra straddling midnight (gap < 0.5d) count as one night."""
+        _seed_spectra_product(
+            ddb_table, _SV_NOVA_ID, "p1", observation_date_mjd=Decimal("59234.95")
+        )
+        _seed_spectra_product(
+            ddb_table, _SV_NOVA_ID, "p2", observation_date_mjd=Decimal("59235.05")
+        )
+
+        ctx = _make_sv_context()
+        generate_spectra_json(_SV_NOVA_ID, ddb_table, _stub_s3(), "test-bucket", ctx)
+
+        assert ctx["spectra_count"] == 2
+        # MJD 59234.95 and 59235.05 have different integer floors (59234 vs 59235)
+        # but gap = 0.1 < 0.5 threshold, so they are one observing night.
         assert ctx["spectral_visits"] == 1
 
     def test_zero_spectra(self, ddb_table: Any) -> None:

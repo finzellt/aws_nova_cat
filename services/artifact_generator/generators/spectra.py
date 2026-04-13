@@ -34,6 +34,7 @@ from typing import Any
 import numpy as np
 from boto3.dynamodb.conditions import Attr, Key
 
+from generators.compositing import cluster_by_night
 from generators.shared import (
     generated_at_timestamp,
     reject_chip_gap_artifacts,
@@ -485,14 +486,16 @@ def generate_spectra_json(
     # Step 5 — Update context.
     nova_context["spectra_count"] = len(individual_products)
 
-    # Group by integer MJD (floor) to count distinct nights.
-    distinct_nights = len(
-        {
-            int(float(p["observation_date_mjd"]))
-            for p in individual_products
-            if p.get("observation_date_mjd") is not None
-        }
-    )
+    # Count distinct observing nights using gap-based clustering
+    # (same algorithm as the compositing pipeline — ADR-033 Decision 2).
+    products_with_mjd = [
+        p for p in individual_products if p.get("observation_date_mjd") is not None
+    ]
+    if products_with_mjd:
+        night_groups = cluster_by_night(products_with_mjd)
+        distinct_nights = len(night_groups)
+    else:
+        distinct_nights = 0
     nova_context["spectral_visits"] = distinct_nights
 
     _logger.info(
