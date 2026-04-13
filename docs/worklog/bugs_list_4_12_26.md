@@ -4,3 +4,5 @@
 3. From the 4-11 worklog, item # 4: When I click on individual spectra and switch to log scaling, I've seen several instances where the minimum y-values get cut off. Again, another issue with the floor.
 4. There should be an option for sqrt(flux) scaling when you've selected an individual spectra.
 5. I just want to make sure that my memory is correct here: when you select individual spectra you're being shown a high(er) resolution spectra, as compared to the waterfall, right?
+6. SNR median cut off. Don't include a spectra if its median SNR << the median SNR.
+7. Come up with stricter selection criteria for which logs to pull. (Also, figure out if that will work, in terms of reducing your log consumption.)
