@@ -290,6 +290,23 @@ def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dic
     resolved_epoch: str = event.get("resolved_epoch") or "J2000"
     resolver_source: str = event.get("resolver_source") or "UNKNOWN"
     aliases: list[str] = event.get("aliases") or []
+    simbad_main_id: str | None = event.get("simbad_main_id")
+
+    # Determine effective primary name: prefer SIMBAD canonical name
+    # over raw ingestion candidate_name.
+    effective_name: str = candidate_name
+    effective_normalized: str = normalized_candidate_name
+    primary_source: str = "INGESTION"
+    demote_candidate: bool = False
+
+    if simbad_main_id:
+        simbad_normalized = re.sub(r"\s+", " ", simbad_main_id.strip().lower())
+        if simbad_normalized != normalized_candidate_name:
+            effective_name = simbad_main_id
+            effective_normalized = simbad_normalized
+            primary_source = "SIMBAD"
+            demote_candidate = True
+
     now = _now()
 
     # Update Nova item with coordinates, ACTIVE status, and aliases list
@@ -298,7 +315,9 @@ def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dic
         UpdateExpression=(
             "SET ra_deg = :ra, dec_deg = :dec, coord_epoch = :epoch, "
             "coord_frame = :frame, resolver_source = :source, "
-            "#status = :status, aliases = :aliases, updated_at = :now"
+            "#status = :status, aliases = :aliases, "
+            "primary_name = :pname, primary_name_normalized = :pnorm, "
+            "updated_at = :now"
         ),
         ExpressionAttributeNames={"#status": "status"},
         ExpressionAttributeValues={
@@ -309,27 +328,48 @@ def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dic
             ":source": resolver_source,
             ":status": "ACTIVE",
             ":aliases": aliases,
+            ":pname": effective_name,
+            ":pnorm": effective_normalized,
             ":now": now,
         },
     )
 
     # Write PRIMARY NameMapping
-    _check_name_collision(normalized_candidate_name, nova_id)
+    _check_name_collision(effective_normalized, nova_id)
     _table.put_item(
         Item={
-            "PK": f"NAME#{normalized_candidate_name}",
+            "PK": f"NAME#{effective_normalized}",
             "SK": f"NOVA#{nova_id}",
             "entity_type": "NameMapping",
             "schema_version": _SCHEMA_VERSION,
-            "name_raw": candidate_name,
-            "name_normalized": normalized_candidate_name,
+            "name_raw": effective_name,
+            "name_normalized": effective_normalized,
             "name_kind": "PRIMARY",
             "nova_id": nova_id,
-            "source": "INGESTION",
+            "source": primary_source,
             "created_at": now,
             "updated_at": now,
         }
     )
+
+    # Demote original candidate_name to ALIAS if SIMBAD name took over
+    if demote_candidate:
+        _check_name_collision(normalized_candidate_name, nova_id)
+        _table.put_item(
+            Item={
+                "PK": f"NAME#{normalized_candidate_name}",
+                "SK": f"NOVA#{nova_id}",
+                "entity_type": "NameMapping",
+                "schema_version": _SCHEMA_VERSION,
+                "name_raw": candidate_name,
+                "name_normalized": normalized_candidate_name,
+                "name_kind": "ALIAS",
+                "nova_id": nova_id,
+                "source": "INGESTION",
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
 
     # Write ALIAS NameMapping items for each SIMBAD alias
     alias_count = 0
@@ -337,7 +377,7 @@ def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dic
         normalized_alias = re.sub(r"\s+", " ", alias_raw.replace("_", " ").strip().lower())
         if not normalized_alias:
             continue
-        if normalized_alias == normalized_candidate_name:
+        if normalized_alias in (normalized_candidate_name, effective_normalized):
             continue
         _check_name_collision(normalized_alias, nova_id)
         _table.put_item(
@@ -359,7 +399,12 @@ def _upsert_minimal_nova_metadata(event: dict[str, Any], context: object) -> dic
 
     logger.info(
         "Minimal nova metadata upserted",
-        extra={"nova_id": nova_id, "alias_count": alias_count},
+        extra={
+            "nova_id": nova_id,
+            "alias_count": alias_count,
+            "primary_name_overridden": demote_candidate,
+            "effective_primary_name": effective_name,
+        },
     )
     return {"nova_id": nova_id}
 

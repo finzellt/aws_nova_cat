@@ -84,6 +84,7 @@ class TestSimbadClassification:
         assert result["is_nova"] is True
         assert result["is_classical_nova"] == "true"
         assert result["resolver_source"] == "SIMBAD"
+        assert result["simbad_main_id"] == "V1324 Sco"
 
     def test_recurrent_nova_otype(self) -> None:
         handler = _load_handler()
@@ -93,6 +94,7 @@ class TestSimbadClassification:
             result = handler.handle(_resolve_event(), None)
         assert result["is_nova"] is True
         assert result["is_classical_nova"] == "false"
+        assert result["simbad_main_id"] == "V1324 Sco"
 
     def test_non_nova_otype(self) -> None:
         handler = _load_handler()
@@ -101,6 +103,7 @@ class TestSimbadClassification:
         ):
             result = handler.handle(_resolve_event(), None)
         assert result["is_nova"] is False
+        assert result["simbad_main_id"] == "V1324 Sco"
 
     def test_coordinates_present_for_nova(self) -> None:
         handler = _load_handler()
@@ -109,6 +112,28 @@ class TestSimbadClassification:
         assert "resolved_ra" in result
         assert "resolved_dec" in result
         assert result["resolved_epoch"] == "J2000"
+
+    def test_simbad_main_id_strips_v_star_prefix(self) -> None:
+        """main_id with 'V* ' prefix is stripped to bare name."""
+        handler = _load_handler()
+        rows = []
+        row = MagicMock()
+        row.__getitem__ = lambda self, col: {
+            "otypes.otype_txt": "No*",
+            "ra": 271.08,
+            "dec": -32.46,
+            "main_id": "V* V1324 Sco",
+            "ids": "V* V1324 Sco|Nova Sco 2012",
+        }[col]
+        rows.append(row)
+        tbl = MagicMock()
+        tbl.__len__ = lambda self: len(rows)
+        tbl.__iter__ = lambda self: iter(rows)
+        tbl.__getitem__ = lambda self, idx: rows[idx]
+
+        with patch.object(handler._simbad, "query_object", return_value=tbl):
+            result = handler.handle(_resolve_event(), None)
+        assert result["simbad_main_id"] == "V1324 Sco"
 
     def test_no_coordinates_for_non_nova(self) -> None:
         handler = _load_handler()
@@ -130,6 +155,7 @@ class TestNoResult:
             result = handler.handle(_resolve_event(), None)
         assert result["is_nova"] is False
         assert result["resolver_source"] == "NONE"
+        assert result["simbad_main_id"] is None
 
     def test_simbad_empty_table_treated_as_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("TNS_API_KEY", "")
