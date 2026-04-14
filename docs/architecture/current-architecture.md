@@ -81,7 +81,11 @@ Name-based resolution occurs only in `initialize_nova`.
 Mechanism:
 - `NAME#<normalized_name>` global partition
 - Maps alias → `nova_id`
-- Deterministic normalization applied
+- Deterministic normalization applied:
+  1. Strip leading/trailing whitespace
+  2. Replace underscores with spaces
+  3. Lowercase
+  4. Collapse internal whitespace to single space
 
 Duplicate detection via coordinate thresholds:
 
@@ -124,7 +128,7 @@ specification.
 | `ingest_new_nova` | Standard | Orchestrates downstream launches (`refresh_references`, `discover_spectra_products`) for a newly resolved nova. |
 | `refresh_references` | Standard | Fetches ADS references for a nova, upserts Reference and NovaReference items, computes `discovery_date`. |
 | `discover_spectra_products` | Standard | Queries provider archives, assigns `data_product_id` values, persists product stubs, fans out `acquire_and_validate_spectra`. |
-| `acquire_and_validate_spectra` | Standard | Downloads spectra bytes, validates FITS against instrument profiles, persists normalized products to S3 + DDB. |
+| `acquire_and_validate_spectra` | Express | Downloads spectra bytes, validates FITS against instrument profiles, persists normalized products to S3 + DDB. |
 | `ingest_ticket` | Standard | Ingests hand-curated photometry or spectra tickets. Resolves nova identity, then branches by ticket type. |
 
 All Standard Workflows follow a consistent execution pattern: `BeginJobRun` →
@@ -346,6 +350,8 @@ Item types:
   during `initialize_nova` quarantine before a `nova_id` exists)
 - `WORKQUEUE` — WorkItem records for the regeneration pipeline (§4)
 - `REGEN_PLAN` — RegenBatchPlan records for sweep coordination (§4)
+- `IDEMPOTENCY#<idempotency_key>` — workflow-level idempotency locks
+  (15-minute TTL, DynamoDB TTL auto-cleanup; see `idempotency_guard` handler)
 
 ## 6.2 Dedicated Photometry Table (NovaCatPhotometry)
 
