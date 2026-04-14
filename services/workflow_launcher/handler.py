@@ -110,7 +110,7 @@ def _publish_ingest_new_nova(event: dict[str, Any], context: object) -> dict[str
 
     Called from initialize_nova on three paths:
       - EXISTS_AND_LAUNCHED  (name already known)
-      - EXISTS_AND_LAUNCHED  (coordinate duplicate confirmed)
+      - EXISTS_AND_LAUNCHED  (coordinate duplicate — not yet in deployed ASL)
       - CREATED_AND_LAUNCHED (new nova established)
     """
     return _start_execution(

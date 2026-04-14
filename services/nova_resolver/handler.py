@@ -60,7 +60,7 @@ def handle(event: dict[str, Any], context: object) -> dict[str, Any]:
     task_name = event.get("task_name")
     handler_fn = _TASK_HANDLERS.get(task_name)  # type: ignore[arg-type]
     if handler_fn is None:
-        raise ValueError(f"Unknown task_name: {task_name!r}")
+        raise ValueError(f"Unknown task_name: {task_name!r}. Known tasks: {list(_TASK_HANDLERS)}")
     logger.info("Task started", extra={"task_name": task_name})
     with log_duration(f"task:{task_name}"):
         result = handler_fn(event, context)
@@ -77,10 +77,11 @@ def _normalize_candidate_name(event: dict[str, Any], context: object) -> dict[st
     """
     Normalize a raw candidate name to canonical form for dedup and lookup.
 
-    Normalization rules:
+    Normalization rules (in application order):
+      - Strip leading/trailing whitespace
+      - Replace underscores with spaces
       - Lowercase
       - Collapse internal whitespace to single space
-      - Strip leading/trailing whitespace
 
     Returns:
         normalized_candidate_name — canonical form for DynamoDB lookups
@@ -225,7 +226,8 @@ def _create_nova_id(event: dict[str, Any], context: object) -> dict[str, Any]:
     """
     Generate a stable nova_id and write the initial Nova stub to DynamoDB.
 
-    The Nova item is written with status=PENDING. UpsertMinimalNovaMetadata
+    The Nova item is written with status=ACTIVE directly (there is no
+    PENDING → ACTIVE lifecycle transition). UpsertMinimalNovaMetadata
     will populate coordinates and other fields immediately after.
 
     Returns:

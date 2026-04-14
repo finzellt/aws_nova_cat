@@ -1,23 +1,24 @@
 """
 job_run_manager Lambda handler
 
-Manages JobRun and Attempt records for all Nova Cat workflows.
+Manages JobRun records for all Nova Cat workflows.
 
 Task dispatch table:
   BeginJobRun               — emit JobRun STARTED, generate correlation_id if missing
+  TerminalFailHandler       — classify error, persist error_classification + fingerprint
   FinalizeJobRunSuccess     — emit JobRun SUCCEEDED with outcome
-  FinalizeJobRunFailed      — emit JobRun FAILED with error classification
+  FinalizeJobRunFailed      — emit JobRun FAILED with error context
   FinalizeJobRunQuarantined — emit JobRun QUARANTINED
 
 DynamoDB item model (see dynamodb-item-model.md):
-  JobRun:  PK = "WORKFLOW#<correlation_id>" (pre-nova) or "<nova_id>" (post-creation)
+  JobRun:  PK = "WORKFLOW#<correlation_id>"
            SK = "JOBRUN#<workflow_name>#<started_at>#<job_run_id>"
 
-Note on PK before nova_id is known:
-  initialize_nova calls BeginJobRun before a nova_id exists. JobRuns are
-  partitioned under "WORKFLOW#<correlation_id>" until a nova_id is assigned.
-  For workflows that never produce a nova_id (NOT_FOUND, NOT_A_CLASSICAL_NOVA)
-  this partition is permanent.
+Note on PK:
+  All JobRuns are partitioned under "WORKFLOW#<correlation_id>". This is
+  permanent — there is no re-keying step to move them under a nova_id
+  partition. Querying JobRuns by nova_id is not supported; use
+  correlation_id instead.
 
 Note on candidate_name vs nova_id:
   initialize_nova always supplies candidate_name. Downstream workflows
@@ -146,14 +147,13 @@ def _finalize_job_run_success(event: dict[str, Any], context: object) -> dict[st
     Emit JobRun SUCCEEDED with the terminal outcome.
 
     Known outcomes by workflow:
-        initialize_nova:        CREATED_AND_LAUNCHED | EXISTS_AND_LAUNCHED |
-                                NOT_FOUND | NOT_A_CLASSICAL_NOVA
-        ingest_new_nova:        LAUNCHED
-        refresh_references:     (no named outcome; success implies completion)
-        discover_spectra_products: (no named outcome; success implies completion)
-        acquire_and_validate_spectra: (no named outcome; success implies completion)
-        ingest_photometry:      INGESTED | SKIPPED_DUPLICATE
-        name_check_and_reconcile: UPDATED | NO_CHANGE
+        initialize_nova:              CREATED_AND_LAUNCHED | EXISTS_AND_LAUNCHED |
+                                      NOT_FOUND | NOT_A_CLASSICAL_NOVA
+        ingest_new_nova:              LAUNCHED
+        refresh_references:           SUCCEEDED
+        discover_spectra_products:    SUCCEEDED
+        acquire_and_validate_spectra: COMPLETED
+        ingest_ticket:                INGESTED_SPECTRA | INGESTED_PHOTOMETRY
     """
     job_run: dict[str, Any] = event["job_run"]
     outcome: str = event["outcome"]
@@ -237,10 +237,9 @@ def _terminal_fail_handler(event: dict[str, Any], context: object) -> dict[str, 
     persisted on the JobRun record for operator diagnosis before the item is
     marked FAILED.
 
-    Called by initialize_nova (and any workflow that needs richer error context
-    than FinalizeJobRunFailed alone provides). ingest_new_nova and
-    refresh_references collapse straight to FinalizeJobRunFailed because their
-    terminal failure paths are simpler and don't require pre-classification.
+    Called by all workflows as a pre-classification step before
+    FinalizeJobRunFailed. Every workflow's ASL error path routes through
+    TerminalFailHandler → FinalizeJobRunFailed.
 
     Classification heuristic (extend as the error taxonomy grows):
       - Error name contains "RetryableError"  → RETRYABLE  (shouldn't reach here

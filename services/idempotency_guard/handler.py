@@ -14,6 +14,8 @@ DynamoDB item model:
   SK = "LOCK"
 
   Fields:
+    entity_type              — always "IdempotencyLock"
+    schema_version           — internal item evolution
     idempotency_key          — the full computed key (internal only)
     job_run_id               — the execution that holds the lock
     workflow_name            — for human debugging
