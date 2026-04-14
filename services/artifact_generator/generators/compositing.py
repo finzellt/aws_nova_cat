@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict
 
 import numpy as np
+from nova_common.spectral import der_snr
 from numpy.typing import NDArray
 
 _logger = logging.getLogger(__name__)
@@ -39,9 +40,45 @@ NIGHT_GAP_THRESHOLD_DAYS: float = 0.5
 #: in a composite.
 MIN_POINTS_FOR_COMPOSITE: int = 2000
 
+#: Relative SNR threshold for compositing group membership.
+#: A spectrum with SNR below this fraction of the group's median
+#: is excluded from the composite but still displayed individually
+#: (if above the absolute display floor in spectra.py).
+_COMPOSITING_SNR_RELATIVE_THRESHOLD: float = 1.0 / 3.0
+
 #: NovaCat UUID v5 namespace for deterministic composite IDs.
 #: Generated once via uuid.uuid4() and frozen here.
 _NOVACAT_UUID_NAMESPACE: uuid.UUID = uuid.UUID("7f1b3c5e-8a2d-4e6f-b9c1-d3e5f7a8b0c2")
+
+
+def _effective_snr_for_product(product: dict[str, Any]) -> float:
+    """Compute effective SNR for a compositing candidate.
+
+    Priority: DDB top-level snr → hints.snr → DER_SNR on raw flux.
+    Requires ``_raw_fluxes`` to be attached to the product dict
+    (set during FITS reading in ``_process_group``).
+    """
+    snr_val = product.get("snr")
+    if snr_val is not None:
+        try:
+            return float(snr_val)
+        except (TypeError, ValueError):
+            pass
+
+    hints = product.get("hints")
+    if isinstance(hints, dict):
+        hints_snr = hints.get("snr")
+        if hints_snr is not None:
+            try:
+                return float(hints_snr)
+            except (TypeError, ValueError):
+                pass
+
+    raw_fluxes = product.get("_raw_fluxes")
+    if raw_fluxes is not None and len(raw_fluxes) > 0:
+        return der_snr(raw_fluxes)
+
+    return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -1011,6 +1048,32 @@ def _process_compositing_group(
         product["_raw_wavelengths"] = wavelengths
         product["_raw_fluxes"] = fluxes
         constituents.append(product)
+
+    # --- Relative SNR gate (epic/29) ---
+    # Exclude spectra whose SNR is far below the group's median.
+    # These are moved to the rejected list, not silently dropped.
+    if len(constituents) >= 2:
+        snr_values = [_effective_snr_for_product(p) for p in constituents]
+        group_median_snr = float(np.median(snr_values))
+
+        if group_median_snr > 0:
+            snr_floor = group_median_snr * _COMPOSITING_SNR_RELATIVE_THRESHOLD
+            snr_passed: list[dict[str, Any]] = []
+            for p, snr in zip(constituents, snr_values, strict=False):
+                if 0 < snr < snr_floor:
+                    _logger.info(
+                        "Spectrum excluded from composite by relative SNR gate",
+                        extra={
+                            "data_product_id": str(p["data_product_id"]),
+                            "effective_snr": round(snr, 2),
+                            "group_median_snr": round(group_median_snr, 2),
+                            "threshold": round(snr_floor, 2),
+                        },
+                    )
+                    rejected.append(p)
+                else:
+                    snr_passed.append(p)
+            constituents = snr_passed
 
     constituent_ids = sorted(str(p["data_product_id"]) for p in constituents)
     rejected_ids = sorted(str(p["data_product_id"]) for p in rejected)
