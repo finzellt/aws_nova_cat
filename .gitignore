@@ -84,3 +84,8 @@ tools/svo-filter-analysis/svo_fps.db-wal
 /tools/filter_band_reg/parse_radio_table
 /tools/filter_band_reg/parse_strope_table/data
 /tools/filter_band_reg/spectra_tickets
+/tools/catalog-expansion/parse_radio_table
+/tools/catalog-expansion/parse_strope_table
+/tools/catalog-expansion/spectra_tickets/Data
+/tools/catalog-expansion/spectra_tickets
+/tools/catalog-expansion/vizier_data

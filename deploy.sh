@@ -57,10 +57,10 @@ echo ""
 # ---------------------------------------------------------------------------
 # Step 3 — CDK deploy
 #
-# Deploys both the production stack (NovaCat) and the smoke test stack
-# (NovaCatSmoke). Pass a stack name to target a specific stack, e.g.:
-#   ./deploy.sh NovaCat
-#   ./deploy.sh NovaCatSmoke
+# Deploys the production stack (NovaCat) by default. Pass stack names
+# to target specific stacks, e.g.:
+#   ./deploy.sh NovaCat NovaCatSmoke   # both stacks
+#   ./deploy.sh NovaCatSmoke           # smoke test stack only
 # ---------------------------------------------------------------------------
 echo "==> [3/4] Deploying CDK stacks..."
 cd "$REPO_ROOT/infra"
@@ -77,7 +77,7 @@ for arg in "$@"; do
   fi
 done
 if [[ ${#STACKS[@]} -eq 0 ]]; then
-  STACKS=(NovaCat NovaCatSmoke)
+  STACKS=(NovaCat)
 fi
 cdk deploy \
   -c account="$ACCOUNT_ID" \
