@@ -398,7 +398,7 @@ class AcquireIdempotencyLockOutput(BaseModel):
 
     Acquires a workflow-level idempotency lock via conditional DynamoDB put.
     Raises RetryableError if the lock is already held — Step Functions retries
-    with backoff. The lock TTL is 24 hours; stale locks can be manually deleted
+    with backoff. The lock TTL is 15 minutes; stale locks can be manually deleted
     (see idempotency_guard/handler.py module docstring for CLI command).
 
     Idempotency key format:
@@ -545,20 +545,17 @@ class LaunchWorkflowOutput(BaseModel):
     ResultPath: none (Parallel branch terminal state — branch output IS the return value)
 
     These tasks start child workflow executions non-blocking via SFN StartExecution.
-    The handler is workflow_launcher; task_names are "LaunchRefreshReferences" and
-    "LaunchDiscoverSpectraProducts". Return shape inferred from the _start_execution()
-    pattern used by PublishIngestNewNovaOutput — verify when handler is in scope.
+    Return shape matches the _start_execution() helper used by all launch tasks.
 
-    Source: services/workflow_launcher/handler.py (task_names not yet confirmed)
+    Source: services/workflow_launcher/handler.py :: _launch_refresh_references()
+            / _launch_discover_spectra_products()
     """
 
     model_config = _OUTPUT_CONFIG
-    # Fields inferred from PublishIngestNewNovaOutput pattern.
-    # Promote to "# from handler" when workflow_launcher handler is in scope.
-    nova_id: str  # inferred from ASL
-    execution_name: str  # inferred from ASL
-    execution_arn: str | None = None  # inferred from ASL
-    already_existed: bool = False  # inferred from ASL
+    nova_id: str  # from handler
+    execution_name: str  # from handler
+    execution_arn: str | None = None  # from handler
+    already_existed: bool = False  # from handler
 
 
 # ---------------------------------------------------------------------------
@@ -686,8 +683,9 @@ class ComputeDiscoveryDateOutput(BaseModel):
     Queries all NOVAREF links for the nova, batch-fetches Reference
     publication_dates, and returns the earliest.
 
-    Tiebreaker: lexicographically smallest bibcode. Lexicographic comparison
-    on YYYY-MM-00 strings is correct because day is always 00.
+    Tiebreaker: lexicographically smallest bibcode. Comparison uses month
+    granularity only (YYYY, MM); the day component is ignored because
+    day-00 signals unknown precision (see _date_sort_key in handler).
 
     Source: services/reference_manager/handler.py :: _handle_computeDiscoveryDate()
     """

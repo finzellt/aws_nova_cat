@@ -240,7 +240,7 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
     "job_run_manager": _FunctionSpec(
         service_dir="job_run_manager",
         description=(
-            "Writes JobRun and Attempt operational records. "
+            "Writes JobRun operational records. "
             "Handles BeginJobRun, TerminalFailHandler (error classification + fingerprint), "
             "FinalizeJobRunSuccess, FinalizeJobRunFailed, "
             "FinalizeJobRunQuarantined. Used by: all workflows (shared)."
@@ -256,7 +256,7 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
     "workflow_launcher": _FunctionSpec(
         service_dir="workflow_launcher",
         description=(
-            "Starts downstream Step Functions executions and publishes SNS continuation events. "
+            "Starts downstream Step Functions executions. "
             "Used by: initialize_nova, ingest_new_nova, discover_spectra_products."
         ),
         timeout=cdk.Duration.seconds(300),  # fan-out: 8s delay × up to ~30 batches

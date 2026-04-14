@@ -4,13 +4,21 @@
 **Date:** 2026-04-10
 **Author:** TF
 **Supersedes:** —
-**Superseded by:** —
+**Superseded by:** ADR-033-amendment
 **Amends:** ADR-014 (adds composite spectrum record type to spectra artifact schema)
 **Relates to:**
 - `DESIGN-003` — Artifact regeneration pipeline (Fargate pre-processing phase)
 - `ADR-013` — Visualization Design (waterfall plot; composites replace constituents)
 - `ADR-014` — Artifact Schemas (spectrum record fields)
 - `ADR-031` — Data Layer Readiness (DataProduct schema)
+
+> **⚠ Amended** (2026-04-14)
+> The original framing of compositing as an SNR-boosting operation is corrected.
+> Compositing produces a single representative spectrum per instrument per night
+> by stitching disjoint wavelength ranges and stacking overlapping ones. SNR
+> improvement in overlap regions is a secondary benefit, not the purpose.
+>
+> See: `docs/adr/ADR-033-amendment-compositing-purpose.md`
 
 ---
 
