@@ -33,6 +33,7 @@ from typing import Any
 
 import numpy as np
 from boto3.dynamodb.conditions import Attr, Key
+from nova_common.spectral import der_snr
 
 from generators.compositing import cluster_by_night
 from generators.shared import (
@@ -53,6 +54,12 @@ _TRIM_TOLERANCE = 1.001  # 0.1% beyond median before wavelength trim kicks in
 
 _ARM_MJD_TOLERANCE = 0.333  # days (~8 hr) — grouping tolerance for arms
 _ARM_OVERLAP_MAX_NM = 100.0  # nm — max overlap before we reject a merge
+
+# SNR quality gating (epic/29-spectra-quality-and-docs).
+# Absolute floor: spectra below this are excluded from the waterfall plot
+# but remain in the observation table. Applied after DER_SNR fallback
+# computation so all spectra have an effective SNR value.
+_SNR_DISPLAY_FLOOR = 5.0
 
 # ADR-035 spectra wavelength regime boundaries (nm).
 # Assignment is by wavelength midpoint: (wavelength_min + wavelength_max) / 2.
@@ -99,6 +106,49 @@ _SPECTRA_REGIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "wavelength_range_nm": [5000, None],
     },
 }
+
+# ---------------------------------------------------------------------------
+# SNR quality gating
+# ---------------------------------------------------------------------------
+
+
+def _compute_effective_snr(rec: dict[str, Any]) -> float:
+    """Compute effective SNR for a parsed spectrum record.
+
+    Priority:
+      1. Top-level ``snr`` on the DDB DataProduct item (from FITS validation).
+      2. ``hints.snr`` (from SSAP discovery metadata).
+      3. DER_SNR computed from the cleaned flux array (Stoehr et al. 2008).
+
+    Returns 0.0 if no SNR can be determined (degenerate spectrum).
+    """
+    product = rec["product"]
+
+    # 1. Top-level SNR from validation
+    snr_val = product.get("snr")
+    if snr_val is not None:
+        try:
+            return float(snr_val)
+        except (TypeError, ValueError):
+            pass
+
+    # 2. Hints SNR from discovery metadata
+    hints = product.get("hints")
+    if isinstance(hints, dict):
+        hints_snr = hints.get("snr")
+        if hints_snr is not None:
+            try:
+                return float(hints_snr)
+            except (TypeError, ValueError):
+                pass
+
+    # 3. DER_SNR fallback from cleaned flux array
+    fluxes = rec.get("fluxes", [])
+    if fluxes:
+        return der_snr(fluxes)
+
+    return 0.0
+
 
 # ADR-035: Cross-boundary spectrum splitting thresholds.
 _SPLIT_FRACTION_THRESHOLD = 0.15  # minor side must be ≥15% of total span
@@ -423,6 +473,40 @@ def generate_spectra_json(
 
     # Step 2a½ — Detect multi-arm groups and merge.
     parsed = _merge_multi_arm_spectra(parsed, nova_id, s3_client, private_bucket)
+
+    # Step 2a¾ — Compute effective SNR and apply absolute display gate.
+    # DER_SNR fallback ensures every spectrum gets an SNR value, even if
+    # the archive/validation pipeline didn't provide one.  Spectra below
+    # the display floor are excluded from the waterfall plot but remain
+    # in the observation table (they are real DataProducts with real metadata).
+    pre_gate_count = len(parsed)
+    gated: list[dict[str, Any]] = []
+    for rec in parsed:
+        eff_snr = _compute_effective_snr(rec)
+        rec["effective_snr"] = eff_snr
+        if 0 < eff_snr < _SNR_DISPLAY_FLOOR:
+            _logger.info(
+                "Spectrum excluded by SNR display gate",
+                extra={
+                    "nova_id": nova_id,
+                    "data_product_id": rec["product"]["data_product_id"],
+                    "effective_snr": round(eff_snr, 2),
+                    "snr_floor": _SNR_DISPLAY_FLOOR,
+                },
+            )
+            continue
+        gated.append(rec)
+    if pre_gate_count != len(gated):
+        _logger.info(
+            "SNR display gate applied",
+            extra={
+                "nova_id": nova_id,
+                "before": pre_gate_count,
+                "after": len(gated),
+                "excluded": pre_gate_count - len(gated),
+            },
+        )
+    parsed = gated
 
     # Step 2b — Regime classification and cross-boundary splitting (ADR-035).
     parsed = _assign_and_split_regimes(parsed)
