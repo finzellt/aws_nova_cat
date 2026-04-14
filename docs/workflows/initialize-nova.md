@@ -59,14 +59,14 @@ Other workflows may be triggered directly when `nova_id` already exists.
    - No  -> continue
 8. **ResolveCandidateAgainstPublicArchives** (Task)
 
-9. **CheckExistingNovaByCoordinates** (Task)
+9. **CheckExistingNovaByCoordinates** (Task) *(handler implemented; not yet in deployed ASL)*
    - Inputs: resolved coordinates (RA/Dec + epoch if available)
    - Behavior:
      - Retrieve existing nova coordinates from persistent store
      - Compute angular separation to each candidate
      - Determine minimum separation
 
-10. **CoordinateMatchClassification?** (Choice)
+10. **CoordinateMatchClassification?** (Choice) *(not yet in deployed ASL)*
    - Separation < 2"  -> **UpsertAliasForExistingNova** -> **PublishIngestNewNova**
      -> **FinalizeJobRunSuccess** (outcome = `EXISTS_AND_LAUNCHED`)
    - Separation 2"–10" -> **QuarantineHandler** -> **FinalizeJobRunQuarantined**

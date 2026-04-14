@@ -177,13 +177,15 @@ notification delivery fails.
 
 ## Idempotency Guarantees & Invariants
 
-- Workflow idempotency key (time-bucketed): `RefreshReferences:{nova_id}:{schema_version}:{time_bucket}`
+- Workflow idempotency key (time-bucketed): `refresh_references:{nova_id}:{schema_version}:{time_bucket}`
 - Reference upsert dedupe key: `ReferenceUpsert:ADS:{bibcode}:{schema_version}`
 - Relationship dedupe key: `NovaReferenceLink:{nova_id}:{bibcode}`
 - DiscoveryDate dedupe key: `DiscoveryDate:{nova_id}:{earliest_bibcode}:{rule_version}`
 - Invariant: `discovery_date` update is monotonically earlier (unless explicitly
   configured otherwise). `discovery_date` is stored as `YYYY-MM-DD` string; day `00`
-  signals month-only precision. Lexicographic comparison is correct for this format.
+  signals month-only precision. Comparison uses month granularity only `(YYYY, MM)`;
+  the day component is ignored because `00` means unknown precision. A day-00 date
+  and a day-precise date in the same month are treated as equal (no overwrite).
 - Invariant: `idempotency_key` is internal-only (not in event schemas).
 
 ---

@@ -137,7 +137,7 @@ Used for:
 
 ```json
 {
-  "PK": "NAME#nova sco 2012 #2",
+  "PK": "NAME#v1324 sco",
   "SK": "NOVA#4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
   "entity_type": "NameMapping",
   "schema_version": "1",
@@ -956,7 +956,7 @@ condition_expression=attribute_not_exists(PK).
 #### Example:
 ```json
 {
-  "PK": "4e9b0e88-5d2b-4d1a-9a1a-4a4f6f0cb9b1",
+  "PK": "WORKFLOW#a1b2c3d4-9e8f-7a6b-5c4d-3e2f1a0b9c8d",
   "SK": "JOBRUN#acquire_and_validate_spectra#2026-02-23T18:10:00Z#5a4fce02-3b02-4b5c-8d06-541d9f2d4f60",
   "entity_type": "JobRun",
   "schema_version": "1",
