@@ -6,3 +6,6 @@
 4. Flag, quarantine, and don't show spectra missing any of the following: source, telescope, instrument.
 5. Flag (and don't show) photometry without a source
 6. Have observation table for photometry.
+7. When you're on the third page of the catalog, click on a nova, and then hit back, it takes you to the first page.
+8. Issue with zoom in when toggling spectral features now affecting waterfall plot
+9. Pull Gaia and 2MASS info/data
