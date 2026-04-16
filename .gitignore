@@ -89,3 +89,6 @@ tools/svo-filter-analysis/svo_fps.db-wal
 /tools/catalog-expansion/spectra_tickets/Data
 /tools/catalog-expansion/spectra_tickets
 /tools/catalog-expansion/vizier_data
+/tools/novacat-tools/notebooks/iue_downloads/mastDownload
+/tools/catalog-expansion/v615_vul_valisa
+/tools/catalog-expansion/vizier_nova_spectra
