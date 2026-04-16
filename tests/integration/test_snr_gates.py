@@ -27,6 +27,7 @@ from unittest.mock import patch
 
 import boto3
 import numpy as np
+import pytest
 from moto import mock_aws
 from nova_common.spectral import der_snr
 from numpy.typing import NDArray
@@ -287,6 +288,66 @@ class TestDisplayGate:
             # SNR=5.0 is included — the condition ``0 < 5.0 < 5.0`` is False.
             assert dp_id in _spectra_ids_in_output(result)
 
+    # ---------------------------------------------------------------
+    # B30 regression: non-positive and non-finite SNR exclusion
+    # ---------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "label,snr_value",
+        [
+            ("negative", -0.1),
+            ("zero", 0.0),
+        ],
+        ids=["snr=-0.1", "snr=0.0"],
+    )
+    def test_non_positive_snr_excluded(self, label: str, snr_value: float) -> None:
+        """Non-positive stored SNR is excluded by the display gate (B30)."""
+        with mock_aws():
+            dynamodb = boto3.resource("dynamodb", region_name=_REGION)
+            table = _create_table(dynamodb)
+            s3 = boto3.client("s3", region_name=_REGION)
+            s3.create_bucket(Bucket=_BUCKET)
+
+            dp_id = f"dp-non-positive-{label}"
+            _seed_spectra_product(table, dp_id, snr=snr_value)
+            _seed_csv(s3, dp_id, _make_csv(_make_high_snr_fluxes()))
+
+            result = self._run_generate(table, s3)
+            assert dp_id not in _spectra_ids_in_output(result)
+
+    @pytest.mark.parametrize(
+        "label,snr_value",
+        [
+            ("nan", float("nan")),
+            ("pos_inf", float("inf")),
+            ("neg_inf", float("-inf")),
+        ],
+        ids=["snr=NaN", "snr=+inf", "snr=-inf"],
+    )
+    def test_non_finite_snr_excluded(self, label: str, snr_value: float) -> None:
+        """Non-finite effective SNR is excluded by the display gate (B30).
+
+        NaN/inf cannot be stored in DynamoDB, so we patch
+        ``_compute_effective_snr`` to return the problematic value directly.
+        """
+        with mock_aws():
+            dynamodb = boto3.resource("dynamodb", region_name=_REGION)
+            table = _create_table(dynamodb)
+            s3 = boto3.client("s3", region_name=_REGION)
+            s3.create_bucket(Bucket=_BUCKET)
+
+            dp_id = f"dp-non-finite-{label}"
+            # Seed with a high SNR that would normally pass; the patch overrides it.
+            _seed_spectra_product(table, dp_id, snr=10.0)
+            _seed_csv(s3, dp_id, _make_csv(_make_high_snr_fluxes()))
+
+            with patch(
+                "generators.spectra._compute_effective_snr",
+                return_value=snr_value,
+            ):
+                result = self._run_generate(table, s3)
+            assert dp_id not in _spectra_ids_in_output(result)
+
 
 # ===================================================================
 # Composite relative gate tests
@@ -477,5 +538,58 @@ class TestCompositeRelativeGate:
         composite = self._run_compositing_group(products)
 
         # snr=3 is excluded by relative gate (3 < 8.33).
+        assert sorted(composite["constituent_data_product_ids"]) == ["dp-a", "dp-b"]
+        assert sorted(composite["rejected_data_product_ids"]) == ["dp-c"]
+
+    # ---------------------------------------------------------------
+    # B30 regression: non-positive and non-finite SNR in compositing
+    # ---------------------------------------------------------------
+
+    def test_negative_snr_excluded_from_composite(self) -> None:
+        """Group [30, 25, -0.1]: the -0.1 spectrum is excluded (B30)."""
+        products = [
+            self._make_product("dp-a", snr=30.0, sha256="aa"),
+            self._make_product("dp-b", snr=25.0, sha256="bb"),
+            self._make_product("dp-c", snr=-0.1, sha256="cc"),
+        ]
+        composite = self._run_compositing_group(products)
+        assert sorted(composite["constituent_data_product_ids"]) == ["dp-a", "dp-b"]
+        assert sorted(composite["rejected_data_product_ids"]) == ["dp-c"]
+
+    def test_zero_snr_excluded_from_composite(self) -> None:
+        """Group [30, 25, 0.0]: the 0.0 spectrum is excluded (B30)."""
+        products = [
+            self._make_product("dp-a", snr=30.0, sha256="aa"),
+            self._make_product("dp-b", snr=25.0, sha256="bb"),
+            self._make_product("dp-c", snr=0.0, sha256="cc"),
+        ]
+        composite = self._run_compositing_group(products)
+        assert sorted(composite["constituent_data_product_ids"]) == ["dp-a", "dp-b"]
+        assert sorted(composite["rejected_data_product_ids"]) == ["dp-c"]
+
+    def test_nan_snr_excluded_from_composite(self) -> None:
+        """Group [30, 25, NaN]: the NaN spectrum is excluded (B30).
+
+        NaN cannot be stored in DynamoDB Decimals, so we patch
+        ``_effective_snr_for_product`` to return NaN for the target product.
+        """
+        from generators.compositing import _effective_snr_for_product as _real_eff_snr
+
+        products = [
+            self._make_product("dp-a", snr=30.0, sha256="aa"),
+            self._make_product("dp-b", snr=25.0, sha256="bb"),
+            self._make_product("dp-c", snr=10.0, sha256="cc"),  # will be overridden
+        ]
+
+        def _patched_eff_snr(product: dict[str, Any]) -> float:
+            if product["data_product_id"] == "dp-c":
+                return float("nan")
+            return _real_eff_snr(product)
+
+        with patch(
+            "generators.compositing._effective_snr_for_product",
+            side_effect=_patched_eff_snr,
+        ):
+            composite = self._run_compositing_group(products)
         assert sorted(composite["constituent_data_product_ids"]) == ["dp-a", "dp-b"]
         assert sorted(composite["rejected_data_product_ids"]) == ["dp-c"]

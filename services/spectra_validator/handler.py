@@ -73,6 +73,7 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from nova_common.errors import RetryableError
 from nova_common.logging import configure_logging, logger
+from nova_common.spectral import der_snr
 from nova_common.timing import log_duration
 from nova_common.tracing import tracer
 from nova_common.web_ready_csv import build_web_ready_csv, write_web_ready_csv_to_s3
@@ -403,6 +404,7 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
     wavelength_min_nm: float | None = None
     wavelength_max_nm: float | None = None
     snr_median: float | None = None
+    snr_provenance: str | None = None
 
     if spectrum:
         axis = spectrum.spectral_axis
@@ -421,7 +423,18 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
             # else: assume already nm
             wavelength_min_nm = round(wl_min, 4)
             wavelength_max_nm = round(wl_max, 4)
-        snr_median = spectrum.snr
+
+        # SNR: prefer profile-extracted source value, fall back to DER_SNR.
+        if spectrum.snr is not None:
+            snr_median = spectrum.snr
+            snr_provenance = "source"
+        else:
+            flux = spectrum.flux_axis
+            if len(flux) > 0:
+                estimated = der_snr(flux.tolist())
+                if estimated > 0.0:
+                    snr_median = round(estimated, 4)
+                    snr_provenance = "estimated_der_snr"
 
     # --- Write web-ready CSV (ADR-031 P-4) ---
     # Best-effort: a failed write logs a warning but does not fail the
@@ -484,6 +497,7 @@ def _handle_validate_bytes(event: dict[str, Any], context: object) -> dict[str, 
         "wavelength_min_nm": wavelength_min_nm,
         "wavelength_max_nm": wavelength_max_nm,
         "snr": snr_median,
+        "snr_provenance": snr_provenance,
     }
 
 
@@ -627,6 +641,10 @@ def _handle_record_validation_result(event: dict[str, Any], context: object) -> 
     if validation.get("snr") is not None:
         set_expr_parts.append("snr = :snr")
         values[":snr"] = Decimal(str(validation["snr"]))
+
+    if validation.get("snr_provenance") is not None:
+        set_expr_parts.append("snr_provenance = :snr_prov")
+        values[":snr_prov"] = validation["snr_provenance"]
 
     update_expression = "SET " + ", ".join(set_expr_parts) + " REMOVE GSI1PK, GSI1SK"
 

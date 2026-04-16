@@ -65,6 +65,7 @@ def _put_spectrum(
     sha256: str = "sha_default",
     raw_s3_key: str | None = "raw/test.fits",
     validation_status: str = "VALID",
+    snr: float = 30.0,
 ) -> None:
     """Write an individual spectra DataProduct item."""
     item: dict[str, Any] = {
@@ -79,6 +80,7 @@ def _put_spectrum(
         "observation_date_mjd": Decimal(str(observation_date_mjd)),
         "sha256": sha256,
         "telescope": "VLT-UT2",
+        "snr": Decimal(str(snr)),
     }
     if raw_s3_key is not None:
         item["raw_s3_key"] = raw_s3_key

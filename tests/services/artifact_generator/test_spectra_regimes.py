@@ -14,6 +14,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+import numpy as np
 import pytest
 from generators.spectra import (
     _assign_and_split_regimes,
@@ -61,11 +62,12 @@ def _make_stage1_rec(
 
 
 def _make_csv(wl_min: float, wl_max: float, n: int = 50) -> str:
-    """Generate a web-ready CSV string."""
+    """Generate a web-ready CSV string with realistic flux (DER_SNR >> 5)."""
+    rng = np.random.default_rng(42)
     step = (wl_max - wl_min) / max(n - 1, 1)
     rows = ["wavelength_nm,flux"]
     for i in range(n):
-        rows.append(f"{wl_min + i * step:.4f},1.0")
+        rows.append(f"{wl_min + i * step:.4f},{1000.0 + rng.normal(0, 5):.6f}")
     return "\n".join(rows)
 
 
@@ -88,6 +90,7 @@ def _make_product(
         "PK": "nova-test",
         "SK": f"PRODUCT#SPECTRA#{dp_id}",
         "validation_status": "VALID",
+        "snr": Decimal("10.0"),
     }
 
 

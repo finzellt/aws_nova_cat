@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from nova_common.spectral import der_snr
 
 from contracts.models.tickets import SpectraTicket
 from ticket_ingestor.fits_builder import FloatArray, build_fits
@@ -73,6 +74,10 @@ class SpectrumResult:
     telescope: str | None = None
     observation_date_mjd: float | None = None
     flux_unit: str | None = None
+
+    # --- SNR (S21: DER_SNR at ingestion time) ---
+    snr: float | None = None
+    snr_provenance: str | None = None  # "estimated_der_snr" or None
 
 
 @dataclass(frozen=True)
@@ -428,6 +433,18 @@ def read_spectra(
                 # ── Construct FITS bytes ─────────────────────────────────
                 fits_bytes = build_fits(wav_arr, flux_arr, ferr_arr, keywords)
 
+                # ── S21: estimate SNR via DER_SNR ───────────────────────
+                # Ticket-ingested spectra have no source-provided SNR, so
+                # we always attempt DER_SNR.  A result of 0.0 means the
+                # estimator couldn't produce a value (degenerate flux).
+                snr_value: float | None = None
+                snr_prov: str | None = None
+                if len(flux_arr) > 0:
+                    estimated = der_snr(flux_arr.tolist())
+                    if estimated > 0.0:
+                        snr_value = round(estimated, 4)
+                        snr_prov = "estimated_der_snr"
+
                 # ── Derive stable identity ───────────────────────────────
                 data_product_id = _derive_data_product_id(
                     ticket.bibcode, spectrum_filename, nova_id
@@ -446,6 +463,8 @@ def read_spectra(
                         telescope=enrichment["telescope"],
                         observation_date_mjd=enrichment["observation_date_mjd"],
                         flux_unit=enrichment["flux_unit"],
+                        snr=snr_value,
+                        snr_provenance=snr_prov,
                     )
                 )
 

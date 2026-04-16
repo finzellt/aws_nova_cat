@@ -22,6 +22,7 @@ from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 from generators.shared import LTTB_THRESHOLD, segment_aware_lttb
 from generators.spectra import (
@@ -67,12 +68,13 @@ def _make_stage1(
 
 
 def _make_csv_body(wl_min: float, wl_max: float, n: int = 50) -> str:
-    """Generate a web-ready CSV string."""
+    """Generate a web-ready CSV string with realistic flux (DER_SNR >> 5)."""
+    rng = np.random.default_rng(42)
     step = (wl_max - wl_min) / max(n - 1, 1)
     rows = ["wavelength_nm,flux"]
     for i in range(n):
         wl = wl_min + i * step
-        rows.append(f"{wl:.4f},1.0")
+        rows.append(f"{wl:.4f},{1000.0 + rng.normal(0, 5):.6f}")
     return "\n".join(rows)
 
 
@@ -480,6 +482,7 @@ class TestEndToEndMerge:
                 "PK": "nova-e2e",
                 "SK": "PRODUCT#SPECTRA#dp-uvb",
                 "validation_status": "VALID",
+                "snr": Decimal("10.0"),
             },
             {
                 "data_product_id": "dp-vis",
@@ -491,6 +494,7 @@ class TestEndToEndMerge:
                 "PK": "nova-e2e",
                 "SK": "PRODUCT#SPECTRA#dp-vis",
                 "validation_status": "VALID",
+                "snr": Decimal("10.0"),
             },
             {
                 "data_product_id": "dp-nir",
@@ -502,6 +506,7 @@ class TestEndToEndMerge:
                 "PK": "nova-e2e",
                 "SK": "PRODUCT#SPECTRA#dp-nir",
                 "validation_status": "VALID",
+                "snr": Decimal("10.0"),
             },
         ]
 

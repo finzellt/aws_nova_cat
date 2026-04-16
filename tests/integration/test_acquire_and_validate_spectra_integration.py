@@ -656,6 +656,158 @@ class TestHappyPathValid:
 
 
 # ---------------------------------------------------------------------------
+# S21: SNR provenance through validation path
+# ---------------------------------------------------------------------------
+
+
+def _make_uves_fits_bytes_with_snr_column(*, n: int = 1000) -> bytes:
+    """Build a synthetic UVES FITS with an SNR_REDUCED column (source-provided SNR)."""
+    primary = fits.PrimaryHDU()
+    hdr = primary.header
+    hdr["INSTRUME"] = "UVES"
+    hdr["TELESCOP"] = "ESO-VLT-U2"
+    hdr["MJD-OBS"] = 56082.05
+    hdr["DATE-OBS"] = "2012-06-04"
+    hdr["EXPTIME"] = 7200.0
+    hdr["SPEC_RES"] = 42000.0
+    hdr["FLUXCAL"] = "ABSOLUTE"
+
+    wave = np.linspace(3200.0, 10000.0, n).astype(np.float32)
+    flux = np.ones(n, dtype=np.float32) * 1.5e-16
+    err = np.ones(n, dtype=np.float32) * 1.0e-17
+    qual = np.zeros(n, dtype=np.int32)
+    snr = np.ones(n, dtype=np.float32) * 25.0  # source-provided SNR
+
+    cols = fits.ColDefs(
+        [
+            fits.Column(name="WAVE", format=f"{n}E", array=wave.reshape(1, n)),
+            fits.Column(name="FLUX", format=f"{n}E", array=flux.reshape(1, n)),
+            fits.Column(name="ERR", format=f"{n}E", array=err.reshape(1, n)),
+            fits.Column(name="QUAL", format=f"{n}J", array=qual.reshape(1, n)),
+            fits.Column(name="SNR_REDUCED", format=f"{n}E", array=snr.reshape(1, n)),
+        ]
+    )
+    spectrum_hdu = fits.BinTableHDU.from_columns(cols, name="SPECTRUM")
+
+    buf = io.BytesIO()
+    fits.HDUList([primary, spectrum_hdu]).writeto(buf)
+    return buf.getvalue()
+
+
+def _make_uves_fits_bytes_noisy_flux(*, n: int = 1000) -> bytes:
+    """Build a synthetic UVES FITS with noisy flux (no SNR column) → DER_SNR fallback."""
+    primary = fits.PrimaryHDU()
+    hdr = primary.header
+    hdr["INSTRUME"] = "UVES"
+    hdr["TELESCOP"] = "ESO-VLT-U2"
+    hdr["MJD-OBS"] = 56082.05
+    hdr["DATE-OBS"] = "2012-06-04"
+    hdr["EXPTIME"] = 7200.0
+    hdr["SPEC_RES"] = 42000.0
+    hdr["FLUXCAL"] = "ABSOLUTE"
+
+    rng = np.random.default_rng(42)
+    wave = np.linspace(3200.0, 10000.0, n).astype(np.float32)
+    flux = (1.5e-16 + rng.normal(0, 1.0e-18, n)).astype(np.float32)
+    err = np.ones(n, dtype=np.float32) * 1.0e-17
+    qual = np.zeros(n, dtype=np.int32)
+
+    cols = fits.ColDefs(
+        [
+            fits.Column(name="WAVE", format=f"{n}E", array=wave.reshape(1, n)),
+            fits.Column(name="FLUX", format=f"{n}E", array=flux.reshape(1, n)),
+            fits.Column(name="ERR", format=f"{n}E", array=err.reshape(1, n)),
+            fits.Column(name="QUAL", format=f"{n}J", array=qual.reshape(1, n)),
+        ]
+    )
+    spectrum_hdu = fits.BinTableHDU.from_columns(cols, name="SPECTRUM")
+
+    buf = io.BytesIO()
+    fits.HDUList([primary, spectrum_hdu]).writeto(buf)
+    return buf.getvalue()
+
+
+class TestSnrProvenanceValidationPath:
+    """S21: snr_provenance flows through the validation path into DDB."""
+
+    def test_source_snr_provenance(self, aws_resources: tuple[Any, Any]) -> None:
+        """FITS with SNR_REDUCED column → snr_provenance='source' on DDB item."""
+        table, _ = aws_resources
+        fits_bytes = _make_uves_fits_bytes_with_snr_column()
+
+        with mock_aws():
+            _seed_data_product(table)
+            h = _load_handlers()
+            state = _run_prefix(h)
+            status = _run_check_status(h, state)
+            acquisition = _run_acquire(h, state, status, fits_bytes)
+            validation = _run_validate(h, state, status, acquisition)
+
+            assert validation["snr"] is not None
+            assert validation["snr"] > 0.0
+            assert validation["snr_provenance"] == "source"
+
+            _run_record_result(h, state, status, acquisition, validation)
+            _finalize_success(h, state)
+
+        dp = _get_data_product(table)
+        assert dp is not None
+        assert "snr" in dp
+        assert float(dp["snr"]) > 0.0
+        assert dp["snr_provenance"] == "source"
+
+    def test_estimated_der_snr_provenance(self, aws_resources: tuple[Any, Any]) -> None:
+        """FITS with noisy flux, no SNR column → snr_provenance='estimated_der_snr'."""
+        table, _ = aws_resources
+        fits_bytes = _make_uves_fits_bytes_noisy_flux()
+
+        with mock_aws():
+            _seed_data_product(table)
+            h = _load_handlers()
+            state = _run_prefix(h)
+            status = _run_check_status(h, state)
+            acquisition = _run_acquire(h, state, status, fits_bytes)
+            validation = _run_validate(h, state, status, acquisition)
+
+            assert validation["snr"] is not None
+            assert validation["snr"] > 0.0
+            assert validation["snr_provenance"] == "estimated_der_snr"
+
+            _run_record_result(h, state, status, acquisition, validation)
+            _finalize_success(h, state)
+
+        dp = _get_data_product(table)
+        assert dp is not None
+        assert "snr" in dp
+        assert float(dp["snr"]) > 0.0
+        assert dp["snr_provenance"] == "estimated_der_snr"
+
+    def test_no_snr_when_constant_flux(self, aws_resources: tuple[Any, Any]) -> None:
+        """Constant flux, no SNR column → DER_SNR returns 0 → snr absent from DDB."""
+        table, _ = aws_resources
+        fits_bytes = _make_uves_fits_bytes()  # constant flux, no SNR column
+
+        with mock_aws():
+            _seed_data_product(table)
+            h = _load_handlers()
+            state = _run_prefix(h)
+            status = _run_check_status(h, state)
+            acquisition = _run_acquire(h, state, status, fits_bytes)
+            validation = _run_validate(h, state, status, acquisition)
+
+            assert validation["snr"] is None
+            assert validation["snr_provenance"] is None
+
+            _run_record_result(h, state, status, acquisition, validation)
+            _finalize_success(h, state)
+
+        dp = _get_data_product(table)
+        assert dp is not None
+        assert "snr" not in dp
+        assert "snr_provenance" not in dp
+
+
+# ---------------------------------------------------------------------------
 # Path 2–4: CheckOperationalStatusOutcome skip paths
 # ---------------------------------------------------------------------------
 

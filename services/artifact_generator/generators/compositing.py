@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import uuid
 from datetime import UTC, datetime
 from typing import Any, TypedDict
@@ -487,8 +488,16 @@ def combine_spectra(
         raise ValueError(f"Need ≥ 2 flux arrays for combination, got {len(resampled_fluxes)}")
 
     stacked = np.vstack(resampled_fluxes)
-    with np.errstate(all="ignore"):
-        combined: NDArray[np.float64] = np.nanmedian(stacked, axis=0)
+    # Detect columns where every constituent is NaN (chip gaps, dead
+    # detector regions, dichroic gaps). nanmedian would produce NaN for
+    # these anyway but emits a RuntimeWarning — handle them explicitly.
+    all_nan_mask = np.all(np.isnan(stacked), axis=0)
+    if np.all(all_nan_mask):
+        combined: NDArray[np.float64] = np.full(stacked.shape[1], np.nan)
+    else:
+        combined = np.full(stacked.shape[1], np.nan)
+        valid = ~all_nan_mask
+        combined[valid] = np.nanmedian(stacked[:, valid], axis=0)
     return combined
 
 
@@ -1054,13 +1063,29 @@ def _process_compositing_group(
     # These are moved to the rejected list, not silently dropped.
     if len(constituents) >= 2:
         snr_values = [_effective_snr_for_product(p) for p in constituents]
-        group_median_snr = float(np.median(snr_values))
+
+        # B30: reject non-finite and non-positive SNR before computing the
+        # group median — these are physically meaningless and would poison
+        # the median (e.g. NaN makes np.median return NaN).
+        finite_positive: list[dict[str, Any]] = []
+        for p, snr in zip(constituents, snr_values, strict=False):
+            if not math.isfinite(snr) or snr <= 0:
+                rejected.append(p)
+            else:
+                finite_positive.append(p)
+
+        if len(finite_positive) != len(constituents):
+            constituents = finite_positive
+            # Recompute SNR values for survivors only.
+            snr_values = [_effective_snr_for_product(p) for p in constituents]
+
+        group_median_snr = float(np.median(snr_values)) if len(constituents) >= 2 else 0.0
 
         if group_median_snr > 0:
             snr_floor = group_median_snr * _COMPOSITING_SNR_RELATIVE_THRESHOLD
             snr_passed: list[dict[str, Any]] = []
             for p, snr in zip(constituents, snr_values, strict=False):
-                if 0 < snr < snr_floor:
+                if snr < snr_floor:
                     _logger.info(
                         "Spectrum excluded from composite by relative SNR gate",
                         extra={
