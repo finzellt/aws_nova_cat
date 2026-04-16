@@ -488,8 +488,16 @@ def combine_spectra(
         raise ValueError(f"Need ≥ 2 flux arrays for combination, got {len(resampled_fluxes)}")
 
     stacked = np.vstack(resampled_fluxes)
-    with np.errstate(all="ignore"):
-        combined: NDArray[np.float64] = np.nanmedian(stacked, axis=0)
+    # Detect columns where every constituent is NaN (chip gaps, dead
+    # detector regions, dichroic gaps). nanmedian would produce NaN for
+    # these anyway but emits a RuntimeWarning — handle them explicitly.
+    all_nan_mask = np.all(np.isnan(stacked), axis=0)
+    if np.all(all_nan_mask):
+        combined: NDArray[np.float64] = np.full(stacked.shape[1], np.nan)
+    else:
+        combined = np.full(stacked.shape[1], np.nan)
+        valid = ~all_nan_mask
+        combined[valid] = np.nanmedian(stacked[:, valid], axis=0)
     return combined
 
 
