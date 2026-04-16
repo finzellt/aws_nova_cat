@@ -43,7 +43,7 @@ import {
   ChevronRight,
   Search,
 } from 'lucide-react';
-import type { NovaSummary } from '@/types/catalog';
+import type { NovaSummary, SourceEntry } from '@/types/catalog';
 import { getArtifactUrl } from '@/lib/dataClient';
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -323,6 +323,32 @@ export function CatalogTable({
             {getValue<number>()}
           </span>
         ),
+      },
+
+      // ── Sources (§F9) ─────────────────────────────────────────────────
+      // Data provenance: archive providers and/or bibcodes from ticket ingestion.
+      {
+        id: 'sources',
+        header: 'Sources',
+        enableSorting: false,
+        cell: ({ row }) => {
+          const sources: SourceEntry[] = row.original.sources ?? [];
+          if (sources.length === 0) {
+            return (
+              <span className="text-[var(--color-text-disabled)]">—</span>
+            );
+          }
+          const labels = sources.map((s) =>
+            s.type === 'archive' ? s.provider : s.bibcode,
+          );
+          return (
+            <div className="flex flex-col text-sm text-[var(--color-text-primary)] leading-snug">
+              {labels.map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+          );
+        },
       },
 
       // ── Light curve sparkline ────────────────────────────────────────

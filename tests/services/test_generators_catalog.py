@@ -190,11 +190,11 @@ def _find_nova(catalog: dict[str, Any], nova_id: str) -> dict[str, Any]:
 class TestOutputSchema:
     """Top-level schema fields and versioning."""
 
-    def test_schema_version_is_1_1(self, table: Any) -> None:
-        """§11.9: schema_version bumped to '1.1'."""
+    def test_schema_version_is_1_2(self, table: Any) -> None:
+        """§11.9, §F9: schema_version bumped to '1.2'."""
         _seed_nova(table, _NOVA_A)
         result = generate_catalog_json([], table)
-        assert result["schema_version"] == "1.1"
+        assert result["schema_version"] == "1.2"
 
     def test_generated_at_is_iso_8601(self, table: Any) -> None:
         """generated_at matches YYYY-MM-DDTHH:MM:SSZ format."""
@@ -592,6 +592,7 @@ class TestRecordFields:
             "photometry_count",
             "references_count",
             "has_sparkline",
+            "sources",
         }
         assert set(nova.keys()) == expected_keys
 
@@ -644,3 +645,264 @@ class TestSpectralVisits:
         result = generate_catalog_json(sweep, table)
         nova = _find_nova(result, _NOVA_A)
         assert nova["spectral_visits"] == 5
+
+
+# ===========================================================================
+# Sources field (§F9)
+# ===========================================================================
+
+
+def _seed_data_product(
+    table: Any,
+    nova_id: str,
+    data_product_id: str,
+    *,
+    provider: str = "ESO",
+    locator_identity: str = "provider_product_id:abc123",
+    validation_status: str = "VALID",
+) -> None:
+    """Write a SPECTRA DataProduct item to the mocked table."""
+    sk = f"PRODUCT#SPECTRA#{provider}#{data_product_id}"
+    table.put_item(
+        Item={
+            "PK": nova_id,
+            "SK": sk,
+            "data_product_id": data_product_id,
+            "nova_id": nova_id,
+            "product_type": "SPECTRA",
+            "provider": provider,
+            "locator_identity": locator_identity,
+            "validation_status": validation_status,
+        }
+    )
+
+
+class TestSources:
+    """Sources field populated from DataProduct scan (§F9)."""
+
+    def test_ticket_ingested_nova_has_bibcode_source(self, table: Any) -> None:
+        """Ticket-ingested DataProduct → bibcode appears in sources."""
+        _seed_nova(table, _NOVA_A, primary_name="V1674 Her")
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-001",
+            provider="ticket_ingestion",
+            locator_identity="ticket_ingestion:2021ApJ...910..134C:spec_01.csv",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == [
+            {"type": "bibcode", "bibcode": "2021ApJ...910..134C"},
+        ]
+
+    def test_archive_ingested_nova_has_provider_source(self, table: Any) -> None:
+        """Archive-ingested DataProduct → provider appears in sources."""
+        _seed_nova(table, _NOVA_A, primary_name="RS Oph")
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-002",
+            provider="ESO",
+            locator_identity="provider_product_id:ESO-12345",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == [
+            {"type": "archive", "provider": "ESO"},
+        ]
+
+    def test_no_spurious_bibcode_for_archive_nova(self, table: Any) -> None:
+        """Archive-only nova must not have any bibcode source entry."""
+        _seed_nova(table, _NOVA_A, primary_name="GK Per")
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-003",
+            provider="AAVSO",
+            locator_identity="url:https://aavso.org/data/gk-per",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert all(s["type"] == "archive" for s in nova["sources"])
+        assert not any(s.get("bibcode") for s in nova["sources"])
+
+    def test_mixed_sources_both_present(self, table: Any) -> None:
+        """Nova with both archive and ticket data shows both source types."""
+        _seed_nova(table, _NOVA_A, primary_name="V1405 Cas")
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-004",
+            provider="ESO",
+            locator_identity="provider_product_id:ESO-99",
+        )
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-005",
+            provider="ticket_ingestion",
+            locator_identity="ticket_ingestion:2022MNRAS.512.2003M:spec_01.csv",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        types = {s["type"] for s in nova["sources"]}
+        assert types == {"archive", "bibcode"}
+
+    def test_no_data_products_empty_sources(self, table: Any) -> None:
+        """Nova with no DataProducts gets an empty sources list."""
+        _seed_nova(table, _NOVA_A, primary_name="Lonely Nova")
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == []
+
+    def test_duplicate_bibcodes_deduplicated(self, table: Any) -> None:
+        """Multiple DataProducts from the same bibcode produce one entry."""
+        _seed_nova(table, _NOVA_A, primary_name="V1674 Her")
+        bibcode = "2021ApJ...910..134C"
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-006",
+            provider="ticket_ingestion",
+            locator_identity=f"ticket_ingestion:{bibcode}:spec_01.csv",
+        )
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-007",
+            provider="ticket_ingestion",
+            locator_identity=f"ticket_ingestion:{bibcode}:spec_02.csv",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        bibcode_entries = [s for s in nova["sources"] if s["type"] == "bibcode"]
+        assert len(bibcode_entries) == 1
+
+    def test_invalid_data_products_excluded(self, table: Any) -> None:
+        """DataProducts not VALID are excluded from sources."""
+        _seed_nova(table, _NOVA_A, primary_name="V1674 Her")
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-008",
+            provider="ESO",
+            locator_identity="provider_product_id:ESO-1",
+            validation_status="INVALID",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == []
+
+    def test_duplicate_providers_deduplicated(self, table: Any) -> None:
+        """Multiple DataProducts from the same provider produce one entry."""
+        _seed_nova(table, _NOVA_A, primary_name="GK Per")
+        _seed_data_product(table, _NOVA_A, "dp-010", provider="ESO", locator_identity="id:e1")
+        _seed_data_product(table, _NOVA_A, "dp-011", provider="ESO", locator_identity="id:e2")
+        _seed_data_product(table, _NOVA_A, "dp-012", provider="AAVSO", locator_identity="id:a1")
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == [
+            {"type": "archive", "provider": "AAVSO"},
+            {"type": "archive", "provider": "ESO"},
+        ]
+
+    def test_malformed_locator_empty_bibcode(self, table: Any) -> None:
+        """locator_identity='ticket_ingestion:' — empty bibcode, skipped."""
+        _seed_nova(table, _NOVA_A, primary_name="V1674 Her")
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-020",
+            provider="ticket_ingestion",
+            locator_identity="ticket_ingestion:",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == []
+
+    def test_malformed_locator_missing_filename(self, table: Any) -> None:
+        """locator_identity with no filename segment still extracts bibcode."""
+        _seed_nova(table, _NOVA_A, primary_name="V1674 Her")
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-021",
+            provider="ticket_ingestion",
+            locator_identity="ticket_ingestion:2021ApJ...910..134C",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == [
+            {"type": "bibcode", "bibcode": "2021ApJ...910..134C"},
+        ]
+
+    def test_malformed_locator_wrong_prefix(self, table: Any) -> None:
+        """locator_identity with wrong prefix — silently skipped."""
+        _seed_nova(table, _NOVA_A, primary_name="V1674 Her")
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-022",
+            provider="ticket_ingestion",
+            locator_identity="something_else:foo:bar",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == []
+
+    def test_malformed_locator_empty_string(self, table: Any) -> None:
+        """locator_identity='' — silently skipped."""
+        _seed_nova(table, _NOVA_A, primary_name="V1674 Her")
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-023",
+            provider="ticket_ingestion",
+            locator_identity="",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == []
+
+    def test_malformed_locator_missing_field(self, table: Any) -> None:
+        """locator_identity field missing entirely — silently skipped."""
+        _seed_nova(table, _NOVA_A, primary_name="V1674 Her")
+        # Seed manually without locator_identity.
+        table.put_item(
+            Item={
+                "PK": _NOVA_A,
+                "SK": "PRODUCT#SPECTRA#ticket_ingestion#dp-024",
+                "data_product_id": "dp-024",
+                "nova_id": _NOVA_A,
+                "product_type": "SPECTRA",
+                "provider": "ticket_ingestion",
+                "validation_status": "VALID",
+            }
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == []
+
+    def test_malformed_locator_does_not_block_other_products(self, table: Any) -> None:
+        """Malformed locator on one DataProduct doesn't affect others."""
+        _seed_nova(table, _NOVA_A, primary_name="V1674 Her")
+        # Malformed ticket DataProduct.
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-025",
+            provider="ticket_ingestion",
+            locator_identity="something_else:foo:bar",
+        )
+        # Valid archive DataProduct.
+        _seed_data_product(
+            table,
+            _NOVA_A,
+            "dp-026",
+            provider="ESO",
+            locator_identity="provider_product_id:ESO-1",
+        )
+        result = generate_catalog_json([], table)
+        nova = _find_nova(result, _NOVA_A)
+        assert nova["sources"] == [{"type": "archive", "provider": "ESO"}]
