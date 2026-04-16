@@ -56,7 +56,7 @@ from contracts.models.outputs import (
     AcquireAndValidateSpectraTerminalOutput,
     DiscoverSpectraProductsFinalizeOutput,
     DiscoverSpectraProductsTerminalOutput,
-    FetchReferenceCandidatesOutput,
+    FetchAndReconcileReferencesOutput,
     IngestNewNovaFinalizeOutput,
     IngestNewNovaTerminalOutput,
     InitializeNovaFinalizeOutput,
@@ -1002,12 +1002,10 @@ class TestRefreshReferences:
         )
         assert model.finalize.outcome == "SUCCEEDED"
         assert model.idempotency is not None, "idempotency absent on happy path"
-        assert model.fetch is not None, "fetch absent on happy path"
-        assert isinstance(model.fetch, FetchReferenceCandidatesOutput)
-        assert model.fetch.candidate_count >= 0
-        assert model.fetch.nova_id == nova_id
-        assert model.reconcile is not None, "reconcile absent on happy path"
-        assert isinstance(model.reconcile, list)
+        assert model.reconcile_summary is not None, "reconcile_summary absent on happy path"
+        assert isinstance(model.reconcile_summary, FetchAndReconcileReferencesOutput)
+        assert model.reconcile_summary.total_candidates >= 0
+        assert model.reconcile_summary.nova_id == nova_id
         assert model.discovery is not None, "discovery absent on happy path"
         assert model.discovery.nova_id == nova_id
         assert model.discovery_upsert is not None, "discovery_upsert absent on happy path"
@@ -1068,14 +1066,9 @@ class TestRefreshReferences:
         )
         assert model.finalize.outcome == "SUCCEEDED"
 
-        assert model.fetch is not None
-        assert model.fetch.candidate_count == 0
-        assert model.fetch.candidates == []
-
-        assert model.reconcile is not None
-        assert model.reconcile == [], (
-            f"Expected empty reconcile list for zero-ADS-hit nova, got {model.reconcile}"
-        )
+        assert model.reconcile_summary is not None
+        assert model.reconcile_summary.total_candidates == 0
+        assert model.reconcile_summary.reconciled == 0
 
         assert model.discovery is not None
         assert model.discovery.earliest_bibcode is None

@@ -6,39 +6,37 @@ directly in ASL order, sharing a single mocked AWS environment (DynamoDB,
 Secrets Manager, SNS) via moto. ADS HTTP calls are patched via requests.
 
 Workflow order (per refresh_references.asl.json):
-  BeginJobRun → AcquireIdempotencyLock → FetchReferenceCandidates →
-  ReconcileReferences (Map: NormalizeReference → UpsertReferenceEntity →
-  LinkNovaReference | ItemFailureHandler) → ComputeDiscoveryDate →
-  UpsertDiscoveryDateMetadata → FinalizeJobRunSuccess |
-  TerminalFailHandler → FinalizeJobRunFailed
+  BeginJobRun → AcquireIdempotencyLock → FetchAndReconcileReferences →
+  ComputeDiscoveryDate → UpsertDiscoveryDateMetadata →
+  FinalizeJobRunSuccess | TerminalFailHandler → FinalizeJobRunFailed
 
-Map ResultPath notes (from ASL):
-  NormalizeReference:      no ResultPath → replaces entire item state
-  UpsertReferenceEntity:   no ResultPath → replaces entire item state
-  LinkNovaReference:       no ResultPath → replaces entire item state (End)
-  ItemFailureHandler:      ResultPath=$.quarantine → preserves item state
+FetchAndReconcileReferences is a single Lambda invocation that internally
+performs: ADS query → per-candidate (normalize → upsert → link), with
+per-item error isolation (quarantine). The full candidate list never
+transits through SFn state.
 
 Top-level ResultPath notes:
-  FetchReferenceCandidates:    ResultPath=$.fetch
-  ReconcileReferences:         ResultPath=$.reconcile
-  ComputeDiscoveryDate:        ResultPath=$.discovery
-  UpsertDiscoveryDateMetadata: ResultPath=$.discovery_upsert
-  FinalizeJobRunSuccess:       ResultPath=$.finalize
+  FetchAndReconcileReferences:   ResultPath=$.reconcile_summary
+  ComputeDiscoveryDate:          ResultPath=$.discovery
+  UpsertDiscoveryDateMetadata:   ResultPath=$.discovery_upsert
+  FinalizeJobRunSuccess:         ResultPath=$.finalize
 
 Paths covered:
-  1. Happy path — ADS returns two candidates; all Map items succeed; earlier
+  1. Happy path — ADS returns two candidates; all items succeed; earlier
      discovery date is written to the Nova item; JobRun ends SUCCEEDED
-  2. Empty candidates — ADS returns no results; Map is a no-op; workflow
-     still reaches FinalizeJobRunSuccess; no discovery date is set
+  2. Empty candidates — ADS returns no results; reconcile is a no-op;
+     workflow still reaches FinalizeJobRunSuccess; no discovery date is set
   3. Discovery date no-op — Nova already has an earlier date;
      UpsertDiscoveryDateMetadata is a no-op (updated: False)
-  4. Item-level quarantine — one candidate fails NormalizeReference;
-     ItemFailureHandler (QuarantineHandler) fires and continues; remaining
+  4. Item-level quarantine — one candidate fails NormalizeReference inside
+     the combined Lambda; quarantine diagnostics are persisted; remaining
      items succeed; JobRun ends SUCCEEDED
-  5. Terminal failure — FetchReferenceCandidates raises TerminalError; ASL
-     routes to TerminalFailHandler → FinalizeJobRunFailed; JobRun ends FAILED
-  6. Idempotency — running the Map tasks twice for the same nova does not
-     produce duplicate NOVAREF items (LinkNovaReference is idempotent)
+  5. Terminal failure — FetchAndReconcileReferences raises TerminalError
+     (nova not found); ASL routes to TerminalFailHandler →
+     FinalizeJobRunFailed; JobRun ends FAILED
+  6. Idempotency — running the combined function twice for the same nova
+     does not produce duplicate NOVAREF items (LinkNovaReference is
+     idempotent)
 """
 
 from __future__ import annotations
@@ -253,62 +251,36 @@ def _run_prefix(h: dict[str, types.ModuleType]) -> dict[str, Any]:
     }
 
 
-def _run_map_item(
-    h: dict[str, types.ModuleType],
-    state: dict[str, Any],
-    raw_doc: dict[str, Any],
-) -> None:
-    """
-    Run one Map item through the full happy path:
-      NormalizeReference → UpsertReferenceEntity → LinkNovaReference.
-
-    Mirrors the ASL chain: each task's output (with no ResultPath) becomes
-    the next task's input. task_name is injected at each step as the ASL
-    Parameters block would.
-    """
-    # NormalizeReference: receives ItemSelector fields (no ResultPath → replaces state)
-    normalized = cast(
-        dict[str, Any],
-        h["reference_manager"].handle(
-            {
-                "task_name": "NormalizeReference",
-                "nova_id": state["nova_id"],
-                "correlation_id": state["job_run"]["correlation_id"],
-                "job_run": state["job_run"],
-                **raw_doc,
-            },
-            None,
-        ),
-    )
-
-    # UpsertReferenceEntity: receives NormalizeReference output (no ResultPath → replaces state)
-    upserted = cast(
-        dict[str, Any],
-        h["reference_manager"].handle(
-            {
-                "task_name": "UpsertReferenceEntity",
-                **normalized,
-            },
-            None,
-        ),
-    )
-
-    # LinkNovaReference: receives UpsertReferenceEntity output (no ResultPath, End: true)
-    h["reference_manager"].handle(
-        {
-            "task_name": "LinkNovaReference",
-            **upserted,
-        },
-        None,
-    )
-
-
-def _run_post_map(
+def _run_fetch_and_reconcile(
     h: dict[str, types.ModuleType],
     state: dict[str, Any],
 ) -> dict[str, Any]:
     """
-    Run the post-Map states: ComputeDiscoveryDate → UpsertDiscoveryDateMetadata.
+    Run the combined FetchAndReconcileReferences task.
+    Returns the lightweight summary.
+    """
+    return cast(
+        dict[str, Any],
+        h["reference_manager"].handle(
+            {
+                "task_name": "FetchAndReconcileReferences",
+                "workflow_name": "refresh_references",
+                "nova_id": _NOVA_ID,
+                "correlation_id": state["job_run"]["correlation_id"],
+                "job_run_id": state["job_run"]["job_run_id"],
+                "job_run": state["job_run"],
+            },
+            None,
+        ),
+    )
+
+
+def _run_post_reconcile(
+    h: dict[str, types.ModuleType],
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Run the post-reconcile states: ComputeDiscoveryDate → UpsertDiscoveryDateMetadata.
 
     Both use ResultPath so the top-level state is preserved. Returns the
     UpsertDiscoveryDateMetadata result for assertion.
@@ -403,21 +375,13 @@ class TestHappyPath:
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
+                summary = _run_fetch_and_reconcile(h, state)
 
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "FetchReferenceCandidates",
-                        "workflow_name": "refresh_references",
-                        "nova_id": _NOVA_ID,
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run_id": state["job_run"]["job_run_id"],
-                    },
-                    None,
-                )
+                assert summary["total_candidates"] == 2
+                assert summary["reconciled"] == 2
+                assert summary["quarantined"] == 0
 
-                _run_map_item(h, state, _RAW_DOC_A)
-                _run_map_item(h, state, _RAW_DOC_B)
-                _run_post_map(h, state)
+                _run_post_reconcile(h, state)
                 _run_finalize_success(h, state)
 
         job_run_item = _get_job_run(table, state)
@@ -435,18 +399,7 @@ class TestHappyPath:
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "FetchReferenceCandidates",
-                        "workflow_name": "refresh_references",
-                        "nova_id": _NOVA_ID,
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run_id": state["job_run"]["job_run_id"],
-                    },
-                    None,
-                )
-                _run_map_item(h, state, _RAW_DOC_A)
-                _run_map_item(h, state, _RAW_DOC_B)
+                _run_fetch_and_reconcile(h, state)
 
         ref_a = table.get_item(Key={"PK": f"REFERENCE#{_BIBCODE_A}", "SK": "METADATA"})["Item"]
         ref_b = table.get_item(Key={"PK": f"REFERENCE#{_BIBCODE_B}", "SK": "METADATA"})["Item"]
@@ -467,18 +420,7 @@ class TestHappyPath:
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "FetchReferenceCandidates",
-                        "workflow_name": "refresh_references",
-                        "nova_id": _NOVA_ID,
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run_id": state["job_run"]["job_run_id"],
-                    },
-                    None,
-                )
-                _run_map_item(h, state, _RAW_DOC_A)
-                _run_map_item(h, state, _RAW_DOC_B)
+                _run_fetch_and_reconcile(h, state)
 
         novarefs = _list_novarefs(table)
         bibcodes = {item["bibcode"] for item in novarefs}
@@ -499,19 +441,8 @@ class TestHappyPath:
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "FetchReferenceCandidates",
-                        "workflow_name": "refresh_references",
-                        "nova_id": _NOVA_ID,
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run_id": state["job_run"]["job_run_id"],
-                    },
-                    None,
-                )
-                _run_map_item(h, state, _RAW_DOC_A)
-                _run_map_item(h, state, _RAW_DOC_B)
-                _run_post_map(h, state)
+                _run_fetch_and_reconcile(h, state)
+                _run_post_reconcile(h, state)
                 _run_finalize_success(h, state)
 
         nova = _get_nova(table)
@@ -539,17 +470,7 @@ class TestHappyPath:
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "FetchReferenceCandidates",
-                        "workflow_name": "refresh_references",
-                        "nova_id": _NOVA_ID,
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run_id": state["job_run"]["job_run_id"],
-                    },
-                    None,
-                )
-                _run_map_item(h, state, _RAW_DOC_A)
+                _run_fetch_and_reconcile(h, state)
 
         ref = table.get_item(Key={"PK": f"REFERENCE#{_BIBCODE_A}", "SK": "METADATA"})["Item"]
         assert ref["publication_date"] == "2013-06-00"
@@ -573,23 +494,11 @@ class TestEmptyCandidates:
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
-                fetch = cast(
-                    dict[str, Any],
-                    h["reference_manager"].handle(
-                        {
-                            "task_name": "FetchReferenceCandidates",
-                            "workflow_name": "refresh_references",
-                            "nova_id": _NOVA_ID,
-                            "correlation_id": state["job_run"]["correlation_id"],
-                            "job_run_id": state["job_run"]["job_run_id"],
-                        },
-                        None,
-                    ),
-                )
+                summary = _run_fetch_and_reconcile(h, state)
 
-            # Map receives zero items — skip directly to post-Map states
-            assert fetch["candidate_count"] == 0
-            _run_post_map(h, state)
+            assert summary["total_candidates"] == 0
+            assert summary["reconciled"] == 0
+            _run_post_reconcile(h, state)
             _run_finalize_success(h, state)
 
         job_run_item = _get_job_run(table, state)
@@ -607,18 +516,8 @@ class TestEmptyCandidates:
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "FetchReferenceCandidates",
-                        "workflow_name": "refresh_references",
-                        "nova_id": _NOVA_ID,
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run_id": state["job_run"]["job_run_id"],
-                    },
-                    None,
-                )
-                # No Map items to run
-                _run_post_map(h, state)
+                _run_fetch_and_reconcile(h, state)
+                _run_post_reconcile(h, state)
 
         assert _list_novarefs(table) == []
 
@@ -634,17 +533,8 @@ class TestEmptyCandidates:
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "FetchReferenceCandidates",
-                        "workflow_name": "refresh_references",
-                        "nova_id": _NOVA_ID,
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run_id": state["job_run"]["job_run_id"],
-                    },
-                    None,
-                )
-                upsert_result = _run_post_map(h, state)
+                _run_fetch_and_reconcile(h, state)
+                upsert_result = _run_post_reconcile(h, state)
 
         assert upsert_result["updated"] is False
         assert upsert_result["discovery_date"] is None
@@ -675,19 +565,8 @@ class TestDiscoveryDateNoOp:
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "FetchReferenceCandidates",
-                        "workflow_name": "refresh_references",
-                        "nova_id": _NOVA_ID,
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run_id": state["job_run"]["job_run_id"],
-                    },
-                    None,
-                )
-                _run_map_item(h, state, _RAW_DOC_A)
-                _run_map_item(h, state, _RAW_DOC_B)
-                upsert_result = _run_post_map(h, state)
+                _run_fetch_and_reconcile(h, state)
+                upsert_result = _run_post_reconcile(h, state)
 
         assert upsert_result["updated"] is False
         nova = _get_nova(table)
@@ -705,207 +584,175 @@ class TestDiscoveryDateNoOp:
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "FetchReferenceCandidates",
-                        "workflow_name": "refresh_references",
-                        "nova_id": _NOVA_ID,
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run_id": state["job_run"]["job_run_id"],
-                    },
-                    None,
-                )
-                _run_map_item(h, state, _RAW_DOC_B)
-                upsert_result = _run_post_map(h, state)
+                _run_fetch_and_reconcile(h, state)
+                upsert_result = _run_post_reconcile(h, state)
 
         assert upsert_result["updated"] is False
 
 
 # ---------------------------------------------------------------------------
-# Path 4: Item-level quarantine — one candidate fails, Map continues
+# Path 4: Item-level quarantine — one candidate fails, processing continues
 # ---------------------------------------------------------------------------
 
 
 class TestItemLevelQuarantine:
-    def test_quarantine_handler_fires_on_normalize_failure(self, table: Any) -> None:
+    def test_bad_bibcode_quarantined_good_bibcode_succeeds(self, table: Any) -> None:
         """
-        When NormalizeReference raises (simulated by passing a doc with no
-        bibcode), the ASL routes to ItemFailureHandler (QuarantineHandler).
-        The handler should persist quarantine diagnostics onto the JobRun.
+        When one candidate has no bibcode (fails NormalizeReference), the
+        combined function quarantines it and continues. The remaining good
+        candidate is linked and its date is computed.
         """
-        with mock_aws():
-            _seed_nova(table)
-            h = _load_handlers()
+        bad_doc: dict[str, Any] = {
+            "bibcode": None,
+            "doctype": "article",
+            "title": None,
+            "date": None,
+            "author": [],
+            "doi": None,
+            "identifier": [],
+        }
 
-            state = _run_prefix(h)
-
-            # Simulate NormalizeReference failing — bad_doc has no bibcode
-            bad_doc: dict[str, Any] = {
-                "bibcode": None,
-                "doctype": "article",
-                "title": None,
-                "date": None,
-                "author": [],
-                "doi": None,
-                "identifier": [],
-            }
-
-            from nova_common.errors import TerminalError
-
-            with pytest.raises(TerminalError, match="bibcode"):
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "NormalizeReference",
-                        "nova_id": state["nova_id"],
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run": state["job_run"],
-                        **bad_doc,
-                    },
-                    None,
-                )
-
-            # ASL Catch routes to ItemFailureHandler (QuarantineHandler).
-            # The item state at this point still has nova_id, bibcode (None here),
-            # correlation_id, and job_run from the ItemSelector projection.
-            quarantine_result = cast(
-                dict[str, Any],
-                h["quarantine_handler"].handle(
-                    {
-                        "task_name": "QuarantineHandler",
-                        "workflow_name": "refresh_references",
-                        "quarantine_reason_code": "OTHER",
-                        "nova_id": state["nova_id"],
-                        "bibcode": bad_doc["bibcode"],
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run": state["job_run"],
-                    },
-                    None,
-                ),
-            )
-
-        assert quarantine_result["quarantine_reason_code"] == "OTHER"
-        assert "error_fingerprint" in quarantine_result
-        assert "quarantined_at" in quarantine_result
-
-    def test_quarantine_diagnostics_written_to_job_run(self, table: Any) -> None:
-        """QuarantineHandler persists quarantine fields onto the existing JobRun."""
-        with mock_aws():
-            _seed_nova(table)
-            h = _load_handlers()
-
-            state = _run_prefix(h)
-
-            h["quarantine_handler"].handle(
-                {
-                    "task_name": "QuarantineHandler",
-                    "workflow_name": "refresh_references",
-                    "quarantine_reason_code": "OTHER",
-                    "nova_id": state["nova_id"],
-                    "bibcode": _BIBCODE_A,
-                    "correlation_id": state["job_run"]["correlation_id"],
-                    "job_run": state["job_run"],
-                },
-                None,
-            )
-
-        job_run_item = _get_job_run(table, state)
-        assert job_run_item["quarantine_reason_code"] == "OTHER"
-        assert "error_fingerprint" in job_run_item
-        assert "quarantined_at" in job_run_item
-
-    def test_remaining_items_succeed_after_quarantine(self, table: Any) -> None:
-        """
-        After one item is quarantined, the Map continues. The remaining
-        good candidate (_RAW_DOC_B) is linked and its date is computed.
-        """
         with mock_aws():
             _seed_nova(table)
             h = _load_handlers()
 
             with patch.object(h["reference_manager"], "requests") as mock_requests:
-                mock_requests.get.return_value = _mock_ads_response([_RAW_DOC_B])
+                mock_requests.get.return_value = _mock_ads_response([bad_doc, _RAW_DOC_B])
                 mock_requests.exceptions.Timeout = Exception
                 mock_requests.exceptions.RequestException = Exception
 
                 state = _run_prefix(h)
-                h["reference_manager"].handle(
-                    {
-                        "task_name": "FetchReferenceCandidates",
-                        "workflow_name": "refresh_references",
-                        "nova_id": _NOVA_ID,
-                        "correlation_id": state["job_run"]["correlation_id"],
-                        "job_run_id": state["job_run"]["job_run_id"],
-                    },
-                    None,
-                )
+                summary = _run_fetch_and_reconcile(h, state)
 
-            # Simulate first item quarantined — skip its Map steps
-            h["quarantine_handler"].handle(
-                {
-                    "task_name": "QuarantineHandler",
-                    "workflow_name": "refresh_references",
-                    "quarantine_reason_code": "OTHER",
-                    "nova_id": state["nova_id"],
-                    "bibcode": _BIBCODE_A,
-                    "correlation_id": state["job_run"]["correlation_id"],
-                    "job_run": state["job_run"],
-                },
-                None,
-            )
-
-            # Second item (_RAW_DOC_B) succeeds
-            _run_map_item(h, state, _RAW_DOC_B)
-            _run_post_map(h, state)
-            _run_finalize_success(h, state)
+        assert summary["total_candidates"] == 2
+        assert summary["reconciled"] == 1
+        assert summary["quarantined"] == 1
+        assert "unknown" in summary["quarantined_bibcodes"]
 
         # Only _BIBCODE_B should be linked
         novarefs = _list_novarefs(table)
         assert len(novarefs) == 1
         assert novarefs[0]["bibcode"] == _BIBCODE_B
 
-        job_run_item = _get_job_run(table, state)
-        assert job_run_item["status"] == "SUCCEEDED"
+    def test_quarantine_diagnostics_written_to_job_run(self, table: Any) -> None:
+        """
+        When a candidate is quarantined, the combined function persists
+        quarantine diagnostics (reason_code, fingerprint, timestamp) onto
+        the existing JobRun record.
+        """
+        bad_doc: dict[str, Any] = {
+            "bibcode": None,
+            "doctype": "article",
+            "title": None,
+            "date": None,
+            "author": [],
+            "doi": None,
+            "identifier": [],
+        }
 
-    def test_job_run_ends_succeeded_despite_quarantined_item(self, table: Any) -> None:
-        """
-        The Map's item-level quarantine path does not fail the workflow.
-        FinalizeJobRunSuccess is still reachable after a quarantined item.
-        """
         with mock_aws():
             _seed_nova(table)
             h = _load_handlers()
-            state = _run_prefix(h)
 
-            h["quarantine_handler"].handle(
-                {
-                    "task_name": "QuarantineHandler",
-                    "workflow_name": "refresh_references",
-                    "quarantine_reason_code": "OTHER",
-                    "nova_id": state["nova_id"],
-                    "bibcode": _BIBCODE_A,
-                    "correlation_id": state["job_run"]["correlation_id"],
-                    "job_run": state["job_run"],
-                },
-                None,
-            )
+            with patch.object(h["reference_manager"], "requests") as mock_requests:
+                mock_requests.get.return_value = _mock_ads_response([bad_doc, _RAW_DOC_B])
+                mock_requests.exceptions.Timeout = Exception
+                mock_requests.exceptions.RequestException = Exception
 
-            _run_post_map(h, state)
-            _run_finalize_success(h, state)
+                state = _run_prefix(h)
+                _run_fetch_and_reconcile(h, state)
+
+        job_run_item = _get_job_run(table, state)
+        assert job_run_item["quarantine_reason_code"] == "OTHER"
+        assert "error_fingerprint" in job_run_item
+        assert "quarantined_at" in job_run_item
+
+    def test_job_run_ends_succeeded_despite_quarantined_item(self, table: Any) -> None:
+        """
+        Item-level quarantine does not fail the workflow. FinalizeJobRunSuccess
+        is still reachable after a quarantined item.
+        """
+        bad_doc: dict[str, Any] = {
+            "bibcode": None,
+            "doctype": "article",
+            "title": None,
+            "date": None,
+            "author": [],
+            "doi": None,
+            "identifier": [],
+        }
+
+        with mock_aws():
+            _seed_nova(table)
+            h = _load_handlers()
+
+            with patch.object(h["reference_manager"], "requests") as mock_requests:
+                mock_requests.get.return_value = _mock_ads_response([bad_doc, _RAW_DOC_B])
+                mock_requests.exceptions.Timeout = Exception
+                mock_requests.exceptions.RequestException = Exception
+
+                state = _run_prefix(h)
+                _run_fetch_and_reconcile(h, state)
+                _run_post_reconcile(h, state)
+                _run_finalize_success(h, state)
 
         job_run_item = _get_job_run(table, state)
         assert job_run_item["status"] == "SUCCEEDED"
 
+    def test_quarantined_bibcodes_in_summary(self, table: Any) -> None:
+        """
+        The combined function returns quarantined_bibcodes in the summary
+        so downstream states (or operator tooling) can see which ones failed.
+        """
+        bad_doc_1: dict[str, Any] = {
+            "bibcode": None,
+            "doctype": "article",
+            "title": None,
+            "date": None,
+            "author": [],
+            "doi": None,
+            "identifier": [],
+        }
+        bad_doc_2: dict[str, Any] = {
+            "bibcode": "FAKE.BIBCODE.001",
+            "doctype": None,
+            "title": None,
+            "date": "not-a-date",
+            "author": [],
+            "doi": None,
+            "identifier": [],
+        }
+
+        with mock_aws():
+            _seed_nova(table)
+            h = _load_handlers()
+
+            with patch.object(h["reference_manager"], "requests") as mock_requests:
+                mock_requests.get.return_value = _mock_ads_response(
+                    [bad_doc_1, _RAW_DOC_B, bad_doc_2]
+                )
+                mock_requests.exceptions.Timeout = Exception
+                mock_requests.exceptions.RequestException = Exception
+
+                state = _run_prefix(h)
+                summary = _run_fetch_and_reconcile(h, state)
+
+        # bad_doc_1 has no bibcode → quarantined as "unknown"
+        # bad_doc_2 has a bibcode but is otherwise valid (normalize will succeed)
+        # _RAW_DOC_B succeeds
+        assert summary["reconciled"] + summary["quarantined"] == 3
+
 
 # ---------------------------------------------------------------------------
-# Path 5: Terminal failure — FetchReferenceCandidates raises TerminalError
+# Path 5: Terminal failure — FetchAndReconcileReferences raises TerminalError
 # ---------------------------------------------------------------------------
 
 
 class TestTerminalFailure:
     def test_missing_nova_raises_terminal_error(self, table: Any) -> None:
         """
-        FetchReferenceCandidates raises TerminalError when the nova does not
-        exist in DDB. The ASL Catch routes to TerminalFailHandler.
+        FetchAndReconcileReferences raises TerminalError when the nova does
+        not exist in DDB. The ASL Catch routes to TerminalFailHandler.
         """
         with mock_aws():
             # Deliberately do NOT seed the nova
@@ -920,16 +767,7 @@ class TestTerminalFailure:
                 from nova_common.errors import TerminalError
 
                 with pytest.raises(TerminalError, match="Nova not found"):
-                    h["reference_manager"].handle(
-                        {
-                            "task_name": "FetchReferenceCandidates",
-                            "workflow_name": "refresh_references",
-                            "nova_id": _NOVA_ID,
-                            "correlation_id": state["job_run"]["correlation_id"],
-                            "job_run_id": state["job_run"]["job_run_id"],
-                        },
-                        None,
-                    )
+                    _run_fetch_and_reconcile(h, state)
 
             # ASL routes to TerminalFailHandler then FinalizeJobRunFailed
             h["job_run_manager"].handle(
@@ -1014,26 +852,31 @@ class TestTerminalFailure:
 
 
 # ---------------------------------------------------------------------------
-# Path 6: Idempotency — Map tasks are safe to run twice
+# Path 6: Idempotency — combined function is safe to run twice
 # ---------------------------------------------------------------------------
 
 
 class TestIdempotency:
-    def test_running_map_items_twice_does_not_duplicate_novaref(self, table: Any) -> None:
+    def test_running_combined_function_twice_does_not_duplicate_novaref(self, table: Any) -> None:
         """
-        LinkNovaReference uses a conditional put. Running the same item through
-        the Map chain twice produces exactly one NOVAREF item, not two.
-        This covers the case where a Map execution is retried.
+        LinkNovaReference uses a conditional put. Running the combined function
+        twice for the same nova produces exactly one NOVAREF item per bibcode,
+        not two. This covers the case where the Lambda is retried.
         """
         with mock_aws():
             _seed_nova(table)
             h = _load_handlers()
-            state = _run_prefix(h)
 
-            # First pass
-            _run_map_item(h, state, _RAW_DOC_A)
-            # Second pass — simulates a Map retry
-            _run_map_item(h, state, _RAW_DOC_A)
+            with patch.object(h["reference_manager"], "requests") as mock_requests:
+                mock_requests.get.return_value = _mock_ads_response([_RAW_DOC_A])
+                mock_requests.exceptions.Timeout = Exception
+                mock_requests.exceptions.RequestException = Exception
+
+                state = _run_prefix(h)
+                # First pass
+                _run_fetch_and_reconcile(h, state)
+                # Second pass — simulates a Lambda retry
+                _run_fetch_and_reconcile(h, state)
 
         novarefs = _list_novarefs(table)
         assert len(novarefs) == 1
@@ -1047,18 +890,25 @@ class TestIdempotency:
         with mock_aws():
             _seed_nova(table)
             h = _load_handlers()
-            state = _run_prefix(h)
 
-            _run_map_item(h, state, _RAW_DOC_A)
-            original_created = table.get_item(
-                Key={"PK": f"REFERENCE#{_BIBCODE_A}", "SK": "METADATA"}
-            )["Item"]["created_at"]
+            with patch.object(h["reference_manager"], "requests") as mock_requests:
+                mock_requests.get.return_value = _mock_ads_response([_RAW_DOC_A])
+                mock_requests.exceptions.Timeout = Exception
+                mock_requests.exceptions.RequestException = Exception
 
-            # Second pass
-            _run_map_item(h, state, _RAW_DOC_A)
-            item_after_retry = table.get_item(
-                Key={"PK": f"REFERENCE#{_BIBCODE_A}", "SK": "METADATA"}
-            )["Item"]
+                state = _run_prefix(h)
+                _run_fetch_and_reconcile(h, state)
+
+                original_created = table.get_item(
+                    Key={"PK": f"REFERENCE#{_BIBCODE_A}", "SK": "METADATA"}
+                )["Item"]["created_at"]
+
+                # Second pass
+                _run_fetch_and_reconcile(h, state)
+
+                item_after_retry = table.get_item(
+                    Key={"PK": f"REFERENCE#{_BIBCODE_A}", "SK": "METADATA"}
+                )["Item"]
 
         assert item_after_retry["created_at"] == original_created
 
@@ -1070,16 +920,21 @@ class TestIdempotency:
         with mock_aws():
             _seed_nova(table)
             h = _load_handlers()
-            state = _run_prefix(h)
 
-            _run_map_item(h, state, _RAW_DOC_B)
+            with patch.object(h["reference_manager"], "requests") as mock_requests:
+                mock_requests.get.return_value = _mock_ads_response([_RAW_DOC_B])
+                mock_requests.exceptions.Timeout = Exception
+                mock_requests.exceptions.RequestException = Exception
 
-            # First post-map run writes the date
-            first_result = _run_post_map(h, state)
-            assert first_result["updated"] is True
-            assert first_result["discovery_date"] == "1992-01-00"
+                state = _run_prefix(h)
+                _run_fetch_and_reconcile(h, state)
 
-            # Second post-map run with the same date is a no-op
-            second_result = _run_post_map(h, state)
-            assert second_result["updated"] is False
-            assert second_result["discovery_date"] == "1992-01-00"
+                # First post-reconcile run writes the date
+                first_result = _run_post_reconcile(h, state)
+                assert first_result["updated"] is True
+                assert first_result["discovery_date"] == "1992-01-00"
+
+                # Second post-reconcile run with the same date is a no-op
+                second_result = _run_post_reconcile(h, state)
+                assert second_result["updated"] is False
+                assert second_result["discovery_date"] == "1992-01-00"

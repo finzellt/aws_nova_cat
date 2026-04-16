@@ -97,7 +97,11 @@ _STANDARD_HANDLERS: list[tuple[str, str, str]] = [
     ("workflow_launcher.handler", "workflow_launcher.handler.logger", "PublishIngestNewNova"),
     ("quarantine_handler.handler", "quarantine_handler.handler.logger", "QuarantineHandler"),
     ("artifact_finalizer.handler", "artifact_finalizer.handler.logger", "Finalize"),
-    ("reference_manager.handler", "reference_manager.handler.logger", "FetchReferenceCandidates"),
+    (
+        "reference_manager.handler",
+        "reference_manager.handler.logger",
+        "FetchAndReconcileReferences",
+    ),
     ("spectra_acquirer.handler", "spectra_acquirer.handler.logger", "AcquireArtifact"),
 ]
 

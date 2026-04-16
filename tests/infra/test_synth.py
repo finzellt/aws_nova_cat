@@ -257,7 +257,7 @@ _ZIP_FUNCTIONS: dict[str, dict[str, int]] = {
     "nova-cat-job-run-manager": {"memory": 256, "timeout": 30},
     "nova-cat-idempotency-guard": {"memory": 256, "timeout": 30},
     "nova-cat-workflow-launcher": {"memory": 256, "timeout": 300},
-    "nova-cat-reference-manager": {"memory": 256, "timeout": 90},
+    "nova-cat-reference-manager": {"memory": 256, "timeout": 180},
     "nova-cat-spectra-acquirer": {"memory": 512, "timeout": 900},
     "nova-cat-photometry-ingestor": {"memory": 512, "timeout": 300},
     "nova-cat-quarantine-handler": {"memory": 256, "timeout": 30},

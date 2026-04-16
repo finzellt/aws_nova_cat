@@ -1045,7 +1045,7 @@ class TestDispatch:
             with pytest.raises(ValueError, match="Unknown task_name"):
                 h.handle(_base_event(task_name="NonExistentTask"), None)
 
-    def test_all_six_task_names_are_registered(self, table: Any) -> None:
+    def test_all_seven_task_names_are_registered(self, table: Any) -> None:
         with mock_aws():
             h = _load_handler()
             expected = {
@@ -1053,6 +1053,7 @@ class TestDispatch:
                 "NormalizeReference",
                 "UpsertReferenceEntity",
                 "LinkNovaReference",
+                "FetchAndReconcileReferences",
                 "ComputeDiscoveryDate",
                 "UpsertDiscoveryDateMetadata",
             }
@@ -1147,3 +1148,114 @@ class TestADSCollectionFilter:
         with mock_aws():
             h = _load_handler()
             assert h._ADS_COLLECTION_FILTER == "collection:(astronomy OR physics)"
+
+
+# ===========================================================================
+# TestFetchAndReconcileReferences
+# ===========================================================================
+
+
+class TestFetchAndReconcileReferences:
+    """Unit tests for the combined FetchAndReconcileReferences task."""
+
+    def _run(
+        self,
+        table: Any,
+        ads_docs: list[dict[str, Any]],
+        job_run: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _seed_nova(table)
+        _create_ads_secret()
+        h = _load_handler()
+        with patch.object(h, "requests") as mock_requests:
+            mock_requests.get.return_value = _mock_ads_response(ads_docs)
+            mock_requests.exceptions.Timeout = Exception
+            mock_requests.exceptions.RequestException = Exception
+            event: dict[str, Any] = {
+                "task_name": "FetchAndReconcileReferences",
+                "workflow_name": "refresh_references",
+                "nova_id": _NOVA_ID,
+                "correlation_id": "corr-ref-001",
+            }
+            if job_run is not None:
+                event["job_run"] = job_run
+            return cast(dict[str, Any], h.handle(event, None))
+
+    def test_returns_correct_summary_shape(self, table: Any) -> None:
+        with mock_aws():
+            result = self._run(table, [_RAW_DOC_A, _RAW_DOC_B])
+        assert result["nova_id"] == _NOVA_ID
+        assert result["total_candidates"] == 2
+        assert result["reconciled"] == 2
+        assert result["quarantined"] == 0
+        assert result["quarantined_bibcodes"] == []
+
+    def test_references_written_to_ddb(self, table: Any) -> None:
+        with mock_aws():
+            self._run(table, [_RAW_DOC_A, _RAW_DOC_B])
+            ref_a = table.get_item(Key={"PK": f"REFERENCE#{_BIBCODE_A}", "SK": "METADATA"})["Item"]
+            ref_b = table.get_item(Key={"PK": f"REFERENCE#{_BIBCODE_B}", "SK": "METADATA"})["Item"]
+        assert ref_a["bibcode"] == _BIBCODE_A
+        assert ref_b["bibcode"] == _BIBCODE_B
+
+    def test_novaref_links_written(self, table: Any) -> None:
+        with mock_aws():
+            self._run(table, [_RAW_DOC_A, _RAW_DOC_B])
+            novarefs = table.query(
+                KeyConditionExpression=(Key("PK").eq(_NOVA_ID) & Key("SK").begins_with("NOVAREF#"))
+            )["Items"]
+        bibcodes = {item["bibcode"] for item in novarefs}
+        assert bibcodes == {_BIBCODE_A, _BIBCODE_B}
+
+    def test_empty_candidates(self, table: Any) -> None:
+        with mock_aws():
+            result = self._run(table, [])
+        assert result["total_candidates"] == 0
+        assert result["reconciled"] == 0
+        assert result["quarantined"] == 0
+
+    def test_bad_bibcode_quarantined_good_succeeds(self, table: Any) -> None:
+        bad_doc: dict[str, Any] = {
+            "bibcode": None,
+            "doctype": "article",
+            "title": None,
+            "date": None,
+            "author": [],
+            "doi": None,
+            "identifier": [],
+        }
+        with mock_aws():
+            result = self._run(table, [bad_doc, _RAW_DOC_B])
+        assert result["reconciled"] == 1
+        assert result["quarantined"] == 1
+        assert "unknown" in result["quarantined_bibcodes"]
+
+    def test_quarantine_persists_to_job_run(self, table: Any) -> None:
+        """When a job_run dict is provided, quarantine diagnostics are written."""
+        bad_doc: dict[str, Any] = {
+            "bibcode": None,
+            "doctype": "article",
+            "title": None,
+            "date": None,
+            "author": [],
+            "doi": None,
+            "identifier": [],
+        }
+        # Seed a fake JobRun record
+        with mock_aws():
+            job_run_pk = "WORKFLOW#corr-ref-001"
+            job_run_sk = "JOBRUN#refresh_references#2024-01-01T00:00:00Z#jr-001"
+            table.put_item(
+                Item={
+                    "PK": job_run_pk,
+                    "SK": job_run_sk,
+                    "status": "IN_PROGRESS",
+                }
+            )
+            job_run = {"pk": job_run_pk, "sk": job_run_sk}
+            self._run(table, [bad_doc], job_run=job_run)
+
+            jr_item = table.get_item(Key={"PK": job_run_pk, "SK": job_run_sk})["Item"]
+        assert jr_item["quarantine_reason_code"] == "OTHER"
+        assert "error_fingerprint" in jr_item
+        assert "quarantined_at" in jr_item

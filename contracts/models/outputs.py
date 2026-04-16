@@ -675,6 +675,39 @@ class LinkNovaReferenceOutput(BaseModel):
     linked: Literal[True]  # from handler (always True — failures raise, not return)
 
 
+class FetchAndReconcileReferencesOutput(BaseModel):
+    """
+    Returned by the FetchAndReconcileReferences combined task.
+    ResultPath: $.reconcile_summary
+
+    Replaces the FetchReferenceCandidates → ReconcileReferences Map pattern.
+    Fetches ADS candidates and reconciles each one internally (normalize →
+    upsert → link). Per-item failures are quarantined inside the Lambda.
+    The full candidate list never transits through SFn state.
+
+    Source: services/reference_manager/handler.py :: _handle_fetchAndReconcileReferences()
+    """
+
+    model_config = _OUTPUT_CONFIG
+
+    nova_id: str  # from handler
+    total_candidates: int = Field(
+        description="Total number of ADS candidate docs returned by the query."
+    )  # from handler
+    reconciled: int = Field(
+        description="Number of candidates successfully reconciled (normalize + upsert + link)."
+    )  # from handler
+    quarantined: int = Field(
+        description="Number of candidates that failed and were quarantined."
+    )  # from handler
+    quarantined_bibcodes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Bibcodes of quarantined candidates. 'unknown' for candidates missing a bibcode."
+        ),
+    )  # from handler
+
+
 class ComputeDiscoveryDateOutput(BaseModel):
     """
     Returned by the ComputeDiscoveryDate task.
@@ -1161,44 +1194,28 @@ class RefreshReferencesTerminalOutput(BaseModel):
 
     ── Path-by-path field presence ───────────────────────────────────────
     SUCCEEDED (normal completion — all references reconciled, discovery_date updated):
-      job_run ✓ | idempotency ✓ | fetch ✓ | reconcile ✓ | discovery ✓
+      job_run ✓ | idempotency ✓ | reconcile_summary ✓ | discovery ✓
       discovery_upsert ✓ | finalize ✓
 
     FAILED:
       job_run ✓ | terminal_fail ✓ | finalize ✓
       all other fields present only if the failure occurred after that task ran
 
-    ── $.reconcile shape ─────────────────────────────────────────────────
-    $.reconcile is the ReconcileReferences Map result: a list of per-candidate
-    iteration outputs (MaxConcurrency=5). Element shape depends on path taken:
+    ── $.reconcile_summary shape ─────────────────────────────────────────
+    $.reconcile_summary is the FetchAndReconcileReferences output: a lightweight
+    summary with counts and quarantined bibcodes. The full candidate list never
+    transits through SFn state (eliminating the 256KB payload limit).
 
-    Success path (reached LinkNovaReference End:true, no ResultPath):
-      LinkNovaReferenceOutput-shaped dict
-      {nova_id, bibcode, publication_date, linked}
-
-    Failed path (ItemFailureHandler ran, ResultPath: $.quarantine):
-      Accumulated iteration state at point of failure, plus:
-      {quarantine: QuarantineHandlerOutput}
-
-    Both shapes are present in the same list if any individual references fail.
-    Item-level failures do NOT abort the Map (no ToleratedFailurePercentage
-    override needed — ItemFailureHandler produces a successful iteration result).
+    Per-item failures are quarantined inside the Lambda and reported in
+    quarantined_bibcodes. Item-level quarantine writes diagnostics to the
+    JobRun record directly (DDB update_item, no SNS — see handler for details).
     """
 
     model_config = _OUTPUT_CONFIG
 
     job_run: BeginJobRunOutput
     idempotency: AcquireIdempotencyLockOutput | None = None
-    fetch: FetchReferenceCandidatesOutput | None = None
-    reconcile: list[dict[str, Any]] | None = Field(
-        default=None,
-        description=(
-            "ReconcileReferences Map result. Each element is either a "
-            "LinkNovaReferenceOutput dict (success) or a dict containing "
-            "$.quarantine (QuarantineHandlerOutput) on item-level failure. "
-            "See class docstring for full shape description."
-        ),
-    )
+    reconcile_summary: FetchAndReconcileReferencesOutput | None = None
     discovery: ComputeDiscoveryDateOutput | None = None
     discovery_upsert: UpsertDiscoveryDateMetadataOutput | None = None
     terminal_fail: TerminalFailHandlerOutput | None = None

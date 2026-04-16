@@ -24,9 +24,12 @@ Environment variables (injected by CDK):
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
+import random
 import re
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from urllib.parse import urlencode
@@ -589,6 +592,194 @@ def _handle_upsertDiscoveryDateMetadata(event: dict, context: object) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Combined task: FetchAndReconcileReferences
+# ---------------------------------------------------------------------------
+
+# Quarantine classification reason for refresh_references item-level failures.
+# Matches the "OTHER" reason code used by the ASL ItemFailureHandler.
+_QUARANTINE_REASON_CODE = "OTHER"
+_QUARANTINE_CLASSIFICATION_REASON = (
+    "Quarantine triggered — ambiguous or inconclusive results. Manual review required."
+)
+
+# Per-item retry parameters — matches the ASL Map Iterator retry policy:
+#   MaxAttempts=2, IntervalSeconds=2, BackoffRate=4, JitterStrategy=FULL
+_ITEM_MAX_RETRIES = 2
+_ITEM_RETRY_BASE_SECONDS = 2
+_ITEM_RETRY_BACKOFF_RATE = 4
+
+
+def _compute_quarantine_fingerprint(reason_code: str, workflow_name: str, primary_id: str) -> str:
+    """Short hex digest for cross-referencing quarantine logs.
+
+    Mirrors quarantine_handler._compute_error_fingerprint — same algorithm,
+    kept local to avoid cross-service import.
+    """
+    raw = f"{reason_code}:{workflow_name}:{primary_id}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:12]
+
+
+def _persist_quarantine_to_job_run(
+    *,
+    job_run: dict,
+    nova_id: str,
+    workflow_name: str = "refresh_references",
+) -> str:
+    """Write quarantine diagnostics onto the JobRun DDB record.
+
+    Returns the computed error_fingerprint for inclusion in the summary.
+    """
+    now = _utcnow_iso()
+    fingerprint = _compute_quarantine_fingerprint(_QUARANTINE_REASON_CODE, workflow_name, nova_id)
+
+    _table.update_item(
+        Key={"PK": job_run["pk"], "SK": job_run["sk"]},
+        UpdateExpression=(
+            "SET quarantine_reason_code = :reason_code, "
+            "classification_reason = :classification_reason, "
+            "error_fingerprint = :error_fingerprint, "
+            "quarantined_at = :quarantined_at, "
+            "updated_at = :updated_at"
+        ),
+        ExpressionAttributeValues={
+            ":reason_code": _QUARANTINE_REASON_CODE,
+            ":classification_reason": _QUARANTINE_CLASSIFICATION_REASON,
+            ":error_fingerprint": fingerprint,
+            ":quarantined_at": now,
+            ":updated_at": now,
+        },
+    )
+    return fingerprint
+
+
+def _reconcile_one_candidate(candidate: dict, nova_id: str, context: object) -> dict:
+    """Run normalize → upsert → link for a single ADS candidate.
+
+    Wraps each phase with the per-item retry policy (2 retries, exponential
+    backoff with factor 4, full jitter) for RetryableError only.
+
+    Returns the LinkNovaReference output dict on success.
+    Raises on terminal (non-retryable) errors.
+    """
+
+    def _with_retry(fn: Callable[..., dict], event: dict) -> dict:
+        last_exc: Exception | None = None
+        for attempt in range(_ITEM_MAX_RETRIES + 1):
+            try:
+                return fn(event, context)
+            except RetryableError as exc:
+                last_exc = exc
+                if attempt < _ITEM_MAX_RETRIES:
+                    delay = _ITEM_RETRY_BASE_SECONDS * (_ITEM_RETRY_BACKOFF_RATE**attempt)
+                    time.sleep(random.uniform(0, delay))  # noqa: S311
+                    logger.warning(
+                        "Retrying after RetryableError",
+                        extra={
+                            "attempt": attempt + 1,
+                            "max_retries": _ITEM_MAX_RETRIES,
+                            "error": str(exc),
+                        },
+                    )
+        raise last_exc  # type: ignore[misc]
+
+    # Step 1: Normalize
+    normalize_event = {**candidate, "nova_id": nova_id}
+    normalized = _with_retry(_handle_normalizeReference, normalize_event)
+
+    # Step 2: Upsert Reference entity
+    upserted = _with_retry(_handle_upsertReferenceEntity, normalized)
+
+    # Step 3: Link NovaReference
+    linked = _with_retry(_handle_linkNovaReference, upserted)
+
+    return linked
+
+
+@tracer.capture_method
+def _handle_fetchAndReconcileReferences(event: dict, context: object) -> dict:
+    """
+    Combined task: fetch ADS candidates then reconcile each one internally.
+
+    Replaces the FetchReferenceCandidates → ReconcileReferences Map pattern.
+    The full ADS candidate list never transits through Step Functions state,
+    eliminating the 256KB payload limit bottleneck.
+
+    Per-item error isolation: a single candidate's failure is quarantined
+    (logged + persisted to JobRun) without aborting the loop. Processing
+    continues to the next candidate.
+
+    Output shape (lightweight summary only):
+        {
+            "nova_id": "<uuid>",
+            "total_candidates": N,
+            "reconciled": M,
+            "quarantined": Q,
+            "quarantined_bibcodes": ["bibcode1", ...],
+        }
+    """
+    nova_id: str | None = event.get("nova_id")
+    if not nova_id:
+        raise TerminalError("Missing required field: nova_id")
+
+    correlation_id: str = event.get("correlation_id", "unknown")
+    job_run: dict | None = event.get("job_run")
+
+    # Phase 1: Fetch ADS candidates (reuse existing logic)
+    fetch_result = _handle_fetchReferenceCandidates(event, context)
+    candidates: list[dict] = fetch_result["candidates"]
+
+    # Phase 2: Reconcile each candidate sequentially
+    reconciled = 0
+    quarantined_bibcodes: list[str] = []
+
+    for candidate in candidates:
+        bibcode = candidate.get("bibcode") or "unknown"
+        try:
+            _reconcile_one_candidate(candidate, nova_id, context)
+            reconciled += 1
+        except Exception as exc:
+            quarantined_bibcodes.append(bibcode)
+
+            # Structured quarantine log line — replaces SNS notification
+            logger.warning(
+                "Reference candidate quarantined",
+                extra={
+                    "bibcode": bibcode,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "nova_id": nova_id,
+                    "correlation_id": correlation_id,
+                },
+            )
+
+            # Persist quarantine diagnostics to the JobRun record
+            if job_run:
+                _persist_quarantine_to_job_run(
+                    job_run=job_run,
+                    nova_id=nova_id,
+                )
+
+    logger.info(
+        "FetchAndReconcileReferences complete",
+        extra={
+            "nova_id": nova_id,
+            "total_candidates": len(candidates),
+            "reconciled": reconciled,
+            "quarantined": len(quarantined_bibcodes),
+            "quarantined_bibcodes": quarantined_bibcodes,
+        },
+    )
+
+    return {
+        "nova_id": nova_id,
+        "total_candidates": len(candidates),
+        "reconciled": reconciled,
+        "quarantined": len(quarantined_bibcodes),
+        "quarantined_bibcodes": quarantined_bibcodes,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -631,6 +822,7 @@ _TASK_HANDLERS: dict[str, Callable[[dict, object], dict]] = {
     "NormalizeReference": _handle_normalizeReference,
     "UpsertReferenceEntity": _handle_upsertReferenceEntity,
     "LinkNovaReference": _handle_linkNovaReference,
+    "FetchAndReconcileReferences": _handle_fetchAndReconcileReferences,
     "ComputeDiscoveryDate": _handle_computeDiscoveryDate,
     "UpsertDiscoveryDateMetadata": _handle_upsertDiscoveryDateMetadata,
 }
