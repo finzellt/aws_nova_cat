@@ -169,6 +169,13 @@ TASK_RETURN_SHAPES: dict[str, set[str]] = {
         "publication_date",
         "linked",
     },
+    "FetchAndReconcileReferences": {
+        "nova_id",
+        "total_candidates",
+        "reconciled",
+        "quarantined",
+        "quarantined_bibcodes",
+    },
     "ComputeDiscoveryDate": {
         "nova_id",
         "earliest_bibcode",

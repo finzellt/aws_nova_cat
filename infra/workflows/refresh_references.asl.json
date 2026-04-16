@@ -1,5 +1,5 @@
 {
-    "Comment": "refresh_references workflow \u2014 fetches ADS references for a nova, upserts global Reference entities, links them via NovaReference, and computes discovery_date.",
+    "Comment": "refresh_references workflow — fetches ADS references for a nova, upserts global Reference entities, links them via NovaReference, and computes discovery_date.",
     "StartAt": "BeginJobRun",
     "States": {
         "BeginJobRun": {
@@ -76,37 +76,38 @@
         },
         "EnsureAttributes": {
             "Type": "Choice",
-            "Comment": "Guard for the optional $.attributes field. FetchReferenceCandidates uses a hard JSONPath reference (\"attributes.$\": \"$.attributes\") which throws States.Runtime if the field is absent. When refresh_references is launched by workflow_launcher (the normal path), no attributes field is present \u2014 only operator-triggered re-runs include it. This Choice + Pass pair guarantees $.attributes exists before FetchReferenceCandidates runs.",
+            "Comment": "Guard for the optional $.attributes field. FetchAndReconcileReferences uses a hard JSONPath reference (\"attributes.$\": \"$.attributes\") which throws States.Runtime if the field is absent. When refresh_references is launched by workflow_launcher (the normal path), no attributes field is present — only operator-triggered re-runs include it. This Choice + Pass pair guarantees $.attributes exists before FetchAndReconcileReferences runs.",
             "Choices": [
                 {
                     "Variable": "$.attributes",
                     "IsPresent": true,
-                    "Next": "FetchReferenceCandidates"
+                    "Next": "FetchAndReconcileReferences"
                 }
             ],
             "Default": "DefaultAttributes"
         },
         "DefaultAttributes": {
             "Type": "Pass",
-            "Comment": "Inject an empty attributes dict so FetchReferenceCandidates can safely dereference $.attributes.",
+            "Comment": "Inject an empty attributes dict so FetchAndReconcileReferences can safely dereference $.attributes.",
             "Result": {},
             "ResultPath": "$.attributes",
-            "Next": "FetchReferenceCandidates"
+            "Next": "FetchAndReconcileReferences"
         },
-        "FetchReferenceCandidates": {
+        "FetchAndReconcileReferences": {
             "Type": "Task",
-            "Comment": "Load nova aliases, query ADS by name, return raw candidate docs. Output stored at $.fetch; $.fetch.candidates feeds the ReconcileReferences Map.",
+            "Comment": "Load nova aliases, query ADS, then for each candidate: normalize, upsert Reference entity, link NovaReference. Per-item failures are quarantined inside the Lambda. Returns a lightweight summary (counts + quarantined bibcodes). The full candidate list never transits through SFn state.",
             "Resource": "${ReferenceManagerFunctionArn}",
             "Parameters": {
-                "task_name": "FetchReferenceCandidates",
+                "task_name": "FetchAndReconcileReferences",
                 "workflow_name": "refresh_references",
                 "nova_id.$": "$.nova_id",
                 "correlation_id.$": "$.job_run.correlation_id",
                 "job_run_id.$": "$.job_run.job_run_id",
+                "job_run.$": "$.job_run",
                 "attributes.$": "$.attributes"
             },
-            "ResultPath": "$.fetch",
-            "TimeoutSeconds": 60,
+            "ResultPath": "$.reconcile_summary",
+            "TimeoutSeconds": 180,
             "Retry": [
                 {
                     "ErrorEquals": [
@@ -120,184 +121,6 @@
                     "JitterStrategy": "FULL"
                 }
             ],
-            "Catch": [
-                {
-                    "ErrorEquals": [
-                        "States.ALL"
-                    ],
-                    "Next": "TerminalFailHandler",
-                    "ResultPath": "$.error"
-                }
-            ],
-            "Next": "ReconcileReferences"
-        },
-        "ReconcileReferences": {
-            "Type": "Map",
-            "Comment": "For each ADS candidate doc: normalize, upsert global Reference entity, link to nova. Item-level failures are quarantined and skipped; they do not fail the Map. All ADS_FIELDS are explicitly requested so all keys are present in each item (null when absent from ADS).",
-            "ItemsPath": "$.fetch.candidates",
-            "ItemSelector": {
-                "nova_id.$": "$$.Execution.Input.nova_id",
-                "correlation_id.$": "$$.Execution.Input.correlation_id",
-                "job_run.$": "$.job_run",
-                "bibcode.$": "$$.Map.Item.Value.bibcode",
-                "doctype.$": "$$.Map.Item.Value.doctype",
-                "title.$": "$$.Map.Item.Value.title",
-                "date.$": "$$.Map.Item.Value.date",
-                "author.$": "$$.Map.Item.Value.author",
-                "doi.$": "$$.Map.Item.Value.doi",
-                "identifier.$": "$$.Map.Item.Value.identifier"
-            },
-            "MaxConcurrency": 5,
-            "ResultPath": "$.reconcile",
-            "Iterator": {
-                "StartAt": "NormalizeReference",
-                "States": {
-                    "NormalizeReference": {
-                        "Type": "Task",
-                        "Resource": "${ReferenceManagerFunctionArn}",
-                        "Parameters": {
-                            "task_name": "NormalizeReference",
-                            "nova_id.$": "$.nova_id",
-                            "bibcode.$": "$.bibcode",
-                            "doctype.$": "$.doctype",
-                            "title.$": "$.title",
-                            "date.$": "$.date",
-                            "author.$": "$.author",
-                            "doi.$": "$.doi",
-                            "identifier.$": "$.identifier"
-                        },
-                        "TimeoutSeconds": 20,
-                        "Retry": [
-                            {
-                                "ErrorEquals": [
-                                    "RetryableError",
-                                    "Lambda.TooManyRequestsException",
-                                    "Lambda.ServiceException"
-                                ],
-                                "IntervalSeconds": 2,
-                                "MaxAttempts": 2,
-                                "BackoffRate": 4,
-                                "JitterStrategy": "FULL"
-                            }
-                        ],
-                        "Catch": [
-                            {
-                                "ErrorEquals": [
-                                    "States.ALL"
-                                ],
-                                "Next": "ItemFailureHandler",
-                                "ResultPath": "$.error"
-                            }
-                        ],
-                        "Next": "UpsertReferenceEntity"
-                    },
-                    "UpsertReferenceEntity": {
-                        "Type": "Task",
-                        "Comment": "Write or update global Reference item. PK=REFERENCE#<bibcode>, SK=METADATA. Preserves created_at on update.",
-                        "Resource": "${ReferenceManagerFunctionArn}",
-                        "Parameters": {
-                            "task_name": "UpsertReferenceEntity",
-                            "nova_id.$": "$.nova_id",
-                            "bibcode.$": "$.bibcode",
-                            "reference_type.$": "$.reference_type",
-                            "title.$": "$.title",
-                            "year.$": "$.year",
-                            "publication_date.$": "$.publication_date",
-                            "authors.$": "$.authors",
-                            "doi.$": "$.doi",
-                            "arxiv_id.$": "$.arxiv_id"
-                        },
-                        "TimeoutSeconds": 20,
-                        "Retry": [
-                            {
-                                "ErrorEquals": [
-                                    "RetryableError",
-                                    "Lambda.TooManyRequestsException",
-                                    "Lambda.ServiceException"
-                                ],
-                                "IntervalSeconds": 2,
-                                "MaxAttempts": 2,
-                                "BackoffRate": 4,
-                                "JitterStrategy": "FULL"
-                            }
-                        ],
-                        "Catch": [
-                            {
-                                "ErrorEquals": [
-                                    "States.ALL"
-                                ],
-                                "Next": "ItemFailureHandler",
-                                "ResultPath": "$.error"
-                            }
-                        ],
-                        "Next": "LinkNovaReference"
-                    },
-                    "LinkNovaReference": {
-                        "Type": "Task",
-                        "Comment": "Idempotent upsert of NOVAREF link. PK=<nova_id>, SK=NOVAREF#<bibcode>. ConditionalCheckFailed is silently swallowed.",
-                        "Resource": "${ReferenceManagerFunctionArn}",
-                        "Parameters": {
-                            "task_name": "LinkNovaReference",
-                            "nova_id.$": "$.nova_id",
-                            "bibcode.$": "$.bibcode",
-                            "publication_date.$": "$.publication_date"
-                        },
-                        "TimeoutSeconds": 20,
-                        "Retry": [
-                            {
-                                "ErrorEquals": [
-                                    "RetryableError",
-                                    "Lambda.TooManyRequestsException",
-                                    "Lambda.ServiceException"
-                                ],
-                                "IntervalSeconds": 2,
-                                "MaxAttempts": 2,
-                                "BackoffRate": 4,
-                                "JitterStrategy": "FULL"
-                            }
-                        ],
-                        "Catch": [
-                            {
-                                "ErrorEquals": [
-                                    "States.ALL"
-                                ],
-                                "Next": "ItemFailureHandler",
-                                "ResultPath": "$.error"
-                            }
-                        ],
-                        "End": true
-                    },
-                    "ItemFailureHandler": {
-                        "Type": "Task",
-                        "Resource": "${QuarantineHandlerFunctionArn}",
-                        "Parameters": {
-                            "task_name": "QuarantineHandler",
-                            "workflow_name": "refresh_references",
-                            "quarantine_reason_code": "OTHER",
-                            "nova_id.$": "$.nova_id",
-                            "bibcode.$": "$.bibcode",
-                            "correlation_id.$": "$.correlation_id",
-                            "job_run.$": "$.job_run"
-                        },
-                        "ResultPath": "$.quarantine",
-                        "TimeoutSeconds": 10,
-                        "Retry": [
-                            {
-                                "ErrorEquals": [
-                                    "RetryableError",
-                                    "Lambda.TooManyRequestsException",
-                                    "Lambda.ServiceException"
-                                ],
-                                "IntervalSeconds": 2,
-                                "MaxAttempts": 2,
-                                "BackoffRate": 4,
-                                "JitterStrategy": "FULL"
-                            }
-                        ],
-                        "End": true
-                    }
-                }
-            },
             "Catch": [
                 {
                     "ErrorEquals": [
@@ -348,7 +171,7 @@
         },
         "UpsertDiscoveryDateMetadata": {
             "Type": "Task",
-            "Comment": "Write discovery_date to Nova item only if strictly earlier than current value (monotonically earlier invariant, ADR-005 \u00a74). No-op if unchanged or no date computed.",
+            "Comment": "Write discovery_date to Nova item only if strictly earlier than current value (monotonically earlier invariant, ADR-005 §4). No-op if unchanged or no date computed.",
             "Resource": "${ReferenceManagerFunctionArn}",
             "Parameters": {
                 "task_name": "UpsertDiscoveryDateMetadata",

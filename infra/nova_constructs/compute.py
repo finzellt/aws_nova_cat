@@ -267,7 +267,7 @@ _FUNCTION_SPECS: dict[str, _FunctionSpec] = {
             "Fetches ADS references, upserts Reference entities, links NovaReference "
             "records, and computes discovery_date. Used by: refresh_references."
         ),
-        timeout=cdk.Duration.seconds(90),  # ADS API calls
+        timeout=cdk.Duration.seconds(180),  # ADS API + sequential per-candidate reconcile
     ),
     "spectra_acquirer": _FunctionSpec(
         service_dir="spectra_acquirer",
