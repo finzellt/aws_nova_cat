@@ -193,6 +193,12 @@ def write_spectrum(
     if result.flux_unit is not None:
         dp_item["flux_unit"] = result.flux_unit
 
+    # --- S21: ingestion-time SNR ---
+    if result.snr is not None:
+        dp_item["snr"] = _coerce_for_ddb(result.snr)
+    if result.snr_provenance is not None:
+        dp_item["snr_provenance"] = result.snr_provenance
+
     table.put_item(Item=dp_item)
 
     # ── 2b. Web-ready CSV (ADR-031 P-4) ────────────────────────────────

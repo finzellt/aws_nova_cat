@@ -214,14 +214,19 @@ class TestValidateBytesWavelengthAndSnr:
         assert result["validation_outcome"] == "VALID"
         assert result["snr"] is not None
         assert abs(result["snr"] - expected_median) < 0.01
+        assert result["snr_provenance"] == "source"
 
-    def test_validate_bytes_returns_snr_none_when_absent(self, _moto_infra: dict[str, Any]) -> None:
-        """No SNR column → snr is None."""
+    def test_validate_bytes_falls_back_to_der_snr_when_no_column(
+        self, _moto_infra: dict[str, Any]
+    ) -> None:
+        """No SNR column → DER_SNR fallback populates snr with estimated value."""
         fits_bytes = _make_uves_fits_bytes(include_snr=False)
         result = self._run_validate_bytes(_moto_infra, fits_bytes)
 
         assert result["validation_outcome"] == "VALID"
-        assert result["snr"] is None
+        assert result["snr"] is not None
+        assert result["snr"] > 0.0
+        assert result["snr_provenance"] == "estimated_der_snr"
 
 
 # ---------------------------------------------------------------------------

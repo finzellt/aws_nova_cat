@@ -664,3 +664,116 @@ class TestEnrichmentFieldsOnDdbItem:
         assert "telescope" not in dp
         assert "observation_date_mjd" not in dp
         assert "flux_unit" not in dp
+
+
+# ===================================================================
+# S21: DER_SNR at ingestion time
+# ===================================================================
+
+
+def _write_high_snr_spectrum_csv(
+    tmp_path: Path,
+    *,
+    filename: str = "spectrum_a.csv",
+    n: int = 200,
+) -> Path:
+    """Write a two-column spectrum CSV with enough points for DER_SNR >> 0."""
+    import numpy as np
+
+    rng = np.random.default_rng(42)
+    wavelengths = np.linspace(3100.0, 7450.0, n)
+    fluxes = 1.0e-14 + rng.normal(0, 1.0e-16, n)
+    path = tmp_path / filename
+    path.write_text("\n".join(f"{w},{f}" for w, f in zip(wavelengths, fluxes, strict=False)) + "\n")
+    return path
+
+
+class TestSnrAtIngestionTime:
+    """S21: DER_SNR is computed at ingestion time and stored on SpectrumResult / DDB."""
+
+    def test_der_snr_estimated_on_spectrum_result(self, tmp_path: Path) -> None:
+        """With sufficient flux points, SpectrumResult.snr is populated via DER_SNR."""
+        _write_high_snr_spectrum_csv(tmp_path)
+        _write_metadata_csv(tmp_path, rows=[_standard_metadata_row()])
+        ticket = _make_ticket()
+
+        read_result = read_spectra(tmp_path / "metadata.csv", tmp_path, ticket, _NOVA_ID)
+        sr = read_result.results[0]
+
+        assert sr.snr is not None
+        assert sr.snr > 0.0
+        assert sr.snr_provenance == "estimated_der_snr"
+
+    def test_der_snr_none_for_degenerate_flux(self, tmp_path: Path) -> None:
+        """With too few flux points, SNR is left unset (artifact-gen fallback remains)."""
+        # Default _write_spectrum_csv produces only 3 points → DER_SNR returns 0.0
+        _write_spectrum_csv(tmp_path)
+        _write_metadata_csv(tmp_path, rows=[_standard_metadata_row()])
+        ticket = _make_ticket()
+
+        read_result = read_spectra(tmp_path / "metadata.csv", tmp_path, ticket, _NOVA_ID)
+        sr = read_result.results[0]
+
+        assert sr.snr is None
+        assert sr.snr_provenance is None
+
+    def test_snr_written_to_ddb(self, tmp_path: Path, aws_resources: dict[str, Any]) -> None:
+        """write_spectrum persists snr and snr_provenance on the DataProduct DDB item."""
+        _write_high_snr_spectrum_csv(tmp_path)
+        _write_metadata_csv(tmp_path, rows=[_standard_metadata_row()])
+        ticket = _make_ticket()
+
+        read_result = read_spectra(tmp_path / "metadata.csv", tmp_path, ticket, _NOVA_ID)
+        sr = read_result.results[0]
+
+        table = aws_resources["table"]
+        write_spectrum(
+            result=sr,
+            nova_id=_NOVA_ID,
+            job_run_id=_JOB_RUN_ID,
+            bucket=aws_resources["bucket"],
+            s3=aws_resources["s3"],
+            table=table,
+        )
+
+        dp = table.get_item(
+            Key={
+                "PK": str(_NOVA_ID),
+                "SK": f"PRODUCT#SPECTRA#ticket_ingestion#{sr.data_product_id}",
+            }
+        )["Item"]
+
+        assert "snr" in dp
+        assert float(dp["snr"]) > 0.0
+        assert dp["snr_provenance"] == "estimated_der_snr"
+
+    def test_snr_absent_from_ddb_when_degenerate(
+        self, tmp_path: Path, aws_resources: dict[str, Any]
+    ) -> None:
+        """When DER_SNR fails, snr and snr_provenance are absent from the DDB item."""
+        _write_spectrum_csv(tmp_path)  # 3 points → degenerate
+        _write_metadata_csv(tmp_path, rows=[_standard_metadata_row()])
+        ticket = _make_ticket()
+
+        read_result = read_spectra(tmp_path / "metadata.csv", tmp_path, ticket, _NOVA_ID)
+        sr = read_result.results[0]
+
+        table = aws_resources["table"]
+        write_spectrum(
+            result=sr,
+            nova_id=_NOVA_ID,
+            job_run_id=_JOB_RUN_ID,
+            bucket=aws_resources["bucket"],
+            s3=aws_resources["s3"],
+            table=table,
+        )
+
+        dp = table.get_item(
+            Key={
+                "PK": str(_NOVA_ID),
+                "SK": f"PRODUCT#SPECTRA#ticket_ingestion#{sr.data_product_id}",
+            }
+        )["Item"]
+
+        assert "snr" not in dp
+        assert "snr_provenance" not in dp

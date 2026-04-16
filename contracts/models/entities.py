@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
@@ -836,7 +836,16 @@ class DataProduct(PersistentBase):
     snr: float | None = Field(
         default=None,
         ge=0,
-        description="Median signal-to-noise ratio per pixel, from FITS SNR column when available.",
+        description="Median signal-to-noise ratio per pixel, from FITS SNR column or DER_SNR estimate.",
+    )
+    snr_provenance: Literal["source", "estimated_der_snr"] | None = Field(
+        default=None,
+        description=(
+            "How the SNR value was obtained. "
+            "'source' = extracted from FITS header/column during validation; "
+            "'estimated_der_snr' = computed via DER_SNR (Stoehr et al. 2008) at ingestion time; "
+            "None = SNR not available."
+        ),
     )
 
     # --- composite spectra fields (ADR-033) ---
