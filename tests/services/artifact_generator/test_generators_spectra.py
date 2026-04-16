@@ -25,6 +25,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import boto3
+import numpy as np
 import pytest
 from generators.shared import (
     LTTB_THRESHOLD,
@@ -358,10 +359,12 @@ class TestDisplayWavelengthFields:
     """Top-level display_wavelength_min/max in artifact output."""
 
     def _make_csv(self, wl_min: float, wl_max: float, n: int = 50) -> str:
+        rng = np.random.default_rng(42)
         step = (wl_max - wl_min) / max(n - 1, 1)
         rows = ["wavelength_nm,flux"]
         for i in range(n):
-            rows.append(f"{wl_min + i * step:.2f},1.0")
+            # Signal=1000 + low noise → DER_SNR well above the 5.0 display floor.
+            rows.append(f"{wl_min + i * step:.2f},{1000.0 + rng.normal(0, 5):.6f}")
         return "\n".join(rows)
 
     def _make_product(
@@ -380,6 +383,7 @@ class TestDisplayWavelengthFields:
             "PK": "nova-test",
             "SK": f"PRODUCT#SPECTRA#{dp_id}",
             "validation_status": "VALID",
+            "snr": Decimal("10.0"),
         }
 
     def test_display_fields_present(self) -> None:

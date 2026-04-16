@@ -24,6 +24,7 @@ import csv
 import hashlib
 import io
 import logging
+import math
 import statistics
 import time
 import uuid
@@ -484,7 +485,7 @@ def generate_spectra_json(
     for rec in parsed:
         eff_snr = _compute_effective_snr(rec)
         rec["effective_snr"] = eff_snr
-        if 0 < eff_snr < _SNR_DISPLAY_FLOOR:
+        if not math.isfinite(eff_snr) or eff_snr < _SNR_DISPLAY_FLOOR:
             _logger.info(
                 "Spectrum excluded by SNR display gate",
                 extra={
