@@ -25,6 +25,7 @@ Schema amendments (§11.9):
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from decimal import Decimal
 from typing import Any
 
@@ -35,7 +36,9 @@ from generators.shared import format_coordinates, generated_at_timestamp
 
 _logger = logging.getLogger("artifact_generator")
 
-_SCHEMA_VERSION = "1.1"
+_SCHEMA_VERSION = "1.2"
+
+_TICKET_PROVIDER = "ticket_ingestion"
 
 
 # ---------------------------------------------------------------------------
@@ -70,8 +73,11 @@ def generate_catalog_json(
     # Step 2 — Scan all ACTIVE Nova items from DDB.
     active_novae = _scan_active_novae(table)
 
+    # Step 2b — Scan DataProducts to build per-nova source lists.
+    sources_by_nova = _scan_data_product_sources(table)
+
     # Step 3 — Merge: DDB as base, in-memory as overlay (§11.3).
-    records = _merge_records(active_novae, sweep_overlay)
+    records = _merge_records(active_novae, sweep_overlay, sources_by_nova)
 
     # Step 4 — Sort: spectra_count desc, primary_name asc (§11.6).
     records.sort(key=lambda r: (-r["spectra_count"], r["primary_name"]))
@@ -174,6 +180,73 @@ def _scan_active_novae(table: Any) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# DataProduct source extraction
+# ---------------------------------------------------------------------------
+
+
+def _scan_data_product_sources(
+    table: Any,
+) -> dict[str, list[dict[str, str]]]:
+    """Scan all VALID SPECTRA DataProducts and extract per-nova source lists.
+
+    Returns a dict keyed by nova_id → sorted, deduplicated list of source
+    entry dicts (``{"type": "archive", "provider": "..."}`` or
+    ``{"type": "bibcode", "bibcode": "..."}``).
+
+    Ticket-ingested DataProducts are identified by ``provider ==
+    "ticket_ingestion"``; their bibcode is extracted from the
+    ``locator_identity`` field (format ``ticket_ingestion:<bibcode>:<file>``).
+    """
+    # Collect unique (type, value) tuples per nova.
+    raw: dict[str, set[tuple[str, str]]] = defaultdict(set)
+
+    scan_kwargs: dict[str, Any] = {
+        "FilterExpression": (
+            Attr("SK").begins_with("PRODUCT#SPECTRA#") & Attr("validation_status").eq("VALID")
+        ),
+        "ProjectionExpression": "PK, provider, locator_identity",
+    }
+
+    while True:
+        response: dict[str, Any] = table.scan(**scan_kwargs)
+        for item in response.get("Items", []):
+            nova_id = item.get("PK", "")
+            provider = item.get("provider", "")
+            locator = item.get("locator_identity", "")
+
+            if provider == _TICKET_PROVIDER:
+                # Format: "ticket_ingestion:<bibcode>:<filename>"
+                # Silently skip if the locator is missing or malformed.
+                if locator.startswith("ticket_ingestion:"):
+                    parts = locator.split(":", 2)
+                    if len(parts) >= 2 and parts[1]:
+                        raw[nova_id].add(("bibcode", parts[1]))
+            elif provider:
+                raw[nova_id].add(("archive", provider))
+
+        if response.get("LastEvaluatedKey") is None:
+            break
+        scan_kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+
+    # Convert to sorted list of dicts for deterministic output.
+    result: dict[str, list[dict[str, str]]] = {}
+    for nova_id, entries in raw.items():
+        sources: list[dict[str, str]] = []
+        for kind, value in sorted(entries):
+            if kind == "archive":
+                sources.append({"type": "archive", "provider": value})
+            else:
+                sources.append({"type": "bibcode", "bibcode": value})
+        result[nova_id] = sources
+
+    _logger.info(
+        "DataProduct source scan complete",
+        extra={"novae_with_sources": len(result), "phase": "catalog_sources"},
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Record assembly (§11.3)
 # ---------------------------------------------------------------------------
 
@@ -181,6 +254,7 @@ def _scan_active_novae(table: Any) -> list[dict[str, Any]]:
 def _merge_records(
     active_novae: list[dict[str, Any]],
     sweep_overlay: dict[str, _SweepCounts],
+    sources_by_nova: dict[str, list[dict[str, str]]] | None = None,
 ) -> list[dict[str, Any]]:
     """Merge DDB items with in-memory sweep results.
 
@@ -229,6 +303,9 @@ def _merge_records(
             float(_to_decimal(dec_deg)),
         )
 
+        # Source entries for this nova (§F9).
+        sources = (sources_by_nova or {}).get(nova_id, [])
+
         # Output mapping (§11.5).
         records.append(
             {
@@ -243,6 +320,7 @@ def _merge_records(
                 "references_count": references_count,
                 "has_sparkline": has_sparkline,
                 "spectral_visits": spectral_visits,
+                "sources": sources,
             }
         )
 

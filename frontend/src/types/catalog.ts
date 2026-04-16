@@ -1,7 +1,7 @@
 /**
  * Types for the catalog.json static artifact.
  *
- * Schema version: 1.1 (ADR-014, DESIGN-003 §11.9)
+ * Schema version: 1.2 (ADR-014, DESIGN-003 §11.9, §F9)
  * These types mirror the artifact schema exactly. Field renames are breaking
  * changes — any update here must be coordinated with the backend generation
  * pipeline.
@@ -12,6 +12,21 @@
  *     month and day are "00" when only year precision is available.
  *     Null when no dated references exist for the nova.
  */
+
+/** Archive-provider source (e.g. ESO, AAVSO). */
+export interface ArchiveSource {
+  type: 'archive';
+  provider: string;
+}
+
+/** Bibcode-backed source from ticket ingestion. */
+export interface BibcodeSource {
+  type: 'bibcode';
+  bibcode: string;
+}
+
+/** Discriminated union for data provenance entries. */
+export type SourceEntry = ArchiveSource | BibcodeSource;
 
 /** One entry in the `novae` array of catalog.json. */
 export interface NovaSummary {
@@ -63,6 +78,15 @@ export interface NovaSummary {
    * The light curve column is post-MVP; this flag is reserved for when it lands.
    */
   has_sparkline: boolean;
+
+  /**
+   * Data provenance entries. Each entry is either an archive provider
+   * (e.g. "ESO") or a bibcode from ticket-ingested data.
+   * Empty array when no validated spectra exist for this nova.
+   *
+   * Schema v1.2 (§F9).
+   */
+  sources: SourceEntry[];
 }
 
 /** Aggregate statistics block for the homepage stats bar. */
