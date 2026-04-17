@@ -1,6 +1,6 @@
 # Nova Cat — Post-MVP Master Task List
 
-_Generated: 2026-04-04 · Updated: 2026-04-14 (v8) · Living document_
+_Generated: 2026-04-04 · Updated: 2026-04-16 (v9) · Living document_
 
 ---
 
@@ -22,8 +22,11 @@ Each task has:
 | ID | Task | CC | Dep | Status |
 |----|------|----|-----|--------|
 | B17 | **Fargate logger sorting, blank rows, and structured formatting.** Log format doesn't support chronological sorting in CloudWatch. Also ensure Fargate logs are structured correctly so they can be parsed by the reader app and Logs Insights. | 🟡 | — | ⬜ |
-| B18 | **Radio band registry test fixture missing radio entries.** All 17 `test_band_registry_radio.py` tests fail — resolver returns `None` for every lookup. Radio entries were likely dropped from the test fixture during a band registry rebuild. | 🟢 | — | ⬜ |
+| B18 | **Fake dataset and end-to-end ingestion test suite.** Create a synthetic dataset (spectra + photometry) to ingest as part of a new integration test suite. Validates the full pipeline from ticket ingestion through artifact generation. Related to T2. | 🟡 | — | ⬜ |
 | B19 | **Hard floor for spectra y-axis.** When plotting individual spectra, large chunks get cut off — not just the bottom spectrum. Need hard controls on the minimum y-value. Includes log-scale variant. Part of the long-range spectra.py rebuild (R10). | 🟡 | — | ⬜ |
+| B30 | **Non-positive / non-finite SNR pass-through in display and compositing gates.** Both SNR gates use `0 < snr < floor`, so spectra with `snr ≤ 0` (including `snr = -0.1` values from ESO) and `NaN`/`inf` are not excluded — they display and can enter composites. Fix: tighten both gates to exclude non-positive and non-finite SNR. Silent exclusion per policy decision. | 🟢 | — | ⬜ |
+| B31 | **Catalog pagination lost on browser back.** Navigating to the third page of the catalog, clicking into a nova, then pressing the browser back button returns to the first page instead of the page the user was on. | 🟡 | — | ⬜ |
+| B32 | **Zoom + spectral feature toggle state in waterfall plot.** Toggling spectral features while zoomed in on the waterfall plot causes display issues. Possibly related to B22 (which fixed a similar toggle bug in single-spectrum mode). | 🟡 | — | ⬜ |
 
 ---
 
@@ -43,7 +46,6 @@ Each task has:
 | ID | Task | CC | Dep | Status |
 |----|------|----|-----|--------|
 | S21 | **DER_SNR at ingestion time.** Add DER_SNR computation to the ticket validation profile so new ingestions get SNR at write time, rather than relying solely on the artifact generator fallback. | 🟢 | — | ⬜ |
-| S22 | **SNR gate integration tests.** Tests for the display gate (SNR < 5 excluded from waterfall) and compositing relative gate (< 1/3 group median → rejected). | 🟢 | — | ⬜ |
 
 ---
 
@@ -61,6 +63,7 @@ Each task has:
 |----|------|----|-----|--------|
 | DR1 | **Gamma-ray nova detection pipeline.** Add support for detecting gamma-ray novae via Fermi-LAT references. | 🔴 | — | ⬜ |
 | DR2 | **Gamma-ray visualization.** Add support for visualizing gamma-ray detections in the light curve panel. | 🟡 | DR1 | ⬜ |
+| DR3 | **Gaia and 2MASS catalog cross-match.** Pull positional and photometric data from Gaia and 2MASS for enrichment (distances, NIR magnitudes, proper motions). | 🟡 | — | ⬜ |
 
 ---
 
@@ -71,7 +74,7 @@ Each task has:
 | F6 | **Splash page = catalog page.** Merge so people access the catalog without navigating away. Show stats on every page. | 🟡 | — | ⬜ |
 | F7 | **Total unique spectral visits in stats display.** | 🟢 | — | ⬜ |
 | F8 | **Stats broken out by spectral regime.** Separate stats per regime (optical, UV, NIR, etc.). | 🟡 | — | ⬜ |
-| F9 | **Sources column for ticket-ingested data should show bibcode.** | 🟢 | — | ⬜ |
+| F13 | **Photometry observation table.** Add an observation table for photometry on the nova page, parallel to the existing spectra observations table. | 🟡 | — | ⬜ |
 
 ---
 
@@ -92,6 +95,20 @@ Each task has:
 | ID | Task | CC | Dep | Status |
 |----|------|----|-----|--------|
 | F10 | **Change nova "Type" field to a list.** Currently a string; should support multiple types (e.g., classical + symbiotic). Prerequisite for PI3 automatic type assignment. | 🟡 | — | ⬜ |
+
+---
+
+## Data Quality & Integrity
+
+_New section. Items 1–5 are data-quality checks and display gates identified during the 2026-04-16 session. These will be formalized under the Active Data Integrity Enforcement DESIGN when that document is written._
+
+| ID | Task | CC | Dep | Status |
+|----|------|----|-----|--------|
+| DQ1 | **Nova page rendering audit.** Automated check that every nova page loads without crashing. Can be a headless-browser smoke test or a simpler artifact-completeness check. | 🟡 | — | ⬜ |
+| DQ2 | **Temporal anomaly flagging.** Flag novae whose observations are all >100 days from discovery or have data >5000 days past outburst or pre-outburst — potential mislabelling or date-calculation errors. | 🟡 | — | ⬜ |
+| DQ3 | **Flag novae without any references.** Every nova should have at least one literature reference; absence suggests an ingestion or reference-linking gap. | 🟢 | — | ⬜ |
+| DQ4 | **Metadata-incomplete spectra gate.** Flag, quarantine, and hide spectra missing any of: source, telescope, instrument. Similar enforcement pattern to the SNR display gate. | 🟡 | — | ⬜ |
+| DQ5 | **Source-less photometry gate.** Flag and hide photometry rows that lack a source attribution. | 🟡 | — | ⬜ |
 
 ---
 
@@ -127,7 +144,7 @@ Each task has:
 
 | ID | Task | CC | Dep | Status |
 |----|------|----|-----|--------|
-| D1 | **Update current-architecture.md.** Dated 2026-03-28. Reflects pre-Epic-5 state. | 🟡 | — | ⬜ |
+| D1 | **Update current-architecture.md.** Dated 2026-04-08. Reflects pre-Epic-30 state. | 🟡 | — | ⬜ |
 | D2 | **Recurrent novae design.** Multiple outbursts, cross-outburst identity, epoch disambiguation. Includes redesigning spectra and photometry viewer to accommodate multiple outburst epochs per object. | 🔴 | — | ⬜ |
 | D3 | **Audit .py file documentation.** Ensure docstrings and inline comments across services are accurate and up to date. | 🟡 | — | 🔲 |
 
@@ -147,64 +164,75 @@ Each task has:
 
 | Category | Count |
 |----------|-------|
-| ✅ Done | 104 |
-| ⬜ Remaining (bugs) | 3 |
-| ⬜ Remaining (features/tasks) | 31 |
-| **Total open** | **34** |
+| ✅ Done | 106 |
+| ⬜ Remaining (bugs) | 6 |
+| ⬜ Remaining (features/tasks) | 37 |
+| **Total open** | **43** |
 
 ---
 
 ## Suggested Priority Order
 
 **Quick wins / high impact:**
-1. B18 — Radio test fixture rebuild (10 min, unblocks 17 tests)
-2. S22 — SNR gate integration tests (close out the epic)
-3. F9 — Sources bibcode column (small artifact generator + frontend change)
-4. F7 — Spectral visits in stats display
+1. B30 — Non-positive SNR gate fix (minimal diff, CC-autonomous)
+2. F7 — Spectral visits in stats display
+3. S21 — DER_SNR at ingestion time
+4. PI2 — CloudWatch log group retention policy
+5. DQ3 — Flag novae without references
 
 **Spectra quality & display:**
-5. S6 — Spectra quality audit
-6. B19 — Spectra y-axis hard floor
-7. S18 — sqrt(flux) scaling
-8. S19 — X-ray keV x-axis
-9. S20 — Non-optical spectral features
+6. S6 — Spectra quality audit
+7. B19 — Spectra y-axis hard floor
+8. S18 — sqrt(flux) scaling
+9. S19 — X-ray keV x-axis
+10. S20 — Non-optical spectral features
+
+**Frontend bugs & features:**
+11. B31 — Catalog pagination on back button
+12. B32 — Zoom + toggle in waterfall
+13. F13 — Photometry observation table
+14. F6 — Splash page = catalog page
+15. F8 — Stats by regime
+16. P4 — Photometry color palette
 
 **Data model & ingestion enrichment:**
-10. F10 — Nova Type as list
-11. PI3 — Initial ingestion enrichment (discovery date, types)
-12. S21 — DER_SNR at ingestion time
+17. F10 — Nova Type as list
+18. PI3 — Initial ingestion enrichment (discovery date, types)
+19. DR3 — Gaia and 2MASS cross-match
+
+**Data quality & integrity:**
+20. DQ1 — Nova page rendering audit
+21. DQ2 — Temporal anomaly flagging
+22. DQ4 — Metadata-incomplete spectra gate
+23. DQ5 — Source-less photometry gate
 
 **Pipeline robustness:**
-13. PI1 — refresh_references payload reduction
-14. PI2 — CloudWatch log group cleanup formalization
-15. L5 — Reduce Logs Insights cost
-16. L6 — Minimize per-item logging
-
-**Frontend overhaul:**
-17. F6 — Splash page = catalog page
-18. F8 — Stats by regime
-19. P4 — Photometry color palette
+24. PI1 — refresh_references payload reduction
+25. B17 — Fargate logger formatting
+26. L5 — Reduce Logs Insights cost
+27. L6 — Minimize per-item logging
 
 **New capabilities:**
-20. DR1/DR2 — Gamma-ray pipeline + visualization
-21. I2 — Coordinate dedup ASL wiring
+28. DR1/DR2 — Gamma-ray pipeline + visualization
+29. I2 — Coordinate dedup ASL wiring
 
 **Bigger arcs:**
-22. R5 — Unified operator app
-23. T1, T2 — Test suites
-24. L1 — Log enrichment
-25. D1 — Architecture doc update
-26. D2 — Recurrent novae design
-27. OT8 — UVES reduction pipeline
-28. R10 — spectra.py rebuild
-29. LR1/LR2 — Data donation + provenance
-30. R4 — Smooth pipeline (capstone)
+30. B18 — Fake dataset + end-to-end test suite
+31. R5 — Unified operator app
+32. T1, T2 — Test suites
+33. L1 — Log enrichment
+34. D1 — Architecture doc update
+35. D2 — Recurrent novae design
+36. OT8 — UVES reduction pipeline
+37. R10 — spectra.py rebuild
+38. LR1/LR2 — Data donation + provenance
+39. R4 — Smooth pipeline (capstone)
 
 ---
 
 # Completed Tasks
 
-_104 tasks completed across all workstreams._
+_106 tasks completed across all workstreams._
 
 | ID | Task |
 |----|------|
@@ -236,7 +264,7 @@ _104 tasks completed across all workstreams._
 | B29 | Spectral visits regression (pre-feature novae missing DDB field) |
 | BN1 | Bundle generator hardcoded S3 path |
 | BN2 | Bundle metadata.json count vs README count mismatch |
-| BN3 | Empty .bib on partial sweeps (references pre-population) |
+| BN3 | Empty .bib on partial sweeps (reference pre-population) |
 | BN4 | Empty sources.json spectra array |
 | S1 | LTTB downsampling / flat spectra fix |
 | S2 | X-axis truncation |
@@ -256,6 +284,7 @@ _104 tasks completed across all workstreams._
 | S15 | Spectral line feature units Å → nm |
 | S16 | STIS adapter for spectra (MAST HASP discovery + FITS profile) |
 | S17 | Spectral visits catalog column |
+| S22 | SNR gate integration tests (display floor + compositing relative gate) |
 | S23 | ADR-033 spectra compositing pipeline (full implementation) |
 | S24 | DER_SNR fallback + SNR display gate + compositing relative gate |
 | S25 | Equitable vertical spacing (gap capping attempted + reverted; pending R10) |
@@ -271,7 +300,8 @@ _104 tasks completed across all workstreams._
 | F3 | Nova page alias display |
 | F4 | Empty state placeholders |
 | F5 | Observations table (rename + DataProduct fields) |
-| F11 | Discovery date MJD on nova page |
+| F9 | Sources column with archive provider and bibcode display |
+| F11 | Discovery date on nova page |
 | F12 | Spectral visits on nova page |
 | I1 | Underscore normalization |
 | R1 | Idempotency override |
