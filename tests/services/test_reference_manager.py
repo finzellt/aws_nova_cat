@@ -1155,6 +1155,32 @@ class TestADSCollectionFilter:
 # ===========================================================================
 
 
+class TestQuoteWhitespaceNormalization:
+    @pytest.mark.parametrize(
+        "input_name,expected",
+        [
+            ("HD  21629", '"HD 21629"'),  # internal multi-space collapsed
+            ("  GK Per  ", '"GK Per"'),  # leading/trailing stripped
+            ("AN\t  3.1901", '"AN 3.1901"'),  # tabs and mixed whitespace
+            ("GK Per", '"GK Per"'),  # single-spaced unchanged
+            ("", ""),  # empty string
+            (None, ""),  # None input
+        ],
+    )
+    def test_whitespace_normalization(
+        self, table: Any, input_name: str | None, expected: str
+    ) -> None:
+        with mock_aws():
+            h = _load_handler()
+            result = h._quote(input_name)
+            assert result == expected
+
+
+# ===========================================================================
+# TestFetchAndReconcileReferences
+# ===========================================================================
+
+
 class TestFetchAndReconcileReferences:
     """Unit tests for the combined FetchAndReconcileReferences task."""
 

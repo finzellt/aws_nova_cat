@@ -110,7 +110,7 @@ def _get_ads_token() -> str:
 
 def _quote(name: str) -> str:
     """Wrap a name in double-quotes for an ADS query; escape internal quotes."""
-    name = (name or "").strip()
+    name = " ".join((name or "").split())
     return '"' + name.replace('"', r"\"") + '"' if name else ""
 
 
