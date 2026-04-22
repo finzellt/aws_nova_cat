@@ -9,6 +9,9 @@
  *   1. The heading and copy are oriented around search rather than browsing.
  *   2. The search input is auto-focused on mount (autoFocusSearch prop).
  *
+ * Like /catalog, this page renders the aggregate stats bar at the top
+ * (ADR-011 Amendment: Homepage Redirect).
+ *
  * PREREQUISITE — one prop addition needed on CatalogTable before deploying:
  * ─────────────────────────────────────────────────────────────────────────
  * In CatalogTableProps (src/components/catalog/CatalogTable.tsx), add:
@@ -33,6 +36,7 @@
  */
 
 import { CatalogTable } from '@/components/catalog/CatalogTable';
+import { StatsBar } from '@/components/catalog/StatsBar';
 import { getCatalogData } from '@/lib/catalog';
 
 export const metadata = {
@@ -42,10 +46,17 @@ export const metadata = {
 };
 
 export default async function SearchPage() {
-  const { novae } = await getCatalogData();
+  const { stats, novae } = await getCatalogData();
 
   return (
     <div className="py-10 flex flex-col gap-8">
+
+      {/* ── Stats bar ────────────────────────────────────────────────── */}
+      {/*
+       * ADR-011 Amendment: stats render at the top of every catalog-flavor
+       * page. Consistent with /catalog.
+       */}
+      <StatsBar stats={stats} />
 
       {/* ── Page heading ─────────────────────────────────────────────── */}
       {/*
