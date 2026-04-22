@@ -1,11 +1,13 @@
 /**
  * Catalog page — /catalog
  *
- * Primary browsing interface (ADR-010, ADR-011).
- * Renders the full catalog as a paginated, sortable, searchable table.
+ * Primary browsing interface and the canonical entry point for the site
+ * (ADR-010; reinstated by ADR-011 Amendment: Homepage Redirect).
  *
- * CatalogTable owns the search bar and pagination controls internally —
- * this page only needs to supply the novae array and a heading.
+ * Renders the full catalog as a paginated, sortable, searchable table,
+ * preceded by the aggregate stats bar. CatalogTable owns the search bar
+ * and pagination controls internally — this page supplies the novae
+ * array, the stats block, and the heading.
  *
  * Server Component: catalog data is read at build time. No client-side
  * fetch is needed; the component tree is interactive via CatalogTable's
@@ -13,6 +15,7 @@
  */
 
 import { CatalogTable } from '@/components/catalog/CatalogTable';
+import { StatsBar } from '@/components/catalog/StatsBar';
 import { getCatalogData } from '@/lib/catalog';
 import { resolveRelease } from '@/lib/dataClient';
 
@@ -23,13 +26,20 @@ export const metadata = {
 };
 
 export default async function CatalogPage() {
-  const [{ novae }, releaseId] = await Promise.all([
+  const [{ stats, novae }, releaseId] = await Promise.all([
     getCatalogData(),
     resolveRelease().catch(() => 'local'),
   ]);
 
   return (
     <div className="py-10 flex flex-col gap-8">
+
+      {/* ── Stats bar ────────────────────────────────────────────────── */}
+      {/*
+       * ADR-011 Amendment: stats render at the top of every catalog-flavor
+       * page. Numbers reflect the release currently being served.
+       */}
+      <StatsBar stats={stats} />
 
       {/* ── Page heading ─────────────────────────────────────────────── */}
       {/*
