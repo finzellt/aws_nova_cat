@@ -207,9 +207,20 @@ class NovaCatStorage(Construct):
                 s3.LifecycleRule(
                     id="ExpireOldReleases",
                     prefix="releases/",
-                    # 7-day retention: enough for rollback while bounding storage
-                    # costs. Immutable release model provides its own rollback
-                    # mechanism (§12.7).
+                    # DISABLED during the NovaCat pause (no sweeps running).
+                    #
+                    # This rule assumes a fresh release lands before the old one
+                    # expires. With sweeps paused, current.json keeps pointing at
+                    # a release that ages past the window and gets purged out from
+                    # under it — wiping the live site. Disabling removes the
+                    # countdown entirely.
+                    #
+                    # Re-enable (enabled=True) ONLY AFTER a fresh release has been
+                    # published on resume; flipping it on while current.json still
+                    # points at the stale paused release would make that release
+                    # immediately eligible for deletion (§12.7, §12.10). Retention
+                    # kept at 7 days so resume is a one-flag flip.
+                    enabled=False,
                     expiration=cdk.Duration.days(7),
                 ),
             ],
