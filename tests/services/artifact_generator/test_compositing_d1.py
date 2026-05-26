@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import boto3
 import numpy as np
+from boto3.dynamodb.conditions import Key
 from generators.compositing import (
     run_compositing_sweep,
 )
@@ -243,8 +244,7 @@ class TestRunCompositingSweep:
         # Verify composite DDB item was written.
         composites = table.query(
             KeyConditionExpression=(
-                boto3.dynamodb.conditions.Key("PK").eq(_NOVA_ID)
-                & boto3.dynamodb.conditions.Key("SK").begins_with("PRODUCT#SPECTRA#ESO#COMPOSITE#")
+                Key("PK").eq(_NOVA_ID) & Key("SK").begins_with("PRODUCT#SPECTRA#ESO#COMPOSITE#")
             ),
         )["Items"]
         assert len(composites) == 1
@@ -341,8 +341,7 @@ class TestRunCompositingSweep:
         # Verify degenerate DDB item.
         composites = table.query(
             KeyConditionExpression=(
-                boto3.dynamodb.conditions.Key("PK").eq(_NOVA_ID)
-                & boto3.dynamodb.conditions.Key("SK").begins_with("PRODUCT#SPECTRA#ESO#COMPOSITE#")
+                Key("PK").eq(_NOVA_ID) & Key("SK").begins_with("PRODUCT#SPECTRA#ESO#COMPOSITE#")
             ),
         )["Items"]
         assert len(composites) == 1
@@ -380,8 +379,7 @@ class TestRunCompositingSweep:
         # No composite written.
         composites = table.query(
             KeyConditionExpression=(
-                boto3.dynamodb.conditions.Key("PK").eq(_NOVA_ID)
-                & boto3.dynamodb.conditions.Key("SK").begins_with("PRODUCT#SPECTRA#ESO#COMPOSITE#")
+                Key("PK").eq(_NOVA_ID) & Key("SK").begins_with("PRODUCT#SPECTRA#ESO#COMPOSITE#")
             ),
         )["Items"]
         assert len(composites) == 0
@@ -509,8 +507,7 @@ class TestRunCompositingSweep:
         # Verify two distinct composites written.
         composites = table.query(
             KeyConditionExpression=(
-                boto3.dynamodb.conditions.Key("PK").eq(_NOVA_ID)
-                & boto3.dynamodb.conditions.Key("SK").begins_with("PRODUCT#SPECTRA#")
+                Key("PK").eq(_NOVA_ID) & Key("SK").begins_with("PRODUCT#SPECTRA#")
             ),
         )["Items"]
         comp_items = [i for i in composites if "COMPOSITE" in str(i["SK"])]

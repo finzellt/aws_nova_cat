@@ -31,6 +31,7 @@ from unittest.mock import patch
 
 import boto3
 import pytest
+from boto3.dynamodb.conditions import Key
 from moto import mock_aws
 
 _TABLE_NAME = "NovaCat-Test"
@@ -663,9 +664,7 @@ class TestAliasDuplication:
             )
             # Query NameMapping for the alias — should be exactly one item
             response = table.query(
-                KeyConditionExpression=(
-                    boto3.dynamodb.conditions.Key("PK").eq("NAME#nova sco 2012")
-                ),
+                KeyConditionExpression=(Key("PK").eq("NAME#nova sco 2012")),
             )
             items = response.get("Items", [])
             assert len(items) == 1
@@ -695,7 +694,7 @@ class TestAliasDuplication:
             )
             # The only NameMapping for "v1324 sco" should be PRIMARY, not ALIAS
             response = table.query(
-                KeyConditionExpression=(boto3.dynamodb.conditions.Key("PK").eq("NAME#v1324 sco")),
+                KeyConditionExpression=(Key("PK").eq("NAME#v1324 sco")),
             )
             items = response.get("Items", [])
             assert len(items) == 1
