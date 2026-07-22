@@ -261,7 +261,7 @@ export default function AboutPage() {
         <div className="flex flex-col gap-2 text-base text-text-secondary">
           <p>
             <a
-              href="https://github.com/YOUR_USERNAME/nova-cat"
+              href="https://github.com/finzellt/aws_nova_cat"
               target="_blank"
               rel="noopener noreferrer"
               className="text-interactive no-underline hover:underline"
